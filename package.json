@@ -1,0 +1,22 @@
+{
+  "name": "friends-tower-defense",
+  "version": "1.0.0",
+  "description": "1v1 real-time tower defense prototype built with Phaser, Socket.io, Node.js, and Express.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "smoke": "node scripts/smoke.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "phaser": "^3.90.0",
+    "socket.io": "^4.7.5"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.3"
+  }
+}
