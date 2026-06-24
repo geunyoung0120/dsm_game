@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, '..');
 const port = Number(process.env.SMOKE_PORT || 3100);
 const url = `http://localhost:${port}`;
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsm-game-smoke-'));
+const smokePassword = 'test-password';
 
 let serverProcess = null;
 let clients = [];
@@ -41,6 +42,8 @@ async function main() {
     signup(`연습유저${Date.now()}A`),
     signup(`연습유저${Date.now()}B`)
   ]);
+  await Promise.all(accounts.map(expectSessionUser));
+  await expectSessionUser(await login(accounts[0].user.username));
   const result = await runClientSmoke(accounts);
   console.log(JSON.stringify(result));
   cleanup();
@@ -93,7 +96,7 @@ async function signup(username) {
   const response = await fetch(`${url}/api/signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password: 'test-password' })
+    body: JSON.stringify({ username, password: smokePassword })
   });
   const body = await response.json();
   if (!response.ok) {
@@ -105,6 +108,37 @@ async function signup(username) {
     user: body.user,
     cookie: rawCookie.split(';')[0]
   };
+}
+
+async function login(username) {
+  const response = await fetch(`${url}/api/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password: smokePassword })
+  });
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(body.error || 'Smoke login failed.');
+  }
+  const rawCookie = response.headers.get('set-cookie');
+  if (!rawCookie) throw new Error('Smoke login did not receive a session cookie.');
+  return {
+    user: body.user,
+    cookie: rawCookie.split(';')[0]
+  };
+}
+
+async function expectSessionUser(account) {
+  const response = await fetch(`${url}/api/me`, {
+    headers: { Cookie: account.cookie }
+  });
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(body.error || 'Smoke session lookup failed.');
+  }
+  if (!body.user || body.user.username !== account.user.username) {
+    throw new Error('Smoke session user did not match the authenticated account.');
+  }
 }
 
 async function runClientSmoke(accounts) {

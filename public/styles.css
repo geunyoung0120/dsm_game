@@ -250,17 +250,19 @@ body {
 
 .auth-forms {
   display: grid;
+  align-items: center;
   gap: 14px;
 }
 
 .auth-card {
-  min-height: 302px;
-  padding: 24px;
+  width: 100%;
+  min-height: 430px;
+  padding: 30px;
   display: grid;
-  align-content: start;
+  align-content: center;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-top: 5px solid var(--teal);
+  border-top: 5px solid var(--gold);
   box-shadow: var(--shadow);
 }
 
@@ -273,6 +275,20 @@ body {
   align-items: end;
   justify-content: space-between;
   gap: 12px;
+}
+
+.auth-switch {
+  margin-top: 20px;
+  padding-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 800;
 }
 
 .eyebrow {
@@ -325,6 +341,17 @@ button.ghost-button {
   background: transparent;
   color: var(--muted);
   border: 1px solid var(--line);
+}
+
+button.link-button {
+  width: auto;
+  min-height: auto;
+  padding: 0;
+  background: transparent;
+  color: var(--gold);
+  border: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 button:hover {

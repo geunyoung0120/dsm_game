@@ -902,11 +902,15 @@ function setupShell() {
   const leaveRoomButton = document.getElementById('leave-room');
   const loginForm = document.getElementById('login-form');
   const signupForm = document.getElementById('signup-form');
+  const showSignupButton = document.getElementById('show-signup');
+  const showLoginButton = document.getElementById('show-login');
+  const authPanels = [...document.querySelectorAll('[data-auth-panel]')];
   const createRoomForm = document.getElementById('create-room-form');
   const refreshRoomsButton = document.getElementById('refresh-rooms');
 
   renderCharacterGrid();
 
+  setAuthMode('login');
   showScreen(authScreen);
   loadSession();
 
@@ -918,6 +922,14 @@ function setupShell() {
   signupForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     await submitAuth('signup', 'signup-message');
+  });
+
+  showSignupButton.addEventListener('click', () => {
+    setAuthMode('signup');
+  });
+
+  showLoginButton.addEventListener('click', () => {
+    setAuthMode('login');
   });
 
   startButton.addEventListener('click', () => {
@@ -949,6 +961,7 @@ function setupShell() {
     currentSlot = null;
     latestState = null;
     resetAuthForms();
+    setAuthMode('login');
     showScreen(authScreen);
   });
 
@@ -974,6 +987,15 @@ function setupShell() {
   function showScreen(target) {
     for (const screen of [authScreen, homeScreen, roomScreen, encyclopediaScreen, gameScreen]) {
       screen.classList.toggle('hidden', screen !== target);
+    }
+  }
+
+  function setAuthMode(mode) {
+    clearAuthMessages();
+    for (const panel of authPanels) {
+      const isActive = panel.dataset.authPanel === mode;
+      panel.classList.toggle('hidden', !isActive);
+      panel.setAttribute('aria-hidden', String(!isActive));
     }
   }
 
@@ -1027,16 +1049,23 @@ async function submitAuth(type, messageId) {
       method: 'POST',
       body: JSON.stringify({ username, password })
     });
-    currentUser = data.user;
-    renderProfile();
-    connectSocket();
-    window.showHomeScreen();
-    resetAuthForms();
+    finishAuth(data.user);
   } catch (error) {
     setMessage(messageId, error.message || '처리하지 못했습니다.');
   } finally {
     if (submitButton) submitButton.disabled = false;
   }
+}
+
+function finishAuth(user) {
+  currentUser = user;
+  currentRoom = null;
+  currentSlot = null;
+  latestState = null;
+  renderProfile();
+  window.showHomeScreen();
+  resetAuthForms();
+  connectSocket();
 }
 
 function clearAuthMessages() {

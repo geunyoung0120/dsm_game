@@ -427,7 +427,7 @@ app.get('/api/rooms', requireAuthApi, (req, res) => {
 
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.html')) {
+    if (['.html', '.js', '.css'].includes(path.extname(filePath))) {
       res.setHeader('Cache-Control', 'no-store');
     } else {
       res.setHeader('Cache-Control', 'public, max-age=3600');
