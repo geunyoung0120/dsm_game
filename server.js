@@ -232,7 +232,7 @@ const CARDS = {
     range: 18,
     speed: 41,
     attackMs: 250,
-    radius: 18,
+    radius: 16,
     female: true,
     berserker: true,
     berserkerThreshold: 0.27,
