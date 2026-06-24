@@ -9,6 +9,8 @@ const port = Number(process.env.SMOKE_PORT || 3100);
 const url = `http://localhost:${port}`;
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsm-game-smoke-'));
 const smokePassword = 'test-password';
+const bestFriendPair = ['baduk', 'johyunwoo'];
+const bestFriendComboCost = 8;
 
 let serverProcess = null;
 let clients = [];
@@ -181,7 +183,7 @@ function runPlayableSmoke(cardsByClient) {
           const player = state.players[slot];
           const cards = cardsByClient[index];
           if (!playedSlots.has(slot) && player) {
-            const handIndex = player.hand.findIndex((id) => cards[id] && cards[id].cost <= player.elixir && id !== 'kkongho');
+            const handIndex = player.hand.findIndex((id) => cards[id] && effectiveSmokeCost(player, cards[id]) <= player.elixir && id !== 'kkongho');
             if (handIndex >= 0) {
               client.emit('play-card', {
                 handIndex,
@@ -210,6 +212,14 @@ function runPlayableSmoke(cardsByClient) {
   }).finally(() => {
     for (const client of clients) client.disconnect();
   });
+}
+
+function effectiveSmokeCost(player, card) {
+  if (!card) return Infinity;
+  if (bestFriendPair.includes(card.id) && bestFriendPair.every((id) => player.hand.includes(id))) {
+    return bestFriendComboCost;
+  }
+  return card.cost;
 }
 
 function once(client, eventName) {

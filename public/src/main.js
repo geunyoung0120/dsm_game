@@ -1,6 +1,8 @@
 const VIEW = { width: 900, height: 760 };
 const ARENA_H = 620;
 const CARD_H = 108;
+const BEST_FRIEND_PAIR = ['baduk', 'johyunwoo'];
+const BEST_FRIEND_COMBO_COST = 8;
 
 const CARD_THEME = {
   zzangga: { fill: 0xe4536d, stroke: 0xffd6df, short: '짱' },
@@ -13,7 +15,7 @@ const CARD_THEME = {
   peach: { fill: 0xf184b5, stroke: 0xffdeee, short: '복' },
   seongjoo: { fill: 0x65c7f7, stroke: 0xd3f4ff, short: '성' },
   johyunwoo: { fill: 0x9aa0a6, stroke: 0xf0f2f5, short: '현' },
-  kimgeunyoung: { fill: 0xe8c547, stroke: 0xfff2ad, short: '근' },
+  kimgeunyoung: { fill: 0xe8c547, stroke: 0xfff2ad, short: '대' },
   kimrui: { fill: 0x8f5fbf, stroke: 0xe4d6ff, short: '루' },
   geunyoungTank: { fill: 0x5d6b73, stroke: 0xcbd3d8, short: '탱' }
 };
@@ -42,9 +44,9 @@ const CHARACTER_DETAILS = [
     name: '박바둑',
     cost: '8',
     type: '카오스 / 리스크 딜러',
-    ability: '갑자기 예측하기 어려운 행동을 하며 범위 안 적들에게 매우 큰 피해를 준다. 같은 범위의 아군도 약한 피해를 받는다. 스킬 발동 시점은 무작위다.',
+    ability: '갑자기 예측하기 어려운 행동을 하며 범위 안 적들에게 매우 큰 피해를 준다. 같은 범위의 아군도 약한 피해를 받는다. 스킬 발동 시점은 무작위다. 조현우와 손패에 함께 있으면 8 엘릭서로 둘이 동시에 출격하며 전장에 절친 특성 문구가 뜬다.',
     appearance: '삭발에 안경을 쓴 통통한 남학생. 교복을 입고 있다.',
-    trait: '체력이 매우 높고 위험 부담이 크다. 갑자기 눕기, 혼자 돌기, 하늘 보고 소리치기 같은 행동을 한다.'
+    trait: '체력이 매우 높고 위험 부담이 크다. 조현우와 절친 특성이 있어 동시에 손패에 잡히면 절친 출격이 가능하다.'
   },
   {
     id: 'kkongho',
@@ -69,9 +71,9 @@ const CHARACTER_DETAILS = [
     name: '지민',
     cost: '4',
     type: '단일 폭딜',
-    ability: '공격 전 손가락으로 가리키며 드립을 치는 동작을 한다. 그 후 한 대상에게 게임 내 최고 수준의 단일 피해를 준다.',
+    ability: '공격 전 손가락으로 가리키며 드립을 치는 동작을 한다. 그 후 한 대상에게 게임 내 최고 수준의 단일 피해를 준다. 유신을 공격할 때는 머리 위에 인포 가위질! 문구가 뜨고 상대 유신 유닛 모두에게 피해를 준다.',
     appearance: '키가 크고 비율이 좋은 남학생. 교복을 입고 있다.',
-    trait: '드립 동작 중에는 완전히 무방비라 피격되면 공격이 취소될 수 있다. 공격속도는 매우 느리지만 한 방 피해가 크다.'
+    trait: '드립 동작 중에는 완전히 무방비라 피격되면 공격이 취소될 수 있다. 공격속도는 매우 느리지만 한 방 피해가 크고, 유신 군단의 카운터다.'
   },
   {
     id: 'mythos',
@@ -105,18 +107,18 @@ const CHARACTER_DETAILS = [
     name: '조현우',
     cost: '6',
     type: '근접 단일 딜러',
-    ability: '근접 거리에서 한 대상에게 매우 강력한 단일 공격을 한다. 단순하지만 위협적인 딜러다.',
+    ability: '근접 거리에서 한 대상에게 매우 강력한 단일 공격을 한다. 박바둑과 손패에 함께 있으면 8 엘릭서로 둘이 동시에 출격하며 전장에 절친 특성 문구가 뜬다.',
     appearance: '특별히 튀는 점이 없는 아주 평범한 남학생이다.',
-    trait: '체력은 보통이지만 공격력이 매우 높다. 별다른 기믹 없이 정직하게 강한 카드다.'
+    trait: '체력은 보통이지만 공격력이 매우 높다. 박바둑과 절친 특성이 있어 동시에 손패에 잡히면 절친 출격이 가능하다.'
   },
   {
     id: 'kimgeunyoung',
-    name: '김.근.영',
+    name: '대.근.영',
     cost: '10',
     type: '탱커 소환 + 근접 딜러',
-    ability: '이동하는 동안 1초마다 탱커 하수인을 하나씩 소환한다. 근접 거리에서는 강력한 킥복싱 단일 공격을 한다.',
+    ability: '이동하는 동안 약 1.7초마다 탱커 하수인을 하나씩 소환한다. 근접 거리에서는 묵직한 킥복싱 단일 공격을 한다.',
     appearance: '잘생긴 남학생이다.',
-    trait: '한 경기에서 한 번만 사용할 수 있다. 매우 높은 능력치와 탱커 하수인 압박으로 꽁호와 함께 최고 위협 카드다.'
+    trait: '한 경기에서 한 번만 사용할 수 있다. 본체와 탱커 하수인으로 라인을 압박하지만, 이전보다 소환 속도와 전투력이 낮아졌다.'
   },
   {
     id: 'kimrui',
@@ -240,7 +242,7 @@ class BattleScene extends Phaser.Scene {
       const cardId = player && player.hand[cardIndex];
       const card = this.cards[cardId];
       if (!card || this.state.status !== 'playing') return;
-      if (player.elixir + 0.001 < card.cost) return;
+      if (player.elixir + 0.001 < getEffectiveCardCost(card, player)) return;
       if (card.oneUse && (player.usedOneTimeCards || []).includes(card.id)) return;
       this.selectedHandIndex = this.selectedHandIndex === cardIndex ? null : cardIndex;
       return;
@@ -578,6 +580,27 @@ class BattleScene extends Phaser.Scene {
         this.g.lineBetween(effect.x - 26, effect.y, effect.x + 26, effect.y);
         this.g.lineBetween(effect.x, effect.y - 26, effect.x, effect.y + 26);
         this.drawCenteredText('멘붕', effect.x, effect.y - 28, 16, '#ffffff');
+      } else if (effect.type === 'jimin-yushin-counter') {
+        const labelY = Math.max(28, effect.y - 66 - t * 8);
+        this.g.fillStyle(0x111318, alpha * 0.88);
+        this.g.fillRoundedRect(effect.x - 54, labelY - 5, 108, 26, 8);
+        this.g.lineStyle(3, 0xd5e9ff, alpha);
+        this.g.strokeRoundedRect(effect.x - 54, labelY - 5, 108, 26, 8);
+        this.drawCenteredText('인포 가위질!', effect.x, labelY, 15, '#ffffff');
+        this.g.lineStyle(4, 0xd5e9ff, alpha);
+        this.g.lineBetween(effect.x - 30 - t * 14, effect.y - 18, effect.x + 30 + t * 14, effect.y + 18);
+        this.g.lineBetween(effect.x - 30 - t * 14, effect.y + 18, effect.x + 30 + t * 14, effect.y - 18);
+        this.g.strokeCircle(effect.x, effect.y, 22 + t * 42);
+      } else if (effect.type === 'best-friend-combo') {
+        this.g.fillStyle(0xfff2ad, alpha * 0.14);
+        this.g.fillCircle(effect.x, effect.y, 48 + t * 92);
+        this.g.lineStyle(6, 0xfff2ad, alpha);
+        this.g.strokeCircle(effect.x, effect.y, 28 + t * 86);
+        this.g.lineStyle(3, 0xffffff, alpha * 0.85);
+        this.g.strokeCircle(effect.x, effect.y, 62 + t * 78);
+        this.g.lineBetween(effect.x - 72, effect.y, effect.x + 72, effect.y);
+        this.g.lineBetween(effect.x, effect.y - 42, effect.x, effect.y + 42);
+        this.drawCenteredText('절친 특성!', effect.x, Math.max(28, effect.y - 70 - t * 8), 24, '#fff2ad');
       } else if (effect.type === 'tower-shot') {
         this.drawAttackTrail(effect, 0xfff2a8, alpha, t, 4);
         this.g.fillStyle(0xffffff, alpha);
@@ -745,7 +768,9 @@ class BattleScene extends Phaser.Scene {
       const card = this.cards[cardId];
       const theme = CARD_THEME[cardId] || { fill: 0x3a3d45, stroke: 0x6f7480, short: '?' };
       const usedOneTime = card && card.oneUse && player && (player.usedOneTimeCards || []).includes(card.id);
-      const disabled = !player || !card || this.state.status !== 'playing' || player.elixir < card.cost || usedOneTime;
+      const effectiveCost = getEffectiveCardCost(card, player);
+      const bestFriendCombo = card && hasBestFriendCombo(player) && isBestFriendCard(card.id);
+      const disabled = !player || !card || this.state.status !== 'playing' || player.elixir < effectiveCost || usedOneTime;
       const selected = this.selectedHandIndex === i;
 
       this.g.fillStyle(disabled ? 0x282b31 : theme.fill, disabled ? 0.7 : 1);
@@ -760,10 +785,10 @@ class BattleScene extends Phaser.Scene {
 
       this.g.fillStyle(0x111318, 0.78);
       this.g.fillCircle(x + 23, y + 23, 17);
-      this.drawCenteredText(String(card.cost), x + 23, y + 14, 17, '#ffffff');
+      this.drawCenteredText(String(effectiveCost), x + 23, y + 14, 17, '#ffffff');
       this.drawCenteredText(theme.short, x + w / 2, y + 33, 30, disabled ? '#b9b9b9' : '#111318');
       this.drawCenteredText(card.name, x + w / 2, y + 69, 15, '#ffffff');
-      this.drawCenteredText(card.role, x + w / 2, y + 91, 10, '#f5ead8');
+      this.drawCenteredText(bestFriendCombo ? '절친 출격' : card.role, x + w / 2, y + 91, 10, '#f5ead8');
     }
   }
 
@@ -822,6 +847,8 @@ class BattleScene extends Phaser.Scene {
     if (type === 'awaken') return 1200;
     if (type === 'windup') return 820;
     if (type === 'punchline') return 1050;
+    if (type === 'jimin-yushin-counter') return 1250;
+    if (type === 'best-friend-combo') return 1300;
     if (type === 'summon-minion') return 700;
     if (type === 'leech') return 760;
     if (type === 'leech-detach') return 620;
@@ -886,6 +913,21 @@ function buildFallbackCards(state) {
     }
   }
   return cards;
+}
+
+function getEffectiveCardCost(card, player) {
+  if (!card) return Infinity;
+  if (isBestFriendCard(card.id) && hasBestFriendCombo(player)) return BEST_FRIEND_COMBO_COST;
+  return card.cost;
+}
+
+function isBestFriendCard(cardId) {
+  return BEST_FRIEND_PAIR.includes(cardId);
+}
+
+function hasBestFriendCombo(player) {
+  if (!player || !Array.isArray(player.hand)) return false;
+  return BEST_FRIEND_PAIR.every((cardId) => player.hand.includes(cardId));
 }
 
 function setupShell() {

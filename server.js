@@ -32,9 +32,11 @@ const ELIXIR_PER_SECOND = 1 / 2.8;
 const DOUBLE_ELIXIR_REMAINING_MS = 60000;
 const DOUBLE_ELIXIR_MULTIPLIER = 2;
 const TOWER_HP = {
-  king: 4600,
-  princess: 2700
+  king: 9200,
+  princess: 5400
 };
+const BEST_FRIEND_PAIR = ['baduk', 'johyunwoo'];
+const BEST_FRIEND_COMBO_COST = 8;
 
 const TIER_DEFINITIONS = [
   { key: 'mayers', name: '마이어스', icon: '🪨', min: 0, max: 9 },
@@ -180,18 +182,18 @@ const CARDS = {
   },
   kimgeunyoung: {
     id: 'kimgeunyoung',
-    name: '김.근.영',
+    name: '대.근.영',
     cost: 10,
     role: '탱커 소환',
-    maxHp: 2250,
-    damage: 265,
+    maxHp: 1850,
+    damage: 200,
     range: 48,
     speed: 45,
-    attackMs: 880,
+    attackMs: 1050,
     radius: 24,
     oneUse: true,
     tankMinionId: 'geunyoungTank',
-    spawnMinionMs: 1000
+    spawnMinionMs: 1700
   },
   kimrui: {
     id: 'kimrui',
@@ -215,11 +217,11 @@ const CARDS = {
     cost: 0,
     role: '소환 탱커',
     playable: false,
-    maxHp: 680,
-    damage: 68,
+    maxHp: 520,
+    damage: 52,
     range: 36,
     speed: 41,
-    attackMs: 920,
+    attackMs: 1050,
     radius: 16
   }
 };
@@ -771,7 +773,7 @@ function createTower(owner, type, x, y) {
     hp: maxHp,
     maxHp,
     range: isKing ? 210 : 190,
-    damage: isKing ? 72 : 58,
+    damage: isKing ? 58 : 46,
     attackMs: isKing ? 950 : 900,
     nextAttackAt: 0
   };
@@ -826,19 +828,30 @@ function playCard(room, slot, payload = {}) {
   const card = CARDS[cardId];
   if (!card || card.playable === false) return;
   if (card.oneUse && player.usedOneTimeCards[card.id]) return;
-  if (player.elixir + 0.0001 < card.cost) return;
+  const bestFriendCombo = getBestFriendCombo(player, card.id);
+  const elixirCost = bestFriendCombo ? bestFriendCombo.cost : card.cost;
+  if (player.elixir + 0.0001 < elixirCost) return;
 
   const x = Number(payload.x);
   const y = Number(payload.y);
   if (!isValidSpawnPoint(slot, x, y)) return;
 
-  player.elixir = Math.max(0, player.elixir - card.cost);
+  player.elixir = Math.max(0, player.elixir - elixirCost);
 
-  if (card.oneUse) {
+  if (bestFriendCombo) {
+    advanceHandSlots(player, bestFriendCombo.handIndexes, true);
+  } else if (card.oneUse) {
     player.usedOneTimeCards[card.id] = true;
     advanceHand(player, handIndex, false);
   } else {
     advanceHand(player, handIndex, true);
+  }
+
+  if (bestFriendCombo) {
+    broadcastEffect(room, { type: 'best-friend-combo', owner: slot, x, y });
+    spawnBestFriendCombo(room, slot, x, y);
+    broadcastState(room);
+    return;
   }
 
   if (card.id === 'kkongho') {
@@ -859,11 +872,24 @@ function isValidSpawnPoint(slot, x, y) {
 }
 
 function advanceHand(player, handIndex, requeuePlayedCard) {
-  const playedCard = player.hand[handIndex];
-  if (requeuePlayedCard && playedCard) {
-    player.cycle.push(playedCard);
+  advanceHandSlots(player, [handIndex], requeuePlayedCard);
+}
+
+function advanceHandSlots(player, handIndexes, requeuePlayedCards) {
+  const uniqueIndexes = [...new Set(handIndexes)]
+    .filter((index) => Number.isInteger(index) && index >= 0 && index < player.hand.length)
+    .sort((a, b) => a - b);
+  const playedCards = uniqueIndexes.map((index) => player.hand[index]).filter(Boolean);
+
+  if (requeuePlayedCards) {
+    for (const playedCard of playedCards) {
+      player.cycle.push(playedCard);
+    }
   }
-  player.hand[handIndex] = player.cycle.shift() || null;
+
+  for (const index of uniqueIndexes) {
+    player.hand[index] = player.cycle.shift() || null;
+  }
 }
 
 function spawnCard(room, owner, cardId, x, y) {
@@ -876,6 +902,17 @@ function spawnCard(room, owner, cardId, x, y) {
   }
 
   broadcastEffect(room, { type: 'spawn', owner, cardId, x, y });
+}
+
+function spawnBestFriendCombo(room, owner, x, y) {
+  const offsets = [
+    { cardId: 'baduk', x: -28, y: 0 },
+    { cardId: 'johyunwoo', x: 28, y: 0 }
+  ];
+
+  for (const offset of offsets) {
+    spawnCard(room, owner, offset.cardId, clamp(x + offset.x, 48, ARENA.width - 48), y + offset.y);
+  }
 }
 
 function spawnUnit(room, owner, cardId, x, y, extras = {}) {
@@ -1164,6 +1201,18 @@ function resolveWindup(room, unit, card, now) {
     return;
   }
 
+  if (unit.cardId === 'jimin' && target.entity === 'unit' && target.cardId === 'yushin') {
+    const yushinTargets = game.units.filter((other) => {
+      return other.owner === target.owner && other.cardId === 'yushin' && other.hp > 0;
+    });
+    broadcastEffect(room, { type: 'jimin-yushin-counter', owner: unit.owner, x: unit.x, y: unit.y });
+    for (const yushin of yushinTargets) {
+      applyDamageToUnit(room, yushin, card.damage, unit.owner, now);
+      broadcastEffect(room, { type: 'punchline', owner: unit.owner, cardId: unit.cardId, fromX: unit.x, fromY: unit.y, x: yushin.x, y: yushin.y });
+    }
+    return;
+  }
+
   applyDamage(room, target, card.damage, unit.owner, now);
   broadcastEffect(room, { type: 'punchline', owner: unit.owner, cardId: unit.cardId, fromX: unit.x, fromY: unit.y, x: target.x, y: target.y });
 }
@@ -1438,6 +1487,19 @@ function getUnitSpeed(unit, card) {
 function getAttackMs(unit, card) {
   if (unit.cardId === 'mythos' && unit.awakened) return card.awakenedAttackMs;
   return card.attackMs;
+}
+
+function getBestFriendCombo(player, selectedCardId) {
+  if (!BEST_FRIEND_PAIR.includes(selectedCardId)) return null;
+
+  const handIndexes = BEST_FRIEND_PAIR.map((cardId) => player.hand.indexOf(cardId));
+  if (handIndexes.some((index) => index < 0)) return null;
+
+  return {
+    cardIds: BEST_FRIEND_PAIR,
+    handIndexes,
+    cost: BEST_FRIEND_COMBO_COST
+  };
 }
 
 function moveToward(unit, target, amount) {
