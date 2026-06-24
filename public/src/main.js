@@ -12,12 +12,34 @@ const BBATMAN_HEAL_RANGE = 90;
 
 const PATCH_NOTICES = [
   {
+    title: '야클 로고와 성장 표시 개선',
+    date: '2026.06.24',
+    items: [
+      '공지에 자세히 보기 버튼을 추가해 세부 변경 내용을 확인 가능',
+      '내 프로필에 다음 티어까지의 진행 바 추가',
+      '게임 이름을 야클로 정하고 상단 브랜드 로고 적용',
+      '광주 탱크 HP와 공격력 20% 추가 하향'
+    ],
+    details: [
+      '공지 카드는 기존처럼 요약을 먼저 보여주고, 자세히 보기를 누르면 밸런스 수치와 UI 변경 의도를 더 자세히 펼쳐 보여준다.',
+      '내 프로필의 티어 카드에는 현재 티어 구간 안에서 다음 티어까지 얼마나 가까워졌는지 진행 바로 표시한다. 최고 티어에서는 바가 가득 찬 상태로 보인다.',
+      '브라우저 제목, 로그인 첫 화면, 로비 이름, favicon, 화면 상단 브랜드 영역을 야클 기준으로 정리했다.',
+      '광주 탱크는 이전 HP 240, 공격력 36에서 HP 192, 공격력 29로 낮아져 대.근.영의 지속 압박력이 줄었다.'
+    ]
+  },
+  {
     title: '6월 24일 밸런스와 공지 개선',
     date: '2026.06.24',
     items: [
       '메인에는 최신 공지만 보이고 업데이트 목록에서 역대 공지를 날짜순으로 확인 가능',
       '꽁호 사용자는 해당 경기 최대 엘릭서가 12로 증가',
       '성주, 빼트맨, 대.근.영, 광주 탱크 밸런스 조정 및 2대2 타워 HP 1.5배 적용'
+    ],
+    details: [
+      '메인 화면 공지 영역은 가장 최근 공지 하나만 표시하고, 업데이트 목록 보기 화면에서 모든 공지를 최신순으로 확인할 수 있게 했다.',
+      '꽁호는 전장 유닛 제거 효과에 더해 사용자 최대 엘릭서를 해당 경기 동안 12로 올린다.',
+      '성주 HP는 224, 빼트맨 힐량은 초당 47.25로 조정했고 빼트맨은 전장에 있는 동안 초당 8 체력을 잃는다.',
+      '대.근.영 HP는 2160, 광주 탱크는 1.5초마다 HP 240 / 공격력 36으로 소환되며, 2대2 타워 HP는 1대1 대비 1.5배다.'
     ]
   },
   {
@@ -27,6 +49,11 @@ const PATCH_NOTICES = [
       '방 만들기에서 1대1 또는 2대2 모드를 선택할 수 있게 변경',
       '덱짜기 화면을 위 8칸 배틀 덱, 아래 카드 풀 구조로 개편',
       '2대2에서는 같은 진영 플레이어가 타워와 승패를 공유'
+    ],
+    details: [
+      '2대2 방은 4명이 모두 들어오면 자동 시작하며 0/2번 슬롯은 아래 진영, 1/3번 슬롯은 위 진영으로 배정된다.',
+      '덱짜기 화면은 선택된 8장 슬롯을 위에 고정하고, 아래 카드 풀에서 눌러 채워 넣는 방식으로 정리했다.',
+      'HUD, 종료 화면, 재경기 동의, 방 목록 표시를 1대1과 2대2 모두에서 자연스럽게 보이도록 조정했다.'
     ]
   },
   {
@@ -36,6 +63,11 @@ const PATCH_NOTICES = [
       '빼트맨 힐량 50% 감소, 주변 원 안 여학생 지속 회복으로 변경',
       '복숭아 공격 속도 40% 감소',
       'OSJ HP 20% 증가, 공격 쿨타임 2.5초로 조정'
+    ],
+    details: [
+      '빼트맨은 단일 대상만 따라가며 회복하던 방식에서 주변 원 안의 회복 가능 아군을 모두 회복하는 방식으로 바뀌었다.',
+      '복숭아 공격 주기는 430ms에서 717ms로 늘어나 2 엘릭서 근접 딜러 수준에 맞게 압박력이 낮아졌다.',
+      'OSJ는 HP가 1200으로 증가한 대신 밀치기 공격 주기가 2.5초가 되어 진형 붕괴 빈도가 줄었다.'
     ]
   }
 ];
@@ -242,9 +274,9 @@ const CHARACTER_DETAILS = [
       ['사거리', '43'],
       ['공격 주기', '1.155초'],
       ['이동속도', '41'],
-      ['광주 탱크', '1.5초마다 HP 240 / 공격력 36']
+      ['광주 탱크', '1.5초마다 HP 192 / 공격력 29']
     ],
-    ability: '전장에 있는 동안 항상 1.5초마다 HP 240의 광주 탱크를 하나씩 소환한다. 본체는 HP 2160, 공격력 90의 근접 단일 공격을 한다.',
+    ability: '전장에 있는 동안 항상 1.5초마다 HP 192의 광주 탱크를 하나씩 소환한다. 본체는 HP 2160, 공격력 90의 근접 단일 공격을 한다.',
     appearance: '잘생긴 남학생이다.',
     trait: '한 경기에서 한 번만 사용할 수 있다. 본체는 더 튼튼하지만 공격력이 낮아졌고, 광주 탱크는 탱크 차체와 포신 형태로 등장한다.'
   },
@@ -1801,7 +1833,7 @@ function renderProfile() {
   summary.replaceChildren(
     profileStat('이름', currentUser.username),
     profileStat('트로피', `${currentUser.trophies}개`),
-    profileStat('티어', `${currentUser.tierIcon} ${currentUser.tier}`)
+    profileTierStat()
   );
 }
 
@@ -1874,6 +1906,31 @@ function patchNoticeArticle(notice) {
   }
 
   article.append(header, items);
+
+  if (Array.isArray(notice.details) && notice.details.length > 0) {
+    const detailButton = document.createElement('button');
+    detailButton.type = 'button';
+    detailButton.className = 'patch-detail-toggle secondary';
+    detailButton.textContent = '자세히 보기';
+
+    const detail = document.createElement('div');
+    detail.className = 'patch-notice-detail hidden';
+    const detailList = document.createElement('ul');
+    for (const detailText of notice.details) {
+      const item = document.createElement('li');
+      item.textContent = detailText;
+      detailList.appendChild(item);
+    }
+    detail.appendChild(detailList);
+
+    detailButton.addEventListener('click', () => {
+      const isHidden = detail.classList.toggle('hidden');
+      detailButton.textContent = isHidden ? '자세히 보기' : '간단히 보기';
+    });
+
+    article.append(detailButton, detail);
+  }
+
   return article;
 }
 
@@ -2022,6 +2079,46 @@ function profileStat(label, value) {
   content.textContent = value;
   item.append(caption, content);
   return item;
+}
+
+function profileTierStat() {
+  const item = document.createElement('div');
+  item.className = 'profile-stat profile-tier-stat';
+
+  const caption = document.createElement('span');
+  caption.textContent = '티어';
+  const content = document.createElement('strong');
+  content.textContent = `${currentUser.tierIcon} ${currentUser.tier}`;
+
+  const progress = tierProgressForUser(currentUser);
+  const progressLabel = document.createElement('small');
+  progressLabel.textContent = progress.label;
+
+  const bar = document.createElement('div');
+  bar.className = 'tier-progress-bar';
+  const fill = document.createElement('i');
+  fill.style.width = `${Math.round(progress.ratio * 100)}%`;
+  bar.appendChild(fill);
+
+  item.append(caption, content, progressLabel, bar);
+  return item;
+}
+
+function tierProgressForUser(user) {
+  const trophies = Math.max(0, Number(user.trophies) || 0);
+  if (!user.nextTier) {
+    return { ratio: 1, label: '최고 티어 달성' };
+  }
+
+  const tierStart = Number.isFinite(user.tierMin) ? user.tierMin : 0;
+  const nextMin = Math.max(tierStart + 1, Number(user.nextTier.min) || tierStart + 1);
+  const current = clamp(trophies - tierStart, 0, nextMin - tierStart);
+  const ratio = (nextMin - tierStart) > 0 ? current / (nextMin - tierStart) : 1;
+  const remaining = Math.max(0, nextMin - trophies);
+  return {
+    ratio,
+    label: `${user.nextTier.icon || ''} ${user.nextTier.name}까지 ${remaining}개`
+  };
 }
 
 function renderRoomList(rooms) {

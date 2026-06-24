@@ -260,8 +260,8 @@ const CARDS = {
     cost: 0,
     role: '소환 탱커',
     playable: false,
-    maxHp: 240,
-    damage: 36,
+    maxHp: 192,
+    damage: 29,
     range: 32,
     speed: 37,
     attackMs: 1155,
@@ -1969,6 +1969,7 @@ function getTierForTrophies(trophies) {
 function publicUser(user) {
   const trophies = Math.max(0, Number(user.trophies) || 0);
   const tier = getTierForTrophies(trophies);
+  const nextTier = TIER_DEFINITIONS.find((candidate) => candidate.min > trophies);
   return {
     id: user.id,
     username: user.username,
@@ -1976,6 +1977,14 @@ function publicUser(user) {
     tier: tier.name,
     tierIcon: tier.icon,
     tierKey: tier.key,
+    tierMin: tier.min,
+    tierMax: Number.isFinite(tier.max) ? tier.max : null,
+    nextTier: nextTier ? {
+      key: nextTier.key,
+      name: nextTier.name,
+      icon: nextTier.icon,
+      min: nextTier.min
+    } : null,
     lossCounter: Math.max(0, Number(user.loss_counter) || 0)
   };
 }

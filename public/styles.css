@@ -107,7 +107,7 @@ body {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 18px;
+  padding: 72px 18px 18px;
 }
 
 .hidden {
@@ -165,6 +165,31 @@ body {
   border: 1px solid var(--line-strong);
   box-shadow: var(--shadow);
   font-size: 13px;
+}
+
+.brand-mark {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 30;
+  min-height: 44px;
+  padding: 6px 12px 6px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.brand-mark img {
+  width: 32px;
+  height: 32px;
+  display: block;
 }
 
 .auth-intro {
@@ -564,6 +589,25 @@ input:disabled {
   line-height: 1.5;
 }
 
+.patch-detail-toggle {
+  margin-top: 12px;
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.patch-notice-detail {
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--goal-bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.patch-notice-detail ul {
+  margin-top: 0;
+}
+
 .ranking-preview-title {
   margin-bottom: 12px;
 }
@@ -685,6 +729,32 @@ input:disabled {
   line-height: 1.25;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.profile-tier-stat small {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.tier-progress-bar {
+  width: 100%;
+  height: 9px;
+  margin-top: 9px;
+  overflow: hidden;
+  background: var(--input-disabled-bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.tier-progress-bar i {
+  height: 100%;
+  display: block;
+  background: linear-gradient(90deg, var(--gold), var(--teal));
+  border-radius: inherit;
 }
 
 .goal-list {
@@ -1347,7 +1417,7 @@ canvas {
 
 @media (max-width: 640px) {
   .shell {
-    padding: 10px;
+    padding: 62px 10px 10px;
   }
 
   .theme-toggle {
@@ -1355,6 +1425,19 @@ canvas {
     right: 10px;
     min-height: 36px;
     padding: 0 11px;
+  }
+
+  .brand-mark {
+    top: 10px;
+    left: 10px;
+    min-height: 36px;
+    padding: 5px 9px 5px 6px;
+    font-size: 15px;
+  }
+
+  .brand-mark img {
+    width: 26px;
+    height: 26px;
   }
 
   .auth-screen,
