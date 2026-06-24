@@ -184,6 +184,8 @@ const CARDS = {
     role: '근접 단일',
     maxHp: 656,
     damage: 88,
+    rageThreshold: 0.2,
+    rageDamageMultiplier: 1.5,
     range: 42,
     speed: 54,
     attackMs: 1050,
@@ -642,6 +644,11 @@ function createRoomForSocket(socket, payload) {
   const password = normalizeRoomPassword(payload.password);
   const mode = normalizeRoomMode(payload.mode);
   const modeDefinition = ROOM_MODES[mode];
+  const requestedTeam = mode === '2v2' ? normalizeRoomTeam(payload.team) : null;
+  if (mode === '2v2' && requestedTeam === null) {
+    socket.emit('room-error', '2대2는 시작할 팀을 선택하세요.');
+    return;
+  }
   const room = {
     id: crypto.randomUUID(),
     name,
@@ -654,7 +661,12 @@ function createRoomForSocket(socket, payload) {
   };
   room.game.message = waitingRoomMessage(room);
   rooms.set(room.id, room);
-  assignSocketToRoom(socket, room);
+  const slot = assignSocketToRoom(socket, room, requestedTeam);
+  if (slot === null) {
+    rooms.delete(room.id);
+    socket.emit('room-error', '선택한 팀에 들어갈 수 없습니다.');
+    return;
+  }
   socket.emit('room-joined', { room: publicRoomDetail(room), slot: socket.data.slot });
   broadcastState(room);
   emitRooms();
@@ -679,13 +691,28 @@ function joinRoomForSocket(socket, payload) {
     emitRooms();
     return;
   }
+  const requestedTeam = room.mode === '2v2' ? normalizeRoomTeam(payload.team) : null;
+  if (room.mode === '2v2' && requestedTeam === null) {
+    socket.emit('room-error', '2대2는 참가할 팀을 선택하세요.');
+    return;
+  }
+  if (room.mode === '2v2' && !hasOpenTeamSlot(room, requestedTeam)) {
+    socket.emit('room-error', `${teamLabel(requestedTeam)}은 이미 가득 찼습니다.`);
+    emitRooms();
+    return;
+  }
   if (room.passwordHash && !bcrypt.compareSync(normalizeRoomPassword(payload.password), room.passwordHash)) {
     socket.emit('room-error', '방 비밀번호가 올바르지 않습니다.');
     return;
   }
 
   leaveCurrentRoom(socket, { disconnecting: false, silent: true });
-  assignSocketToRoom(socket, room);
+  const slot = assignSocketToRoom(socket, room, requestedTeam);
+  if (slot === null) {
+    socket.emit('room-error', room.mode === '2v2' ? `${teamLabel(requestedTeam)}은 이미 가득 찼습니다.` : '이미 가득 찬 방입니다.');
+    emitRooms();
+    return;
+  }
   room.game.message = waitingRoomMessage(room);
   socket.emit('room-joined', { room: publicRoomDetail(room), slot: socket.data.slot });
   broadcastState(room);
@@ -696,7 +723,7 @@ function joinRoomForSocket(socket, payload) {
   emitRooms();
 }
 
-function assignSocketToRoom(socket, room) {
+function assignSocketToRoom(socket, room, requestedTeam = null) {
   const user = statements.getUserById.get(socket.data.user.id);
   if (!user) {
     socket.emit('room-error', '계정을 찾을 수 없습니다.');
@@ -704,7 +731,7 @@ function assignSocketToRoom(socket, room) {
   }
 
   const existingSlot = room.game.players.findIndex((player) => player.userId === user.id);
-  const slot = existingSlot >= 0 ? existingSlot : room.game.players.findIndex((player) => !player.connected && !player.userId);
+  const slot = existingSlot >= 0 ? existingSlot : findAvailableRoomSlot(room, requestedTeam);
   if (slot < 0) return null;
 
   const player = room.game.players[slot];
@@ -719,6 +746,14 @@ function assignSocketToRoom(socket, room) {
   socket.data.slot = slot;
   socket.join(roomChannel(room.id));
   return slot;
+}
+
+function findAvailableRoomSlot(room, requestedTeam = null) {
+  const players = room.game.players;
+  if (room.mode === '2v2' && requestedTeam !== null) {
+    return players.findIndex((player) => player.team === requestedTeam && !player.connected && !player.userId);
+  }
+  return players.findIndex((player) => !player.connected && !player.userId);
 }
 
 function leaveCurrentRoom(socket, options = {}) {
@@ -1084,6 +1119,7 @@ function spawnUnit(room, owner, cardId, x, y, extras = {}) {
     attachedById: null,
     awakened: false,
     berserked: false,
+    furious: false,
     invincibleUntil: 0,
     action: '',
     actionUntil: 0,
@@ -1641,6 +1677,10 @@ function applyDamageToUnit(room, unit, amount, sourceOwner, now, options = {}) {
 
   unit.hp = Math.max(0, unit.hp - amount);
 
+  if (shouldTriggerFury(unit)) {
+    triggerFury(room, unit, now);
+  }
+
   if (unit.cardId === 'heoseon' && shouldTriggerBerserker(unit)) {
     triggerBerserker(room, unit, now);
     return;
@@ -1658,6 +1698,19 @@ function applyDamageToUnit(room, unit, amount, sourceOwner, now, options = {}) {
 function shouldTriggerBerserker(unit) {
   const card = CARDS[unit.cardId];
   return Boolean(card && card.berserker && !unit.berserked && unit.hp <= unit.maxHp * card.berserkerThreshold);
+}
+
+function shouldTriggerFury(unit) {
+  const card = CARDS[unit.cardId];
+  return Boolean(card && card.rageThreshold && !unit.furious && unit.hp > 0 && unit.hp <= unit.maxHp * card.rageThreshold);
+}
+
+function triggerFury(room, unit, now) {
+  unit.furious = true;
+  unit.nextAttackAt = Math.min(unit.nextAttackAt || now, now + 120);
+  unit.action = '명존쎄!';
+  unit.actionUntil = now + 950;
+  broadcastEffect(room, { type: 'johyunwoo-rage', owner: unit.owner, cardId: unit.cardId, x: unit.x, y: unit.y });
 }
 
 function triggerBerserker(room, unit, now) {
@@ -1874,6 +1927,7 @@ function getUnitDamage(unit, card) {
   let damage = card.damage;
   if (unit.cardId === 'mythos' && unit.awakened) damage = card.awakenedDamage;
   if (card.berserker && unit.berserked) damage = card.berserkerDamage;
+  if (card.rageDamageMultiplier && unit.furious) damage *= card.rageDamageMultiplier;
   return Math.round(damage);
 }
 
@@ -2020,6 +2074,7 @@ function serializeState(room, viewerSlot = null) {
       maxHp: unit.maxHp,
       awakened: unit.awakened,
       berserked: unit.berserked,
+      furious: unit.furious,
       invincible: unit.invincibleUntil > now,
       attached: Boolean(unit.attachedToId),
       suppressed: Boolean(unit.attachedById),
@@ -2225,6 +2280,13 @@ function normalizeRoomMode(value) {
   return ROOM_MODES[mode] ? mode : '1v1';
 }
 
+function normalizeRoomTeam(value) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return null;
+  const team = Number(normalized);
+  return Number.isInteger(team) && (team === 0 || team === 1) ? team : null;
+}
+
 function publicRooms() {
   return [...rooms.values()]
     .filter((room) => room.game.status === 'waiting' && getConnectedPlayerCount(room) < room.maxPlayers)
@@ -2250,6 +2312,7 @@ function publicRoomDetail(room) {
         team: player.team,
         connected: player.connected
       })),
+    teams: room.mode === '2v2' ? publicRoomTeams(room) : [],
     playerCount: getConnectedPlayerCount(room),
     maxPlayers: room.maxPlayers
   };
@@ -2261,6 +2324,32 @@ function emitRooms() {
 
 function getConnectedPlayerCount(room) {
   return room.game.players.filter((player) => player.connected).length;
+}
+
+function getTeamCapacity(room) {
+  return room.mode === '2v2' ? room.maxPlayers / 2 : 1;
+}
+
+function getConnectedTeamCount(room, team) {
+  return room.game.players.filter((player) => player.team === team && player.connected).length;
+}
+
+function hasOpenTeamSlot(room, team) {
+  return getConnectedTeamCount(room, team) < getTeamCapacity(room) && findAvailableRoomSlot(room, team) >= 0;
+}
+
+function publicRoomTeams(room) {
+  return [0, 1].map((team) => {
+    const count = getConnectedTeamCount(room, team);
+    const capacity = getTeamCapacity(room);
+    return {
+      team,
+      label: teamLabel(team),
+      count,
+      capacity,
+      full: count >= capacity
+    };
+  });
 }
 
 function getKnownPlayerCount(room) {

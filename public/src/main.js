@@ -16,6 +16,20 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: '2대2 팀 선택과 조현우 분노',
+    date: '2026.06.24',
+    items: [
+      '2대2 방에서 아래 진영 또는 위 진영을 직접 선택해 참가 가능',
+      '이미 2명이 찬 팀은 참가 버튼 비활성화 및 서버 입장 차단',
+      '조현우 HP 20% 이하에서 분노, 공격력 50% 증가와 명존쎄! 이펙트 추가'
+    ],
+    details: [
+      '2대2 방을 만들 때 시작 팀을 고를 수 있고, 방 목록에서도 팀별 인원 현황을 보며 원하는 진영으로 들어갈 수 있다.',
+      '팀별 정원은 2명이며 클라이언트 버튼 비활성화와 서버 검증을 모두 적용해 꽉 찬 팀으로는 들어갈 수 없다.',
+      '조현우는 체력이 최대 HP의 20% 이하로 떨어지는 순간 한 번 분노 상태가 되며, 이후 기본 공격 피해가 88에서 132로 오른다.'
+    ]
+  },
+  {
     title: '소환 임팩트와 절친 특성 개선',
     date: '2026.06.24',
     items: [
@@ -287,11 +301,12 @@ const CHARACTER_DETAILS = [
       ['사거리', '42'],
       ['공격 주기', '1.05초'],
       ['이동속도', '54'],
+      ['분노', 'HP 20% 이하 / 공격력 +50%'],
       ['절친 출격', '8 엘릭서 / 스탯 감소 없음']
     ],
-    ability: '근접 거리에서 한 대상에게 단일 공격을 한다. HP와 공격력이 20% 낮아졌고 비용은 4 엘릭서다. 박바둑과 손패에 함께 있으면 8 엘릭서로 둘이 동시에 기본 스탯 그대로 출격하며 전장에 절친 특성 문구가 뜬다.',
+    ability: '근접 거리에서 한 대상에게 단일 공격을 한다. HP와 공격력이 20% 낮아졌고 비용은 4 엘릭서다. HP가 20% 이하로 떨어지면 분노해서 명존쎄!를 외치고 공격력이 50% 강해진다. 박바둑과 손패에 함께 있으면 8 엘릭서로 둘이 동시에 기본 스탯 그대로 출격하며 전장에 절친 특성 문구가 뜬다.',
     appearance: '특별히 튀는 점이 없는 아주 평범한 남학생이다.',
-    trait: '체력과 공격력이 더 낮아진 근접 단일 딜러다. 박바둑과 절친 특성으로 나올 때도 스탯은 낮아지지 않는다.'
+    trait: '체력과 공격력이 더 낮아진 근접 단일 딜러다. 낮은 체력 구간에 들어가면 피해량이 88에서 132로 오른다. 박바둑과 절친 특성으로 나올 때도 스탯은 낮아지지 않는다.'
   },
   {
     id: 'kimgeunyoung',
@@ -583,6 +598,12 @@ class BattleScene extends Phaser.Scene {
         this.g.lineStyle(3, 0xff5b66, 0.9);
         this.g.strokeCircle(unit.x, unit.y, radius + 12);
       }
+      if (unit.furious) {
+        this.g.fillStyle(0xff3f54, 0.13);
+        this.g.fillCircle(unit.x, unit.y, radius + 13);
+        this.g.lineStyle(3, 0xff5166, 0.92);
+        this.g.strokeCircle(unit.x, unit.y, radius + 9);
+      }
       if (unit.windup) {
         this.g.lineStyle(3, 0xffffff, 0.75);
         this.g.strokeCircle(unit.x, unit.y, radius + 13);
@@ -732,14 +753,22 @@ class BattleScene extends Phaser.Scene {
       this.g.lineStyle(1, dark, 0.8);
       this.g.lineBetween(x - 10, y + 7, x + 10, y + 7);
     } else if (unit.cardId === 'johyunwoo') {
-      this.g.fillStyle(theme.fill, 1);
+      const furious = Boolean(unit.furious);
+      this.g.fillStyle(furious ? 0xd24d5d : theme.fill, 1);
       this.g.fillRoundedRect(x - 9, y - 12, 18, 31, 5);
       this.g.strokeRoundedRect(x - 9, y - 12, 18, 31, 5);
-      this.g.fillStyle(skin, 1);
+      this.g.fillStyle(furious ? 0xffb3a8 : skin, 1);
       this.g.fillEllipse(x, y - 24, 20, 16);
       this.g.strokeEllipse(x, y - 24, 20, 16);
-      this.g.lineStyle(4, white, 0.85);
+      this.g.lineStyle(furious ? 5 : 4, furious ? 0xfff2ad : white, furious ? 1 : 0.85);
       this.g.lineBetween(x + dir * 8, y - 4, x + dir * 24, y - 14);
+      if (furious) {
+        this.g.lineStyle(2, 0x66131d, 1);
+        this.g.lineBetween(x - 6, y - 27, x - 1, y - 25);
+        this.g.lineBetween(x + 1, y - 25, x + 6, y - 27);
+        this.g.lineStyle(3, 0xff5166, 0.85);
+        this.g.lineBetween(x - dir * 6, y - 3, x - dir * 18, y + 6);
+      }
     } else if (unit.cardId === 'osj') {
       this.g.fillStyle(theme.fill, 1);
       this.g.fillRoundedRect(x - 12, y - 16, 24, 39, 5);
@@ -894,6 +923,20 @@ class BattleScene extends Phaser.Scene {
         this.g.lineBetween(effect.x - 42, effect.y + 38, effect.x + 24, effect.y - 52);
         this.g.lineBetween(effect.x + 44, effect.y + 28, effect.x - 16, effect.y - 56);
         this.drawCenteredText('폭발 상태', effect.x, Math.max(16, effect.y - 84 - t * 12), 22, '#ffccd0');
+      } else if (effect.type === 'johyunwoo-rage') {
+        const labelY = Math.max(18, effect.y - 74 - t * 16);
+        this.g.fillStyle(0xff3f54, alpha * 0.18);
+        this.g.fillCircle(effect.x, effect.y, 32 + t * 88);
+        this.g.lineStyle(6, 0xff5166, alpha);
+        this.g.strokeCircle(effect.x, effect.y, 22 + t * 78);
+        this.g.lineStyle(3, 0xfff2ad, alpha * 0.95);
+        this.g.lineBetween(effect.x - 34, effect.y + 28, effect.x + 30, effect.y - 36);
+        this.g.lineBetween(effect.x + 34, effect.y + 28, effect.x - 30, effect.y - 36);
+        this.g.fillStyle(0x111318, alpha * 0.88);
+        this.g.fillRoundedRect(effect.x - 49, labelY - 5, 98, 30, 8);
+        this.g.lineStyle(3, 0xff5166, alpha);
+        this.g.strokeRoundedRect(effect.x - 49, labelY - 5, 98, 30, 8);
+        this.drawCenteredText('명존쎄!', effect.x, labelY, 18, '#ffffff');
       } else if (effect.type === 'windup') {
         this.g.fillStyle(0x111318, alpha * 0.8);
         this.g.fillRoundedRect(effect.x - 29, effect.y - 54, 58, 24, 8);
@@ -1300,6 +1343,7 @@ class BattleScene extends Phaser.Scene {
     if (type === 'chaos') return 950;
     if (type === 'awaken') return 1200;
     if (type === 'berserk') return 1200;
+    if (type === 'johyunwoo-rage') return 1300;
     if (type === 'windup') return 820;
     if (type === 'punchline') return 1050;
     if (type === 'jimin-yushin-counter') return 1250;
@@ -1432,10 +1476,13 @@ function setupShell() {
   const authPanels = [...document.querySelectorAll('[data-auth-panel]')];
   const createRoomForm = document.getElementById('create-room-form');
   const refreshRoomsButton = document.getElementById('refresh-rooms');
+  const roomModeSelect = document.getElementById('room-mode');
+  const createTeamField = document.getElementById('create-team-field');
 
   initializeTheme(themeButton);
   renderCharacterGrid();
   renderPatchNotices();
+  updateCreateTeamField();
 
   setAuthMode('login');
   showScreen(authScreen);
@@ -1533,9 +1580,14 @@ function setupShell() {
     const name = document.getElementById('room-name').value;
     const password = document.getElementById('room-password').value;
     const mode = document.getElementById('room-mode').value;
+    const team = document.getElementById('room-team').value;
     connectSocket();
-    getSocket().emit('create-room', { name, password, mode });
+    getSocket().emit('create-room', { name, password, mode, team: mode === '2v2' ? team : null });
   });
+
+  if (roomModeSelect) {
+    roomModeSelect.addEventListener('change', updateCreateTeamField);
+  }
 
   refreshRoomsButton.addEventListener('click', requestRooms);
 
@@ -1569,6 +1621,11 @@ function setupShell() {
       panel.classList.toggle('hidden', !isActive);
       panel.setAttribute('aria-hidden', String(!isActive));
     }
+  }
+
+  function updateCreateTeamField() {
+    if (!roomModeSelect || !createTeamField) return;
+    createTeamField.classList.toggle('hidden', roomModeSelect.value !== '2v2');
   }
 
   window.showGameScreen = () => {
@@ -2245,7 +2302,8 @@ function renderRoomList(rooms) {
     title.textContent = `${room.locked ? '잠금 ' : ''}${room.name}`;
     const meta = document.createElement('p');
     meta.className = 'room-meta';
-    meta.textContent = `${room.modeLabel || '1대1'} · ${room.playerCount}/${room.maxPlayers}명 대기`;
+    const teamSummary = room.mode === '2v2' ? ` · ${roomTeamSummary(room)}` : '';
+    meta.textContent = `${room.modeLabel || '1대1'} · ${room.playerCount}/${room.maxPlayers}명 대기${teamSummary}`;
     info.append(title, meta);
 
     const password = document.createElement('input');
@@ -2254,20 +2312,65 @@ function renderRoomList(rooms) {
     password.placeholder = room.locked ? '비밀번호' : '공개 방';
     password.disabled = !room.locked;
 
-    const joinButton = document.createElement('button');
-    joinButton.type = 'button';
-    joinButton.textContent = '참가';
-    joinButton.addEventListener('click', () => {
-      connectSocket();
-      getSocket().emit('join-room', {
-        roomId: room.id,
-        password: password.value
-      });
-    });
+    const joinArea = document.createElement('div');
+    joinArea.className = room.mode === '2v2' ? 'room-team-actions' : 'room-join-actions';
 
-    card.append(info, password, joinButton);
+    if (room.mode === '2v2') {
+      for (const team of roomTeamEntries(room)) {
+        const joinButton = document.createElement('button');
+        joinButton.type = 'button';
+        joinButton.textContent = `${team.label} ${team.count}/${team.capacity}`;
+        joinButton.disabled = team.full;
+        joinButton.title = team.full ? '이미 가득 찬 팀입니다.' : `${team.label}으로 참가`;
+        joinButton.addEventListener('click', () => {
+          joinRoom(room, password.value, team.team);
+        });
+        joinArea.appendChild(joinButton);
+      }
+    } else {
+      const joinButton = document.createElement('button');
+      joinButton.type = 'button';
+      joinButton.textContent = '참가';
+      joinButton.addEventListener('click', () => {
+        joinRoom(room, password.value);
+      });
+      joinArea.appendChild(joinButton);
+    }
+
+    card.append(info, password, joinArea);
     list.appendChild(card);
   }
+}
+
+function joinRoom(room, password, team = null) {
+  connectSocket();
+  const payload = {
+    roomId: room.id,
+    password
+  };
+  if (team !== null && team !== undefined) payload.team = String(team);
+  getSocket().emit('join-room', payload);
+}
+
+function roomTeamEntries(room) {
+  if (Array.isArray(room.teams) && room.teams.length > 0) return room.teams;
+  const capacity = 2;
+  return [0, 1].map((team) => {
+    const count = (room.players || []).filter((player) => player.team === team && player.connected).length;
+    return {
+      team,
+      label: teamName(team),
+      count,
+      capacity,
+      full: count >= capacity
+    };
+  });
+}
+
+function roomTeamSummary(room) {
+  return roomTeamEntries(room)
+    .map((team) => `${team.label} ${team.count}/${team.capacity}`)
+    .join(' · ');
 }
 
 function updateGameRoomTitle() {

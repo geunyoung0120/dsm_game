@@ -1246,6 +1246,23 @@ input:disabled {
   font-size: 13px;
 }
 
+.room-join-actions,
+.room-team-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.room-team-actions {
+  min-width: 172px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.room-team-actions button {
+  min-width: 0;
+  padding-inline: 12px;
+  white-space: nowrap;
+}
+
 .character-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));

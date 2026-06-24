@@ -233,9 +233,9 @@ async function runClientSmoke(accounts) {
   const cardsByClient = welcomed.map((payload) => payload.cards);
 
   clients[0].emit('create-room', { name: '스모크 테스트 방', password: '' });
-  const joined = await once(clients[0], 'room-joined');
+  const joined = await once(clients[0], 'room-joined', '1v1 host room-joined');
   clients[1].emit('join-room', { roomId: joined.room.id, password: '' });
-  await once(clients[1], 'room-joined');
+  await once(clients[1], 'room-joined', '1v1 guest room-joined');
   await delay(150);
 
   return runPlayableSmoke(cardsByClient);
@@ -306,15 +306,25 @@ async function expectTwoVersusTwoRoom(accounts) {
   }));
 
   await Promise.all(clients.map((client) => once(client, 'welcome')));
-  clients[0].emit('create-room', { name: '2대2 스모크 테스트 방', password: '', mode: '2v2' });
-  const hostJoin = await once(clients[0], 'room-joined');
+  clients[0].emit('create-room', { name: '2대2 스모크 테스트 방', password: '', mode: '2v2', team: 1 });
+  const hostJoin = await once(clients[0], 'room-joined', '2v2 host room-joined');
   if (!hostJoin.room || hostJoin.room.mode !== '2v2' || hostJoin.room.maxPlayers !== 4) {
     throw new Error('2v2 room did not expose the expected mode and capacity.');
   }
 
-  for (let i = 1; i < clients.length; i += 1) {
-    clients[i].emit('join-room', { roomId: hostJoin.room.id, password: '' });
-    await once(clients[i], 'room-joined');
+  clients[1].emit('join-room', { roomId: hostJoin.room.id, password: '', team: 1 });
+  await once(clients[1], 'room-joined', '2v2 second top team room-joined');
+
+  clients[2].emit('join-room', { roomId: hostJoin.room.id, password: '', team: 1 });
+  const fullTeamError = await once(clients[2], 'room-error', '2v2 full team room-error');
+  if (!String(fullTeamError).includes('이미 가득 찼습니다')) {
+    throw new Error(`2v2 full team did not reject a third player. Got: ${fullTeamError}`);
+  }
+  await delay(120);
+
+  for (let i = 2; i < clients.length; i += 1) {
+    clients[i].emit('join-room', { roomId: hostJoin.room.id, password: '', team: 0 });
+    await once(clients[i], 'room-joined', `2v2 bottom team player ${i} room-joined`);
   }
 
   const state = await waitForState(clients[3], (payload) => payload.status === 'playing');
@@ -336,6 +346,7 @@ async function expectTwoVersusTwoRoom(accounts) {
     status: state.status,
     players: state.players.length,
     teams: state.players.map((player) => player.team),
+    rejectedFullTeam: true,
     kingTowerHp: kingTower.maxHp
   };
 }
@@ -348,9 +359,9 @@ function effectiveSmokeCost(player, card) {
   return card.cost;
 }
 
-function once(client, eventName) {
+function once(client, eventName, label = eventName) {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Timed out waiting for ${eventName}.`)), 5000);
+    const timer = setTimeout(() => reject(new Error(`Timed out waiting for ${label}.`)), 5000);
     client.once(eventName, (payload) => {
       clearTimeout(timer);
       resolve(payload);
