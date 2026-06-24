@@ -239,8 +239,8 @@ const CARDS = {
     berserkerMaxHp: 900,
     berserkerDamage: 90,
     berserkerSpeed: 106,
-    berserkerAttackMs: 250,
-    berserkerSplashRadius: 58
+    berserkerAttackMs: 275,
+    berserkerSplashRadius: 52
   },
   osj: {
     id: 'osj',
