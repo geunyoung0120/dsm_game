@@ -46,6 +46,7 @@ async function main() {
   ]);
   await Promise.all(accounts.map(expectSessionUser));
   await expectRankings(accounts[0], accounts.map((account) => account.user.username));
+  await expectTiers(accounts[0]);
   await expectSessionUser(await login(accounts[0].user.username));
   const result = await runClientSmoke(accounts);
   console.log(JSON.stringify(result));
@@ -160,6 +161,26 @@ async function expectRankings(account, expectedUsernames) {
     if (!entry || !entry.rank || !entry.tier || !Number.isInteger(entry.trophies)) {
       throw new Error('Smoke rankings did not include the expected user entry.');
     }
+  }
+}
+
+async function expectTiers(account) {
+  const response = await fetch(`${url}/api/tiers`, {
+    headers: { Cookie: account.cookie }
+  });
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(body.error || 'Smoke tiers lookup failed.');
+  }
+  if (!Array.isArray(body.tiers) || body.tiers.length === 0) {
+    throw new Error('Smoke tiers response did not include a tiers array.');
+  }
+  const currentTier = body.tiers.find((tier) => tier.key === account.user.tierKey);
+  if (!currentTier || !currentTier.name || !Number.isInteger(currentTier.min)) {
+    throw new Error('Smoke tiers did not include the current user tier.');
+  }
+  if (!body.tiers.some((tier) => tier.max === null)) {
+    throw new Error('Smoke tiers did not expose the open-ended top tier.');
   }
 }
 

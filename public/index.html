@@ -108,8 +108,11 @@
           <section class="lobby-dashboard" aria-label="플레이어 정보">
             <div class="profile-panel">
               <div class="section-title">
-                <p class="eyebrow">내 프로필</p>
-                <h2>전투 준비</h2>
+                <div>
+                  <p class="eyebrow">내 프로필</p>
+                  <h2>전투 준비</h2>
+                </div>
+                <button id="open-tier-chart" type="button" class="secondary">티어표 보기</button>
               </div>
               <div id="profile-summary" class="profile-summary"></div>
             </div>
@@ -165,6 +168,18 @@
           <button id="back-ranking" type="button" class="secondary">뒤로가기</button>
         </header>
         <div id="ranking-list" class="ranking-list"></div>
+      </section>
+
+      <section id="tier-screen" class="tier-screen hidden">
+        <header class="tier-header">
+          <div>
+            <p class="eyebrow">트로피 티어</p>
+            <h1>티어표</h1>
+          </div>
+          <button id="back-tier" type="button" class="secondary">뒤로가기</button>
+        </header>
+        <div id="tier-current-summary" class="tier-current-summary"></div>
+        <div id="tier-list" class="tier-list"></div>
       </section>
 
       <section id="room-screen" class="room-screen hidden">

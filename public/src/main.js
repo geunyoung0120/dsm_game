@@ -161,6 +161,7 @@ let currentRoom = null;
 let currentSlot = null;
 let ascensionAudioUntil = 0;
 let latestRankings = [];
+let latestTiers = [];
 
 class BattleScene extends Phaser.Scene {
   constructor() {
@@ -950,11 +951,14 @@ function setupShell() {
   const roomScreen = document.getElementById('room-screen');
   const encyclopediaScreen = document.getElementById('encyclopedia-screen');
   const rankingScreen = document.getElementById('ranking-screen');
+  const tierScreen = document.getElementById('tier-screen');
   const gameScreen = document.getElementById('game-screen');
   const startButton = document.getElementById('start-game');
   const encyclopediaButton = document.getElementById('open-encyclopedia');
   const rankingButton = document.getElementById('open-ranking');
+  const tierButton = document.getElementById('open-tier-chart');
   const backRankingButton = document.getElementById('back-ranking');
+  const backTierButton = document.getElementById('back-tier');
   const backButton = document.getElementById('back-home');
   const backMainButton = document.getElementById('back-main');
   const logoutButton = document.getElementById('logout');
@@ -1007,7 +1011,16 @@ function setupShell() {
     await loadRankings();
   });
 
+  tierButton.addEventListener('click', async () => {
+    showScreen(tierScreen);
+    await loadTiers();
+  });
+
   backRankingButton.addEventListener('click', () => {
+    showScreen(homeScreen);
+  });
+
+  backTierButton.addEventListener('click', () => {
     showScreen(homeScreen);
   });
 
@@ -1060,7 +1073,7 @@ function setupShell() {
   });
 
   function showScreen(target) {
-    for (const screen of [authScreen, homeScreen, roomScreen, encyclopediaScreen, rankingScreen, gameScreen]) {
+    for (const screen of [authScreen, homeScreen, roomScreen, encyclopediaScreen, rankingScreen, tierScreen, gameScreen]) {
       screen.classList.toggle('hidden', screen !== target);
     }
   }
@@ -1249,6 +1262,21 @@ async function loadRankings() {
   }
 }
 
+async function loadTiers() {
+  if (!currentUser) return;
+  try {
+    const data = await apiRequest('/api/tiers');
+    latestTiers = data.tiers || [];
+    if (data.user) {
+      currentUser = data.user;
+      renderProfile();
+    }
+    renderTierList();
+  } catch (error) {
+    renderTierList(error.message || '티어표를 가져오지 못했습니다.');
+  }
+}
+
 function renderProfile() {
   const summary = document.getElementById('profile-summary');
   if (!summary || !currentUser) return;
@@ -1284,6 +1312,88 @@ function renderTopRankings(errorMessage = '') {
   for (const entry of topThree) {
     list.appendChild(rankingPodiumItem(entry));
   }
+}
+
+function renderTierList(errorMessage = '') {
+  const summary = document.getElementById('tier-current-summary');
+  const list = document.getElementById('tier-list');
+  if (!summary || !list) return;
+
+  summary.replaceChildren();
+  list.replaceChildren();
+
+  if (errorMessage) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = errorMessage;
+    list.appendChild(empty);
+    return;
+  }
+
+  if (latestTiers.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = '아직 티어표가 없습니다.';
+    list.appendChild(empty);
+    return;
+  }
+
+  const currentTier = latestTiers.find((tier) => tier.key === currentUser.tierKey);
+  const nextTier = latestTiers.find((tier) => tier.min > currentUser.trophies);
+  summary.appendChild(tierSummaryCard(currentTier, nextTier));
+
+  for (const tier of [...latestTiers].reverse()) {
+    list.appendChild(tierRow(tier, tier.key === currentUser.tierKey));
+  }
+}
+
+function tierSummaryCard(currentTier, nextTier) {
+  const card = document.createElement('article');
+  card.className = 'tier-current-card';
+
+  const icon = document.createElement('strong');
+  icon.textContent = currentTier ? currentTier.icon : '?';
+
+  const info = document.createElement('div');
+  const title = document.createElement('span');
+  title.textContent = currentTier ? `현재 위치: ${currentTier.name}` : '현재 위치 확인 불가';
+  const detail = document.createElement('small');
+  if (nextTier) {
+    detail.textContent = `내 트로피 ${currentUser.trophies}개 · 다음 티어까지 ${Math.max(0, nextTier.min - currentUser.trophies)}개`;
+  } else {
+    detail.textContent = `내 트로피 ${currentUser.trophies}개 · 최고 티어`;
+  }
+  info.append(title, detail);
+  card.append(icon, info);
+  return card;
+}
+
+function tierRow(tier, isCurrent) {
+  const row = document.createElement('article');
+  row.className = 'tier-row';
+  if (isCurrent) row.classList.add('tier-row-current');
+
+  const icon = document.createElement('strong');
+  icon.textContent = tier.icon;
+
+  const info = document.createElement('div');
+  const name = document.createElement('span');
+  name.textContent = tier.name;
+  const range = document.createElement('small');
+  range.textContent = tierRangeText(tier);
+  info.append(name, range);
+
+  const status = document.createElement('b');
+  status.textContent = isCurrent ? `내 위치 · ${currentUser.trophies}개` : ' ';
+  status.setAttribute('aria-label', isCurrent ? '현재 내 위치' : tier.name);
+
+  row.append(icon, info, status);
+  return row;
+}
+
+function tierRangeText(tier) {
+  if (tier.max === null || tier.max === undefined) return `${tier.min}개 이상`;
+  return `${tier.min}~${tier.max}개`;
 }
 
 function rankingPodiumItem(entry) {

@@ -438,6 +438,10 @@ app.get('/api/rankings', requireAuthApi, (req, res) => {
   res.json({ rankings: publicRankings() });
 });
 
+app.get('/api/tiers', requireAuthApi, (req, res) => {
+  res.json({ tiers: publicTiers(), user: publicUser(req.user) });
+});
+
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, filePath) => {
     if (['.html', '.js', '.css'].includes(path.extname(filePath))) {
@@ -1710,6 +1714,16 @@ function publicRankings() {
       tierIcon: tier.icon
     };
   });
+}
+
+function publicTiers() {
+  return TIER_DEFINITIONS.map((tier) => ({
+    key: tier.key,
+    name: tier.name,
+    icon: tier.icon,
+    min: tier.min,
+    max: Number.isFinite(tier.max) ? tier.max : null
+  }));
 }
 
 function refreshPlayerProfile(player) {
