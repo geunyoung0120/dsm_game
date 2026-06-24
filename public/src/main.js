@@ -12,6 +12,15 @@ const BBATMAN_HEAL_RANGE = 90;
 
 const PATCH_NOTICES = [
   {
+    title: '2대2 모드와 덱 화면 개편',
+    date: '2026.06.24',
+    items: [
+      '방 만들기에서 1대1 또는 2대2 모드를 선택할 수 있게 변경',
+      '덱짜기 화면을 위 8칸 배틀 덱, 아래 카드 풀 구조로 개편',
+      '2대2에서는 같은 진영 플레이어가 타워와 승패를 공유'
+    ]
+  },
+  {
     title: '6월 24일 밸런스 패치',
     date: '2026.06.24',
     items: [
@@ -450,10 +459,12 @@ class BattleScene extends Phaser.Scene {
 
   drawSpawnPreview() {
     if (this.slot === null || this.slot === undefined || this.selectedHandIndex === null || this.state.status !== 'playing') return;
-    const zone = this.slot === 0 ? { y: 338, h: ARENA_H - 380 } : { y: 42, h: 240 };
-    this.g.fillStyle(this.slot === 0 ? 0x4f8de8 : 0xe4536d, 0.13);
+    const player = this.state.players[this.slot];
+    const team = player ? player.team : this.slot;
+    const zone = team === 0 ? { y: 338, h: ARENA_H - 380 } : { y: 42, h: 240 };
+    this.g.fillStyle(team === 0 ? 0x4f8de8 : 0xe4536d, 0.13);
     this.g.fillRect(48, zone.y, ARENA_W - 96, zone.h);
-    this.g.lineStyle(2, this.slot === 0 ? 0xcbe1ff : 0xffd5d1, 0.7);
+    this.g.lineStyle(2, team === 0 ? 0xcbe1ff : 0xffd5d1, 0.7);
     this.g.strokeRect(48, zone.y, ARENA_W - 96, zone.h);
   }
 
@@ -974,8 +985,6 @@ class BattleScene extends Phaser.Scene {
   }
 
   drawHud() {
-    const p0 = this.state.players[0];
-    const p1 = this.state.players[1];
     const me = this.slot === null || this.slot === undefined ? null : this.state.players[this.slot];
     const time = formatTime(this.state.remainingMs);
     const doubleElixir = (this.state.elixirMultiplier || 1) > 1;
@@ -995,37 +1004,44 @@ class BattleScene extends Phaser.Scene {
       this.drawCenteredText('X2', x + 143, 50, 14, '#ffffff');
     }
 
-    this.drawHudPlayer(p1, '위 진영', x + 12, 88, w - 24, '#ffd5d1');
-    this.drawHudPlayer(p0, '아래 진영', x + 12, 198, w - 24, '#cbe1ff');
+    this.drawHudTeam(1, '위 진영', x + 12, 88, w - 24, '#ffd5d1');
+    this.drawHudTeam(0, '아래 진영', x + 12, 212, w - 24, '#cbe1ff');
 
-    this.drawText('상태', x + 14, 322, 11, '#8f98a6');
-    this.drawText(truncateText(this.state.message || (doubleElixir ? '더블 엘릭서' : '전투 중'), 18), x + 14, 340, 13, '#d6d0c6');
+    this.drawText('상태', x + 14, 350, 11, '#8f98a6');
+    this.drawText(truncateText(this.state.message || (doubleElixir ? '더블 엘릭서' : '전투 중'), 18), x + 14, 368, 13, '#d6d0c6');
 
     if (me) {
       this.drawElixir(me.elixir);
-      this.drawText('내 진영', x + 14, 388, 11, '#8f98a6');
-      this.drawText(this.slot === 0 ? '아래' : '위', x + 14, 406, 16, '#f7f2e8');
+      this.drawText('내 진영', x + 14, 416, 11, '#8f98a6');
+      this.drawText(teamName(me.team), x + 14, 434, 16, '#f7f2e8');
     } else {
       this.drawText(truncateText(this.notice || '방 대기 중', 18), x + 14, 500, 14, '#f7f2e8');
     }
   }
 
-  drawHudPlayer(player, label, x, y, w, accent) {
-    this.g.fillStyle(0x222834, 0.88);
-    this.g.fillRoundedRect(x, y, w, 92, 8);
-    this.g.lineStyle(2, 0xffffff, 0.1);
-    this.g.strokeRoundedRect(x, y, w, 92, 8);
+  drawHudTeam(team, label, x, y, w, accent) {
+    const players = (this.state.players || []).filter((player) => player.team === team);
+    const connectedPlayers = players.filter((player) => player.connected || player.username);
+    const towerHp = players[0] ? players[0].totalTowerHp : 0;
 
-    const username = player ? player.username || label : label;
-    const tier = player && player.tier ? `${player.tierIcon || ''} ${player.tier}` : '대기';
-    const towerHp = player ? player.totalTowerHp : 0;
-    const trophies = player ? player.trophies : 0;
+    this.g.fillStyle(0x222834, 0.88);
+    this.g.fillRoundedRect(x, y, w, 108, 8);
+    this.g.lineStyle(2, 0xffffff, 0.1);
+    this.g.strokeRoundedRect(x, y, w, 108, 8);
 
     this.drawText(label, x + 10, y + 8, 11, accent);
-    this.drawText(truncateText(username, 17), x + 10, y + 25, 15, '#f7f2e8');
-    this.drawText(truncateText(tier, 17), x + 10, y + 47, 12, '#d6d0c6');
-    this.drawText(`타워 ${towerHp}`, x + 10, y + 67, 11, '#d6d0c6');
-    this.drawText(`트로피 ${trophies}`, x + 98, y + 67, 11, '#d6d0c6');
+    this.drawText(`타워 ${towerHp}`, x + 94, y + 8, 11, '#d6d0c6');
+    if (connectedPlayers.length === 0) {
+      this.drawText('대기 중', x + 10, y + 34, 14, '#f7f2e8');
+      return;
+    }
+
+    connectedPlayers.slice(0, 2).forEach((player, index) => {
+      const rowY = y + 31 + index * 34;
+      const tier = player.tier ? `${player.tierIcon || ''} ${player.tier}` : '대기';
+      this.drawText(truncateText(player.username || `플레이어 ${player.slot + 1}`, 16), x + 10, rowY, 14, '#f7f2e8');
+      this.drawText(truncateText(`${tier} · ${player.trophies || 0}`, 18), x + 10, rowY + 17, 11, '#d6d0c6');
+    });
   }
 
   drawElixir(elixir) {
@@ -1090,16 +1106,16 @@ class BattleScene extends Phaser.Scene {
     if (this.state.status === 'waiting') {
       this.g.fillStyle(0x0c0e11, 0.62);
       this.g.fillRect(0, 0, ARENA_W, ARENA_H);
-      this.drawCenteredText('상대 접속 대기 중', FIELD_CENTER_X, 286, 30, '#f7f2e8');
-      this.drawCenteredText('다른 플레이어가 이 방에 참가하면 자동으로 시작됩니다.', FIELD_CENTER_X, 326, 16, '#d6d0c6');
+      this.drawCenteredText('플레이어 대기 중', FIELD_CENTER_X, 286, 30, '#f7f2e8');
+      this.drawCenteredText(this.state.message || '필요 인원이 모두 들어오면 자동으로 시작됩니다.', FIELD_CENTER_X, 326, 16, '#d6d0c6');
     }
 
     if (this.state.status === 'ended') {
       this.g.fillStyle(0x0c0e11, 0.68);
       this.g.fillRect(0, 0, ARENA_W, ARENA_H);
-      const winner = this.state.winner === null ? null : this.state.players[this.state.winner];
-      const result = winner ? `${winner.username || `플레이어 ${this.state.winner + 1}`} 승리` : '무승부';
+      const result = this.state.winner === null ? '무승부' : `${teamName(this.state.winner)} 승리`;
       const rematchCount = this.state.players.filter((player) => player.rematchAccepted).length;
+      const requiredRematches = this.state.maxPlayers || this.state.players.length || 2;
       this.drawCenteredText(result, FIELD_CENTER_X, 276, 34, '#f7f2e8');
       this.drawCenteredText(this.state.reason || '', FIELD_CENTER_X, 318, 17, '#d6d0c6');
       if (this.state.trophyChange) {
@@ -1107,14 +1123,16 @@ class BattleScene extends Phaser.Scene {
         const sign = change.delta > 0 ? '+' : '';
         this.drawCenteredText(`트로피 ${sign}${change.delta} | 현재 ${change.trophies}개 | ${change.tierIcon} ${change.tier}`, FIELD_CENTER_X, 356, 15, '#fff4a7');
       }
-      this.drawCenteredText(`재경기 동의 ${rematchCount}/2`, FIELD_CENTER_X, 386, 15, '#fff4a7');
-      this.drawCenteredText('둘 다 재경기를 누르면 같은 방에서 다시 시작합니다.', FIELD_CENTER_X, 414, 14, '#d6d0c6');
+      this.drawCenteredText(`재경기 동의 ${rematchCount}/${requiredRematches}`, FIELD_CENTER_X, 386, 15, '#fff4a7');
+      this.drawCenteredText('모든 플레이어가 재경기를 누르면 같은 방에서 다시 시작합니다.', FIELD_CENTER_X, 414, 14, '#d6d0c6');
     }
   }
 
   isInOwnSpawnZone(x, y) {
     if (x < 48 || x > ARENA_W - 48) return false;
-    if (this.slot === 0) return y >= 338 && y <= ARENA_H - 42;
+    const player = this.state && this.slot !== null && this.slot !== undefined ? this.state.players[this.slot] : null;
+    const team = player ? player.team : this.slot;
+    if (team === 0) return y >= 338 && y <= ARENA_H - 42;
     return y >= 42 && y <= 282;
   }
 
@@ -1197,6 +1215,10 @@ function formatTime(ms) {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function teamName(team) {
+  return team === 0 ? '아래 진영' : '위 진영';
 }
 
 function truncateText(value, maxLength) {
@@ -1354,8 +1376,9 @@ function setupShell() {
     event.preventDefault();
     const name = document.getElementById('room-name').value;
     const password = document.getElementById('room-password').value;
+    const mode = document.getElementById('room-mode').value;
     connectSocket();
-    getSocket().emit('create-room', { name, password });
+    getSocket().emit('create-room', { name, password, mode });
   });
 
   refreshRoomsButton.addEventListener('click', requestRooms);
@@ -1665,11 +1688,23 @@ function renderSelectedDeck() {
     slot.className = 'selected-deck-slot';
     if (!card) {
       slot.classList.add('selected-deck-slot-empty');
-      slot.textContent = `${i + 1}`;
+      const number = document.createElement('b');
+      number.textContent = String(i + 1);
+      const label = document.createElement('span');
+      label.textContent = '빈 카드';
+      const meta = document.createElement('small');
+      meta.textContent = '아래에서 선택';
+      slot.append(number, label, meta);
       slot.disabled = true;
     } else {
       const theme = CARD_THEME[cardId] || { short: '?' };
-      slot.innerHTML = `<b>${theme.short}</b><span>${card.name}</span><small>${card.cost} 엘릭서</small>`;
+      const badge = document.createElement('b');
+      badge.textContent = theme.short;
+      const name = document.createElement('span');
+      name.textContent = card.name;
+      const meta = document.createElement('small');
+      meta.textContent = `${card.cost} 엘릭서`;
+      slot.append(badge, name, meta);
       slot.addEventListener('click', () => {
         selectedDeck.splice(i, 1);
         setMessage('deck-message', '선택한 카드를 뺐습니다.');
@@ -1974,7 +2009,7 @@ function renderRoomList(rooms) {
     title.textContent = `${room.locked ? '잠금 ' : ''}${room.name}`;
     const meta = document.createElement('p');
     meta.className = 'room-meta';
-    meta.textContent = `${room.playerCount}/${room.maxPlayers}명 대기`;
+    meta.textContent = `${room.modeLabel || '1대1'} · ${room.playerCount}/${room.maxPlayers}명 대기`;
     info.append(title, meta);
 
     const password = document.createElement('input');
@@ -2003,8 +2038,10 @@ function updateGameRoomTitle() {
   const title = document.getElementById('game-room-title');
   if (!title) return;
   const roomName = currentRoom ? currentRoom.name : '전투 대기';
-  const side = currentSlot === 0 ? '아래 진영' : currentSlot === 1 ? '위 진영' : '대기';
-  title.textContent = `${roomName} · ${side}`;
+  const statePlayer = latestState && currentSlot !== null && currentSlot !== undefined ? latestState.players[currentSlot] : null;
+  const side = statePlayer ? teamName(statePlayer.team) : '대기';
+  const mode = currentRoom && currentRoom.modeLabel ? currentRoom.modeLabel : '';
+  title.textContent = `${roomName}${mode ? ` · ${mode}` : ''} · ${side}`;
 }
 
 function updateRematchControls(optimistic = false) {
@@ -2013,13 +2050,14 @@ function updateRematchControls(optimistic = false) {
 
   const state = latestState;
   const player = state && currentSlot !== null && currentSlot !== undefined ? state.players[currentSlot] : null;
-  const opponent = state && currentSlot !== null && currentSlot !== undefined ? state.players[1 - currentSlot] : null;
-  const canRequest = Boolean(state && state.status === 'ended' && player && player.connected && opponent && opponent.connected);
+  const requiredPlayers = state ? state.maxPlayers || state.players.length : 2;
+  const connectedPlayers = state ? state.players.filter((candidate) => candidate.connected).length : 0;
+  const canRequest = Boolean(state && state.status === 'ended' && player && player.connected && connectedPlayers === requiredPlayers);
   const accepted = optimistic || Boolean(player && player.rematchAccepted);
 
   button.classList.toggle('hidden', !canRequest);
   button.disabled = !canRequest || accepted;
-  button.textContent = accepted ? '상대 동의 대기' : '재경기';
+  button.textContent = accepted ? '동의 대기' : '재경기';
 }
 
 function setMessage(id, message) {

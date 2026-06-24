@@ -463,7 +463,8 @@ button:disabled {
   font-weight: 800;
 }
 
-input {
+input,
+select {
   width: 100%;
   min-height: 46px;
   padding: 0 12px;
@@ -474,7 +475,12 @@ input {
   font: inherit;
 }
 
-input:focus {
+select {
+  cursor: pointer;
+}
+
+input:focus,
+select:focus {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
@@ -811,7 +817,6 @@ input:disabled {
 
 .deck-builder-layout {
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
@@ -819,11 +824,16 @@ input:disabled {
 .deck-selected-panel,
 .deck-pool-panel {
   padding: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
 }
 
 .selected-deck-list {
   display: grid;
-  gap: 8px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .selected-deck-slot,
@@ -837,15 +847,18 @@ input:disabled {
 }
 
 .selected-deck-slot {
-  min-height: 62px;
-  padding: 9px 10px;
+  min-height: 148px;
+  padding: 12px;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-columns: 1fr;
   grid-template-areas:
-    "badge name"
-    "badge meta";
-  align-items: center;
-  column-gap: 10px;
+    "badge"
+    "name"
+    "meta";
+  align-content: space-between;
+  justify-items: start;
+  gap: 8px;
+  border-top: 5px solid var(--gold);
 }
 
 .selected-deck-slot b,
@@ -861,16 +874,17 @@ input:disabled {
 
 .selected-deck-slot b {
   grid-area: badge;
-  width: 38px;
-  height: 38px;
-  font-size: 14px;
+  width: 42px;
+  height: 42px;
+  font-size: 15px;
 }
 
 .selected-deck-slot span {
   grid-area: name;
   color: var(--ink);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 900;
+  line-height: 1.25;
 }
 
 .selected-deck-slot small {
@@ -881,16 +895,20 @@ input:disabled {
 }
 
 .selected-deck-slot-empty {
-  min-height: 48px;
-  place-items: center;
   color: var(--soft);
   border-style: dashed;
   font-weight: 900;
 }
 
+.selected-deck-slot-empty b {
+  color: var(--soft);
+  background: transparent;
+  border: 2px dashed var(--line-strong);
+}
+
 .deck-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
 }
 
@@ -1312,6 +1330,10 @@ canvas {
   .featured-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .selected-deck-list {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 640px) {
@@ -1346,7 +1368,8 @@ canvas {
   }
 
   .profile-summary,
-  .featured-cards {
+  .featured-cards,
+  .selected-deck-list {
     grid-template-columns: 1fr;
   }
 

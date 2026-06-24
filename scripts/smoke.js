@@ -51,12 +51,18 @@ async function main() {
   await expectDeckSave(accounts[0], smokeDeck);
   await expectSessionUser(await login(accounts[0].user.username));
   const result = await runClientSmoke(accounts);
+  const twoVersusTwo = await expectTwoVersusTwoRoom(await Promise.all([
+    signup(`연습유저${Date.now()}C`),
+    signup(`연습유저${Date.now()}D`),
+    signup(`연습유저${Date.now()}E`),
+    signup(`연습유저${Date.now()}F`)
+  ]));
   const expectedOpeningHand = smokeDeck.slice(0, 4).join('|');
   const actualOpeningHand = (result.initialHands[0] || []).join('|');
   if (actualOpeningHand !== expectedOpeningHand) {
     throw new Error(`Saved deck was not used for player 1. Expected ${expectedOpeningHand}, got ${actualOpeningHand}.`);
   }
-  console.log(JSON.stringify(result));
+  console.log(JSON.stringify({ ...result, twoVersusTwo }));
   cleanup();
 }
 
@@ -293,6 +299,41 @@ function runPlayableSmoke(cardsByClient) {
   });
 }
 
+async function expectTwoVersusTwoRoom(accounts) {
+  clients = accounts.map((account) => io(url, {
+    transports: ['websocket'],
+    extraHeaders: { Cookie: account.cookie }
+  }));
+
+  await Promise.all(clients.map((client) => once(client, 'welcome')));
+  clients[0].emit('create-room', { name: '2대2 스모크 테스트 방', password: '', mode: '2v2' });
+  const hostJoin = await once(clients[0], 'room-joined');
+  if (!hostJoin.room || hostJoin.room.mode !== '2v2' || hostJoin.room.maxPlayers !== 4) {
+    throw new Error('2v2 room did not expose the expected mode and capacity.');
+  }
+
+  for (let i = 1; i < clients.length; i += 1) {
+    clients[i].emit('join-room', { roomId: hostJoin.room.id, password: '' });
+    await once(clients[i], 'room-joined');
+  }
+
+  const state = await waitForState(clients[3], (payload) => payload.status === 'playing');
+  const teams = state.players.map((player) => player.team).join('|');
+  if (state.players.length !== 4 || teams !== '0|1|0|1') {
+    throw new Error(`2v2 room did not assign balanced teams. Got ${teams}.`);
+  }
+  if (!state.room || state.room.playerCount !== 4 || state.room.maxPlayers !== 4) {
+    throw new Error('2v2 room state did not report all four players.');
+  }
+
+  for (const client of clients) client.disconnect();
+  return {
+    status: state.status,
+    players: state.players.length,
+    teams: state.players.map((player) => player.team)
+  };
+}
+
 function effectiveSmokeCost(player, card) {
   if (!card) return Infinity;
   if (bestFriendPair.includes(card.id) && bestFriendPair.every((id) => player.hand.includes(id))) {
@@ -312,6 +353,28 @@ function once(client, eventName) {
       clearTimeout(timer);
       reject(error);
     });
+  });
+}
+
+function waitForState(client, predicate) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Timed out waiting for matching state.')), 5000);
+    client.on('state', handleState);
+    client.once('connect_error', handleError);
+
+    function handleState(payload) {
+      if (!predicate(payload)) return;
+      clearTimeout(timer);
+      client.off('state', handleState);
+      client.off('connect_error', handleError);
+      resolve(payload);
+    }
+
+    function handleError(error) {
+      clearTimeout(timer);
+      client.off('state', handleState);
+      reject(error);
+    }
   });
 }
 

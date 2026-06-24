@@ -38,6 +38,10 @@ const TOWER_HP = {
 };
 const BEST_FRIEND_PAIR = ['baduk', 'johyunwoo'];
 const BEST_FRIEND_COMBO_COST = 8;
+const ROOM_MODES = {
+  '1v1': { key: '1v1', label: '1대1', maxPlayers: 2 },
+  '2v2': { key: '2v2', label: '2대2', maxPlayers: 4 }
+};
 
 const TIER_DEFINITIONS = [
   { key: 'mayers', name: '마이어스', icon: '🪨', min: 0, max: 9 },
@@ -633,13 +637,19 @@ function createRoomForSocket(socket, payload) {
   }
 
   const password = normalizeRoomPassword(payload.password);
+  const mode = normalizeRoomMode(payload.mode);
+  const modeDefinition = ROOM_MODES[mode];
   const room = {
     id: crypto.randomUUID(),
     name,
+    mode,
+    modeLabel: modeDefinition.label,
+    maxPlayers: modeDefinition.maxPlayers,
     passwordHash: password ? bcrypt.hashSync(password, 8) : '',
     createdAt: Date.now(),
-    game: createGameState()
+    game: createGameState(mode)
   };
+  room.game.message = waitingRoomMessage(room);
   rooms.set(room.id, room);
   assignSocketToRoom(socket, room);
   socket.emit('room-joined', { room: publicRoomDetail(room), slot: socket.data.slot });
@@ -661,7 +671,7 @@ function joinRoomForSocket(socket, payload) {
     emitRooms();
     return;
   }
-  if (getConnectedPlayerCount(room) >= 2) {
+  if (getConnectedPlayerCount(room) >= room.maxPlayers) {
     socket.emit('room-error', '이미 가득 찬 방입니다.');
     emitRooms();
     return;
@@ -673,10 +683,11 @@ function joinRoomForSocket(socket, payload) {
 
   leaveCurrentRoom(socket, { disconnecting: false, silent: true });
   assignSocketToRoom(socket, room);
+  room.game.message = waitingRoomMessage(room);
   socket.emit('room-joined', { room: publicRoomDetail(room), slot: socket.data.slot });
   broadcastState(room);
 
-  if (getConnectedPlayerCount(room) === 2) {
+  if (getConnectedPlayerCount(room) === room.maxPlayers) {
     startMatch(room);
   }
   emitRooms();
@@ -719,7 +730,7 @@ function leaveCurrentRoom(socket, options = {}) {
       player.connected = false;
       player.socketId = null;
       if (room.game.status === 'playing') {
-        endMatch(room, 1 - slot, '상대 연결 종료');
+        endMatch(room, getOpponentTeam(player.team), '상대 연결 종료');
         if (getConnectedPlayerCount(room) === 0) {
           rooms.delete(room.id);
         }
@@ -729,7 +740,7 @@ function leaveCurrentRoom(socket, options = {}) {
           rooms.delete(room.id);
         } else {
           room.game.status = 'waiting';
-          room.game.message = '상대 접속 대기 중';
+          room.game.message = waitingRoomMessage(room);
           broadcastState(room);
         }
       }
@@ -766,11 +777,13 @@ function clearOtherWaitingSocketForUser(socket) {
   return true;
 }
 
-function createGameState() {
+function createGameState(mode = '1v1') {
+  const definition = ROOM_MODES[mode] || ROOM_MODES['1v1'];
   return {
     status: 'waiting',
     message: '상대 접속 대기 중',
-    players: [createPlayer(0), createPlayer(1)],
+    mode: definition.key,
+    players: Array.from({ length: definition.maxPlayers }, (_, slot) => createPlayer(slot)),
     towers: [],
     units: [],
     nextUnitId: 1,
@@ -792,6 +805,7 @@ function createGameState() {
 function createPlayer(slot) {
   return {
     slot,
+    team: slot % 2,
     userId: null,
     username: '',
     trophies: 0,
@@ -877,9 +891,9 @@ function createTower(owner, type, x, y) {
 
 function startMatch(room) {
   const game = room.game;
-  if (!game.players[0].connected || !game.players[1].connected) {
+  if (getConnectedPlayerCount(room) !== room.maxPlayers || game.players.some((player) => !player.connected)) {
     game.status = 'waiting';
-    game.message = '상대 접속 대기 중';
+    game.message = waitingRoomMessage(room);
     game.winner = null;
     return;
   }
@@ -917,6 +931,7 @@ function playCard(room, slot, payload = {}) {
   if (game.freezeUntil > now) return;
 
   const player = game.players[slot];
+  if (!player || !player.connected) return;
   const handIndex = Number(payload.handIndex);
   if (!Number.isInteger(handIndex) || handIndex < 0 || handIndex > 3) return;
 
@@ -930,7 +945,7 @@ function playCard(room, slot, payload = {}) {
 
   const x = Number(payload.x);
   const y = Number(payload.y);
-  if (!isValidSpawnPoint(slot, x, y)) return;
+  if (!isValidSpawnPoint(player.team, x, y)) return;
 
   player.elixir = Math.max(0, player.elixir - elixirCost);
 
@@ -944,26 +959,26 @@ function playCard(room, slot, payload = {}) {
   }
 
   if (bestFriendCombo) {
-    broadcastEffect(room, { type: 'best-friend-combo', owner: slot, x, y });
-    spawnBestFriendCombo(room, slot, x, y);
+    broadcastEffect(room, { type: 'best-friend-combo', owner: player.team, x, y });
+    spawnBestFriendCombo(room, player.team, x, y);
     broadcastState(room);
     return;
   }
 
   if (card.id === 'kkongho') {
-    triggerAscension(room, slot, x, y);
+    triggerAscension(room, player.team, x, y);
     broadcastState(room);
     return;
   }
 
-  spawnCard(room, slot, card.id, x, y);
+  spawnCard(room, player.team, card.id, x, y);
   broadcastState(room);
 }
 
-function isValidSpawnPoint(slot, x, y) {
+function isValidSpawnPoint(team, x, y) {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
   if (x < 48 || x > ARENA.width - 48) return false;
-  if (slot === 0) return y >= 338 && y <= ARENA.height - 42;
+  if (team === 0) return y >= 338 && y <= ARENA.height - 42;
   return y >= 42 && y <= 282;
 }
 
@@ -1605,7 +1620,7 @@ function checkWinConditions(room, now) {
   const game = room.game;
   const destroyedKing = game.towers.find((tower) => tower.type === 'king' && tower.hp <= 0);
   if (destroyedKing) {
-    endMatch(room, 1 - destroyedKing.owner, '킹타워 파괴');
+    endMatch(room, getOpponentTeam(destroyedKing.owner), '킹타워 파괴');
     return;
   }
 
@@ -1642,7 +1657,7 @@ function endMatch(room, winner, reason) {
   game.status = 'ended';
   game.winner = winner;
   game.reason = reason;
-  game.message = winner === null ? `무승부: ${reason}` : `${game.players[winner].username || `플레이어 ${winner + 1}`} 승리: ${reason}`;
+  game.message = winner === null ? `무승부: ${reason}` : `${teamLabel(winner)} 승리: ${reason}`;
   game.freezeUntil = 0;
   game.pendingAscensionAt = 0;
   for (const player of game.players) {
@@ -1661,8 +1676,8 @@ function requestRematch(socket) {
     registerBadSocketEvent(socket);
     return;
   }
-  if (getConnectedPlayerCount(room) !== 2) {
-    socket.emit('room-error', '상대가 방에 있어야 재경기를 할 수 있습니다.');
+  if (getConnectedPlayerCount(room) !== room.maxPlayers) {
+    socket.emit('room-error', '모든 플레이어가 방에 있어야 재경기를 할 수 있습니다.');
     return;
   }
 
@@ -1687,13 +1702,16 @@ function settleTrophies(room, winner, reason) {
   const game = room.game;
   if (game.trophiesSettled) return;
   game.trophiesSettled = true;
-  game.trophyChanges = [null, null];
+  game.trophyChanges = game.players.map(() => null);
   if (winner === null) return;
 
-  const loser = 1 - winner;
   const winnerDelta = trophyDeltaForWin(reason);
-  game.trophyChanges[winner] = updateUserTrophies(game.players[winner].userId, { winDelta: winnerDelta });
-  game.trophyChanges[loser] = updateUserTrophies(game.players[loser].userId, { loss: true });
+  for (const player of game.players) {
+    if (!player.userId) continue;
+    game.trophyChanges[player.slot] = player.team === winner
+      ? updateUserTrophies(player.userId, { winDelta: winnerDelta })
+      : updateUserTrophies(player.userId, { loss: true });
+  }
 
   for (const player of game.players) {
     refreshPlayerProfile(player);
@@ -1744,6 +1762,14 @@ function totalTowerHp(game, owner) {
       .filter((tower) => tower.owner === owner)
       .reduce((sum, tower) => sum + Math.max(0, tower.hp), 0)
   );
+}
+
+function getOpponentTeam(team) {
+  return team === 0 ? 1 : 0;
+}
+
+function teamLabel(team) {
+  return team === 0 ? '아래 진영' : '위 진영';
 }
 
 function findEntityById(game, id) {
@@ -1868,6 +1894,8 @@ function serializeState(room, viewerSlot = null) {
   return {
     room: publicRoomDetail(room),
     arena: ARENA,
+    mode: room.mode,
+    maxPlayers: room.maxPlayers,
     status: game.status,
     message: game.message,
     winner: game.winner,
@@ -1879,6 +1907,7 @@ function serializeState(room, viewerSlot = null) {
     trophyChange: viewerSlot === null || viewerSlot === undefined ? null : game.trophyChanges && game.trophyChanges[viewerSlot],
     players: game.players.map((player) => ({
       slot: player.slot,
+      team: player.team,
       username: player.username,
       trophies: player.trophies,
       tier: player.tier,
@@ -1889,7 +1918,7 @@ function serializeState(room, viewerSlot = null) {
       handSize: player.hand.filter(Boolean).length,
       usedOneTimeCards: Object.keys(player.usedOneTimeCards || {}),
       rematchAccepted: Boolean(player.rematchAccepted),
-      totalTowerHp: totalTowerHp(game, player.slot)
+      totalTowerHp: totalTowerHp(game, player.team)
     })),
     towers: game.towers.map((tower) => ({
       id: tower.id,
@@ -2101,9 +2130,14 @@ function normalizeRoomPassword(value) {
   return String(value || '').trim().slice(0, 32);
 }
 
+function normalizeRoomMode(value) {
+  const mode = String(value || '').trim().toLowerCase();
+  return ROOM_MODES[mode] ? mode : '1v1';
+}
+
 function publicRooms() {
   return [...rooms.values()]
-    .filter((room) => room.game.status === 'waiting' && getConnectedPlayerCount(room) < 2)
+    .filter((room) => room.game.status === 'waiting' && getConnectedPlayerCount(room) < room.maxPlayers)
     .sort((a, b) => a.createdAt - b.createdAt)
     .map(publicRoomDetail);
 }
@@ -2112,6 +2146,8 @@ function publicRoomDetail(room) {
   return {
     id: room.id,
     name: room.name,
+    mode: room.mode,
+    modeLabel: room.modeLabel,
     locked: Boolean(room.passwordHash),
     status: room.game.status,
     players: room.game.players
@@ -2121,10 +2157,11 @@ function publicRoomDetail(room) {
         trophies: player.trophies,
         tier: player.tier,
         tierIcon: player.tierIcon,
+        team: player.team,
         connected: player.connected
       })),
     playerCount: getConnectedPlayerCount(room),
-    maxPlayers: 2
+    maxPlayers: room.maxPlayers
   };
 }
 
@@ -2138,6 +2175,11 @@ function getConnectedPlayerCount(room) {
 
 function getKnownPlayerCount(room) {
   return room.game.players.filter((player) => player.userId).length;
+}
+
+function waitingRoomMessage(room) {
+  const remaining = Math.max(0, room.maxPlayers - getConnectedPlayerCount(room));
+  return remaining > 0 ? `${remaining}명 더 들어오면 시작합니다` : '전투 준비 중';
 }
 
 function roomChannel(roomId) {
