@@ -8,7 +8,30 @@
   </head>
   <body>
     <main class="shell">
-      <section class="game-frame">
+      <section id="home-screen" class="home-screen">
+        <div class="home-panel">
+          <p class="eyebrow">실시간 1대1 타워 디펜스</p>
+          <h1>친구들의 타워 디펜스</h1>
+          <p class="home-copy">두 명이 접속하면 자동으로 경기가 시작됩니다. 12장 카드풀에서 8장을 뽑아 싸웁니다.</p>
+          <div class="home-actions">
+            <button id="start-game" type="button">게임 시작</button>
+            <button id="open-encyclopedia" type="button" class="secondary">캐릭터 확인</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="encyclopedia-screen" class="encyclopedia-screen hidden">
+        <header class="encyclopedia-header">
+          <div>
+            <p class="eyebrow">카드 도감</p>
+            <h1>캐릭터 확인</h1>
+          </div>
+          <button id="back-home" type="button" class="secondary">뒤로가기</button>
+        </header>
+        <div id="character-grid" class="character-grid"></div>
+      </section>
+
+      <section id="game-frame" class="game-frame hidden">
         <div id="game"></div>
       </section>
     </main>

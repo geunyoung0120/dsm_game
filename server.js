@@ -5,9 +5,16 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
+const ALLOWED_ORIGINS = parseAllowedOrigins(process.env.ALLOWED_ORIGINS || process.env.PUBLIC_ORIGIN || '');
+const HTTP_RATE_WINDOW_MS = 60 * 1000;
+const HTTP_RATE_LIMIT = Number(process.env.HTTP_RATE_LIMIT || 240);
+const SOCKET_RATE_WINDOW_MS = 60 * 1000;
+const SOCKET_CONNECTION_LIMIT = Number(process.env.SOCKET_CONNECTION_LIMIT || 30);
+const SOCKET_BAD_EVENT_LIMIT = 12;
+const PLAY_CARD_MIN_INTERVAL_MS = 80;
+const MAX_SPECTATORS = Number(process.env.MAX_SPECTATORS || 4);
 const ARENA = { width: 900, height: 620 };
 const TICK_MS = 50;
 const BROADCAST_MS = 100;
@@ -15,6 +22,8 @@ const GAME_DURATION_MS = 180000;
 const SUDDEN_DEATH_MAX_MS = 90000;
 const MAX_ELIXIR = 10;
 const ELIXIR_PER_SECOND = 1 / 2.8;
+const DOUBLE_ELIXIR_REMAINING_MS = 60000;
+const DOUBLE_ELIXIR_MULTIPLIER = 2;
 const TOWER_HP = {
   king: 4600,
   princess: 2700
@@ -39,7 +48,7 @@ const CARDS = {
     id: 'bbatman',
     name: '빼트맨',
     cost: 3,
-    role: '힐러',
+    role: '힐러 지원',
     maxHp: 410,
     damage: 0,
     range: 0,
@@ -77,7 +86,7 @@ const CARDS = {
     id: 'yushin',
     name: '유신',
     cost: 4,
-    role: '군단',
+    role: '군단 근접',
     maxHp: 155,
     damage: 24,
     range: 30,
@@ -102,7 +111,7 @@ const CARDS = {
   mythos: {
     id: 'mythos',
     name: '미토스건휘',
-    cost: 6,
+    cost: 5,
     role: '변신 딜러',
     maxHp: 850,
     damage: 48,
@@ -127,15 +136,120 @@ const CARDS = {
     attackMs: 430,
     radius: 16,
     female: true
+  },
+  seongjoo: {
+    id: 'seongjoo',
+    name: '성주',
+    cost: 3,
+    role: '원거리 딜러',
+    maxHp: 280,
+    damage: 82,
+    range: 185,
+    speed: 42,
+    attackMs: 520,
+    radius: 15
+  },
+  johyunwoo: {
+    id: 'johyunwoo',
+    name: '조현우',
+    cost: 6,
+    role: '근접 단일',
+    maxHp: 820,
+    damage: 270,
+    range: 42,
+    speed: 54,
+    attackMs: 1050,
+    radius: 18
+  },
+  kimgeunyoung: {
+    id: 'kimgeunyoung',
+    name: '김.근.영',
+    cost: 10,
+    role: '탱커 소환',
+    maxHp: 2250,
+    damage: 265,
+    range: 48,
+    speed: 45,
+    attackMs: 880,
+    radius: 24,
+    oneUse: true,
+    tankMinionId: 'geunyoungTank',
+    spawnMinionMs: 1000
+  },
+  kimrui: {
+    id: 'kimrui',
+    name: '김루이',
+    cost: 3,
+    role: '흡혈 부착',
+    maxHp: 430,
+    damage: 0,
+    range: 34,
+    speed: 68,
+    attackMs: 0,
+    radius: 16,
+    leech: true,
+    attachRange: 34,
+    drainPerSecond: 115,
+    regenPerSecond: 52
+  },
+  geunyoungTank: {
+    id: 'geunyoungTank',
+    name: '근영 탱커',
+    cost: 0,
+    role: '소환 탱커',
+    playable: false,
+    maxHp: 680,
+    damage: 68,
+    range: 36,
+    speed: 41,
+    attackMs: 920,
+    radius: 16
   }
 };
 
-const CARD_IDS = Object.keys(CARDS);
+const CARD_IDS = Object.keys(CARDS).filter((id) => CARDS[id].playable !== false);
+const DECK_SIZE = 8;
 const DECK_COST_MIN = 40;
 const DECK_COST_MAX = 55;
 
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/vendor/phaser', express.static(path.join(__dirname, 'node_modules/phaser/dist')));
+const io = new Server(server, {
+  maxHttpBufferSize: 1024,
+  pingInterval: 25000,
+  pingTimeout: 20000,
+  allowRequest: (req, callback) => {
+    if (!isAllowedOrigin(req.headers.origin, req.headers.host)) {
+      callback('허용되지 않은 접속 출처입니다.', false);
+      return;
+    }
+    if (!checkSocketConnectionRate(clientIpFromRequest(req))) {
+      callback('접속 요청이 너무 많습니다.', false);
+      return;
+    }
+    callback(null, true);
+  }
+});
+
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+app.use(applySecurityHeaders);
+app.use(limitHttpRequests);
+app.get('/healthz', (req, res) => {
+  res.type('text/plain').send('ok');
+});
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-store');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+    }
+  }
+}));
+app.use('/vendor/phaser', express.static(path.join(__dirname, 'node_modules/phaser/dist'), {
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+  }
+}));
 
 const game = {
   status: 'waiting',
@@ -156,6 +270,10 @@ const game = {
   reason: ''
 };
 
+const httpRateBuckets = new Map();
+const socketRateBuckets = new Map();
+const spectatorSockets = new Set();
+
 function createPlayer(slot) {
   return {
     slot,
@@ -164,7 +282,7 @@ function createPlayer(slot) {
     elixir: 5,
     hand: [],
     cycle: [],
-    usedKkongho: false
+    usedOneTimeCards: {}
   };
 }
 
@@ -173,21 +291,27 @@ function resetPlayerForMatch(player) {
   player.elixir = 5;
   player.hand = deck.slice(0, 4);
   player.cycle = deck.slice(4);
-  player.usedKkongho = false;
+  player.usedOneTimeCards = {};
 }
 
 function shuffledDeck() {
-  const deck = [...CARD_IDS];
-  for (let i = deck.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [deck[i], deck[j]] = [deck[j], deck[i]];
+  for (let attempt = 0; attempt < 500; attempt += 1) {
+    const deck = shuffle([...CARD_IDS]).slice(0, DECK_SIZE);
+    const totalCost = deck.reduce((sum, id) => sum + CARDS[id].cost, 0);
+    if (totalCost >= DECK_COST_MIN && totalCost <= DECK_COST_MAX) {
+      return deck;
+    }
   }
 
-  const totalCost = deck.reduce((sum, id) => sum + CARDS[id].cost, 0);
-  if (totalCost < DECK_COST_MIN || totalCost > DECK_COST_MAX) {
-    throw new Error(`Deck cost ${totalCost} is outside ${DECK_COST_MIN}-${DECK_COST_MAX}.`);
+  throw new Error(`카드 8장의 총 코스트가 ${DECK_COST_MIN}-${DECK_COST_MAX} 범위인 덱을 만들 수 없습니다.`);
+}
+
+function shuffle(items) {
+  for (let i = items.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
   }
-  return deck;
+  return items;
 }
 
 function createTowers() {
@@ -261,6 +385,9 @@ function assignSlot(socketId) {
 
 io.on('connection', (socket) => {
   const slot = assignSlot(socket.id);
+  socket.data.slot = slot;
+  socket.data.lastPlayCardAt = 0;
+  socket.data.badEventCount = 0;
 
   socket.emit('welcome', {
     slot,
@@ -271,6 +398,12 @@ io.on('connection', (socket) => {
 
   if (slot === null) {
     socket.emit('notice', '현재 방이 가득 차서 관전자로 접속했습니다.');
+    spectatorSockets.add(socket.id);
+    if (spectatorSockets.size > MAX_SPECTATORS) {
+      socket.emit('notice', '관전자 수가 가득 찼습니다.');
+      socket.disconnect(true);
+      return;
+    }
   }
 
   if (game.players[0].connected && game.players[1].connected && game.status !== 'playing') {
@@ -281,15 +414,25 @@ io.on('connection', (socket) => {
 
   socket.on('play-card', (payload) => {
     if (slot === null) return;
+    if (!canUseSocketAction(socket)) return;
+    if (!isValidPlayCardPayload(payload)) {
+      registerBadSocketEvent(socket);
+      return;
+    }
     playCard(slot, payload);
   });
 
   socket.on('restart', () => {
     if (slot === null) return;
+    if (game.status !== 'ended') {
+      registerBadSocketEvent(socket);
+      return;
+    }
     startMatch();
   });
 
   socket.on('disconnect', () => {
+    spectatorSockets.delete(socket.id);
     if (slot !== null && game.players[slot].socketId === socket.id) {
       game.players[slot].connected = false;
       game.players[slot].socketId = null;
@@ -315,8 +458,8 @@ function playCard(slot, payload = {}) {
 
   const cardId = player.hand[handIndex];
   const card = CARDS[cardId];
-  if (!card) return;
-  if (card.id === 'kkongho' && player.usedKkongho) return;
+  if (!card || card.playable === false) return;
+  if (card.oneUse && player.usedOneTimeCards[card.id]) return;
   if (player.elixir + 0.0001 < card.cost) return;
 
   const x = Number(payload.x);
@@ -325,16 +468,20 @@ function playCard(slot, payload = {}) {
 
   player.elixir = Math.max(0, player.elixir - card.cost);
 
-  if (card.id === 'kkongho') {
-    player.usedKkongho = true;
+  if (card.oneUse) {
+    player.usedOneTimeCards[card.id] = true;
     advanceHand(player, handIndex, false);
+  } else {
+    advanceHand(player, handIndex, true);
+  }
+
+  if (card.id === 'kkongho') {
     triggerAscension(slot, x, y);
     broadcastState();
     return;
   }
 
   spawnCard(slot, card.id, x, y);
-  advanceHand(player, handIndex, true);
   broadcastState();
 }
 
@@ -359,29 +506,42 @@ function spawnCard(owner, cardId, x, y) {
   const offsets = formationOffsets(count);
 
   for (let i = 0; i < count; i += 1) {
-    const unit = {
-      entity: 'unit',
-      id: `u${game.nextUnitId++}`,
-      owner,
-      cardId,
-      x: clamp(x + offsets[i].x, 28, ARENA.width - 28),
-      y: clamp(y + offsets[i].y, 28, ARENA.height - 28),
-      hp: card.maxHp,
-      maxHp: card.maxHp,
-      nextAttackAt: Date.now() + Math.floor(Math.random() * 320),
-      nextSkillAt: Date.now() + 700,
-      nextChaosAt: Date.now() + randomBetween(2500, 5600),
-      windupUntil: 0,
-      windupTargetId: null,
-      awakened: false,
-      invincibleUntil: 0,
-      action: '',
-      actionUntil: 0
-    };
-    game.units.push(unit);
+    spawnUnit(owner, cardId, x + offsets[i].x, y + offsets[i].y);
   }
 
   broadcastEffect({ type: 'spawn', owner, cardId, x, y });
+}
+
+function spawnUnit(owner, cardId, x, y, extras = {}) {
+  const card = CARDS[cardId];
+  if (!card || !card.maxHp) return null;
+
+  const now = Date.now();
+  const unit = {
+    entity: 'unit',
+    id: `u${game.nextUnitId++}`,
+    owner,
+    cardId,
+    x: clamp(x, 28, ARENA.width - 28),
+    y: clamp(y, 28, ARENA.height - 28),
+    hp: card.maxHp,
+    maxHp: card.maxHp,
+    nextAttackAt: now + Math.floor(Math.random() * 320),
+    nextSkillAt: now + 700,
+    nextChaosAt: now + randomBetween(2500, 5600),
+    nextSummonAt: now + (card.spawnMinionMs || 1000),
+    windupUntil: 0,
+    windupTargetId: null,
+    attachedToId: null,
+    attachedById: null,
+    awakened: false,
+    invincibleUntil: 0,
+    action: '',
+    actionUntil: 0,
+    ...extras
+  };
+  game.units.push(unit);
+  return unit;
 }
 
 function formationOffsets(count) {
@@ -421,6 +581,9 @@ setInterval(() => {
 
 function tickGame(now, deltaSeconds) {
   if (game.pendingAscensionAt && now >= game.pendingAscensionAt) {
+    for (const unit of game.units) {
+      if (unit.cardId === 'kimrui') detachRui(unit, now, false);
+    }
     game.units = [];
     game.pendingAscensionAt = 0;
     broadcastEffect({ type: 'ascension-end' });
@@ -430,8 +593,9 @@ function tickGame(now, deltaSeconds) {
     return;
   }
 
+  const elixirMultiplier = getElixirMultiplier(now);
   for (const player of game.players) {
-    player.elixir = Math.min(MAX_ELIXIR, player.elixir + ELIXIR_PER_SECOND * deltaSeconds);
+    player.elixir = Math.min(MAX_ELIXIR, player.elixir + ELIXIR_PER_SECOND * elixirMultiplier * deltaSeconds);
   }
 
   updateUnits(now, deltaSeconds);
@@ -451,8 +615,20 @@ function updateUnits(now, deltaSeconds) {
     const card = CARDS[unit.cardId];
     if (!card) continue;
 
+    if (unit.attachedById && findEntityById(unit.attachedById)) {
+      unit.action = '묶임';
+      unit.actionUntil = now + 200;
+      continue;
+    }
+    unit.attachedById = null;
+
     if (card.healer) {
-      updateHealer(unit, card, deltaSeconds);
+      updateHealer(unit, card, deltaSeconds, now);
+      continue;
+    }
+
+    if (card.leech) {
+      updateRui(unit, card, deltaSeconds, now);
       continue;
     }
 
@@ -471,6 +647,9 @@ function updateUnits(now, deltaSeconds) {
     const distanceToTarget = distance(unit, target);
     const attackRange = card.range + getTargetRadius(target);
     if (distanceToTarget > attackRange) {
+      if (card.tankMinionId) {
+        maybeSpawnTankMinion(unit, card, now);
+      }
       moveToward(unit, target, getUnitSpeed(unit, card) * deltaSeconds);
       continue;
     }
@@ -490,7 +669,7 @@ function updateUnits(now, deltaSeconds) {
   }
 }
 
-function updateHealer(unit, card, deltaSeconds) {
+function updateHealer(unit, card, deltaSeconds, now) {
   const candidates = game.units.filter((other) => {
     if (other.id === unit.id || other.owner !== unit.owner || other.hp <= 0) return false;
     const otherCard = CARDS[other.cardId];
@@ -500,7 +679,7 @@ function updateHealer(unit, card, deltaSeconds) {
   const target = nearest(unit, candidates);
   if (!target) {
     unit.action = '대기';
-    unit.actionUntil = Date.now() + 200;
+    unit.actionUntil = now + 200;
     return;
   }
 
@@ -508,13 +687,59 @@ function updateHealer(unit, card, deltaSeconds) {
   if (targetDistance > card.followDistance) {
     moveToward(unit, target, card.speed * deltaSeconds);
     unit.action = '추적';
-    unit.actionUntil = Date.now() + 200;
+    unit.actionUntil = now + 200;
     return;
   }
 
   target.hp = Math.min(target.maxHp, target.hp + card.healPerSecond * deltaSeconds);
   unit.action = '힐';
-  unit.actionUntil = Date.now() + 200;
+  unit.actionUntil = now + 200;
+}
+
+function updateRui(unit, card, deltaSeconds, now) {
+  if (unit.attachedToId) {
+    const target = findEntityById(unit.attachedToId);
+    if (!target || target.entity !== 'unit' || target.hp <= 0) {
+      detachRui(unit, now);
+      return;
+    }
+
+    unit.x = target.x + (unit.owner === 0 ? -16 : 16);
+    unit.y = target.y - 6;
+    target.attachedById = unit.id;
+    applyDamageToUnit(target, card.drainPerSecond * deltaSeconds, unit.owner, now, { leechDrain: true });
+    unit.hp = Math.min(unit.maxHp, unit.hp + card.regenPerSecond * deltaSeconds);
+    unit.action = '흡혈';
+    unit.actionUntil = now + 220;
+    return;
+  }
+
+  const attachable = game.units.filter((other) => {
+    return other.owner !== unit.owner && other.hp > 0 && !other.attachedById && distance(unit, other) <= card.attachRange + getTargetRadius(other);
+  });
+  const latchTarget = nearest(unit, attachable);
+  if (latchTarget) {
+    unit.attachedToId = latchTarget.id;
+    latchTarget.attachedById = unit.id;
+    unit.action = '부착';
+    unit.actionUntil = now + 400;
+    broadcastEffect({ type: 'leech', owner: unit.owner, fromX: unit.x, fromY: unit.y, x: latchTarget.x, y: latchTarget.y });
+    return;
+  }
+
+  const enemyUnits = game.units.filter((other) => other.owner !== unit.owner && other.hp > 0 && !other.attachedById);
+  const target = nearest(unit, enemyUnits);
+  if (target) {
+    moveToward(unit, target, card.speed * deltaSeconds);
+    unit.action = '추적';
+    unit.actionUntil = now + 200;
+    return;
+  }
+
+  const fallbackTower = nearest(unit, getAttackableEnemyTowers(unit.owner));
+  if (fallbackTower) {
+    moveToward(unit, fallbackTower, card.speed * deltaSeconds);
+  }
 }
 
 function updateBadukChaos(unit, card, now) {
@@ -530,6 +755,22 @@ function updateBadukChaos(unit, card, now) {
   unit.action = randomChaosAction();
   unit.actionUntil = now + 720;
   broadcastEffect({ type: 'chaos', owner: unit.owner, x: unit.x, y: unit.y, radius: card.chaosRadius });
+}
+
+function maybeSpawnTankMinion(unit, card, now) {
+  if (now < unit.nextSummonAt) return;
+
+  const dir = unit.owner === 0 ? 1 : -1;
+  const x = unit.x + randomBetween(-24, 25);
+  const y = unit.y + dir * randomBetween(18, 32);
+  const minion = spawnUnit(unit.owner, card.tankMinionId, x, y, {
+    action: '호위',
+    actionUntil: now + 420
+  });
+  unit.nextSummonAt = now + card.spawnMinionMs;
+  if (minion) {
+    broadcastEffect({ type: 'summon-minion', owner: unit.owner, cardId: card.tankMinionId, x: minion.x, y: minion.y });
+  }
 }
 
 function resolveWindup(unit, card, now) {
@@ -620,9 +861,13 @@ function applyDamage(target, amount, sourceOwner, now) {
   }
 }
 
-function applyDamageToUnit(unit, amount, sourceOwner, now) {
+function applyDamageToUnit(unit, amount, sourceOwner, now, options = {}) {
   if (!unit || unit.hp <= 0) return;
   if (unit.invincibleUntil && unit.invincibleUntil > now) return;
+
+  if (unit.cardId === 'kimrui' && unit.attachedToId && sourceOwner !== unit.owner && !options.leechDrain) {
+    detachRui(unit, now);
+  }
 
   const previousHp = unit.hp;
   unit.hp = Math.max(0, unit.hp - amount);
@@ -645,7 +890,31 @@ function applyDamageToUnit(unit, amount, sourceOwner, now) {
   }
 }
 
+function detachRui(unit, now = Date.now(), emitEffect = true) {
+  if (!unit || unit.cardId !== 'kimrui' || !unit.attachedToId) return;
+  const target = findEntityById(unit.attachedToId);
+  if (target && target.attachedById === unit.id) {
+    target.attachedById = null;
+  }
+  unit.attachedToId = null;
+  unit.action = '이탈';
+  unit.actionUntil = now + 420;
+  if (emitEffect) {
+    broadcastEffect({ type: 'leech-detach', owner: unit.owner, x: unit.x, y: unit.y });
+  }
+}
+
 function removeDeadUnits() {
+  for (const unit of game.units) {
+    if (unit.hp > 0) continue;
+    if (unit.cardId === 'kimrui') {
+      detachRui(unit, Date.now(), false);
+    }
+    if (unit.attachedById) {
+      const rui = findEntityById(unit.attachedById);
+      if (rui) detachRui(rui, Date.now(), false);
+    }
+  }
   game.units = game.units.filter((unit) => unit.hp > 0);
 }
 
@@ -773,16 +1042,25 @@ function randomChaosAction() {
   return actions[Math.floor(Math.random() * actions.length)];
 }
 
+function getElixirMultiplier(now) {
+  if (game.status !== 'playing') return 1;
+  if (game.suddenDeath) return DOUBLE_ELIXIR_MULTIPLIER;
+  if (!game.endsAt) return 1;
+  return game.endsAt - now <= DOUBLE_ELIXIR_REMAINING_MS ? DOUBLE_ELIXIR_MULTIPLIER : 1;
+}
+
 function broadcastEffect(effect) {
   io.emit('effect', { ...effect, at: Date.now() });
 }
 
 function broadcastState() {
   game.lastBroadcastAt = Date.now();
-  io.emit('state', serializeState());
+  for (const socket of io.of('/').sockets.values()) {
+    socket.emit('state', serializeState(socket.data.slot));
+  }
 }
 
-function serializeState() {
+function serializeState(viewerSlot = null) {
   const now = Date.now();
   return {
     arena: ARENA,
@@ -792,13 +1070,15 @@ function serializeState() {
     reason: game.reason,
     remainingMs: Math.max(0, (game.suddenDeath ? game.suddenDeathEndsAt : game.endsAt) - now),
     suddenDeath: game.suddenDeath,
+    elixirMultiplier: getElixirMultiplier(now),
     freezeMs: Math.max(0, game.freezeUntil - now),
     players: game.players.map((player) => ({
       slot: player.slot,
       connected: player.connected,
       elixir: Number(player.elixir.toFixed(2)),
-      hand: player.hand,
-      usedKkongho: player.usedKkongho,
+      hand: player.slot === viewerSlot ? player.hand : [],
+      handSize: player.hand.filter(Boolean).length,
+      usedOneTimeCards: Object.keys(player.usedOneTimeCards || {}),
       totalTowerHp: totalTowerHp(player.slot)
     })),
     towers: game.towers.map((tower) => ({
@@ -820,11 +1100,141 @@ function serializeState() {
       maxHp: unit.maxHp,
       awakened: unit.awakened,
       invincible: unit.invincibleUntil > now,
+      attached: Boolean(unit.attachedToId),
+      suppressed: Boolean(unit.attachedById),
       action: unit.action,
       windup: unit.windupUntil > now
     }))
   };
 }
+
+function applySecurityHeaders(req, res, next) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  res.setHeader(
+    'Content-Security-Policy',
+    [
+      "default-src 'self'",
+      "script-src 'self'",
+      "style-src 'self'",
+      "img-src 'self' data:",
+      "font-src 'self' data:",
+      "connect-src 'self' ws: wss:",
+      "object-src 'none'",
+      "base-uri 'none'",
+      "frame-ancestors 'none'",
+      "form-action 'self'"
+    ].join('; ')
+  );
+
+  if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+    res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+  }
+
+  next();
+}
+
+function limitHttpRequests(req, res, next) {
+  const key = req.ip || clientIpFromRequest(req);
+  if (!consumeRateBucket(httpRateBuckets, key, HTTP_RATE_WINDOW_MS, HTTP_RATE_LIMIT)) {
+    res.status(429).type('text/plain').send('요청이 너무 많습니다. 잠시 후 다시 시도하세요.');
+    return;
+  }
+  next();
+}
+
+function canUseSocketAction(socket) {
+  const now = Date.now();
+  if (now - (socket.data.lastPlayCardAt || 0) < PLAY_CARD_MIN_INTERVAL_MS) {
+    registerBadSocketEvent(socket);
+    return false;
+  }
+  socket.data.lastPlayCardAt = now;
+  return true;
+}
+
+function registerBadSocketEvent(socket) {
+  socket.data.badEventCount = (socket.data.badEventCount || 0) + 1;
+  if (socket.data.badEventCount >= SOCKET_BAD_EVENT_LIMIT) {
+    socket.disconnect(true);
+  }
+}
+
+function isValidPlayCardPayload(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  if (!Number.isInteger(payload.handIndex) || payload.handIndex < 0 || payload.handIndex > 3) return false;
+  if (!Number.isFinite(payload.x) || !Number.isFinite(payload.y)) return false;
+  return payload.x >= 0 && payload.x <= ARENA.width && payload.y >= 0 && payload.y <= ARENA.height;
+}
+
+function checkSocketConnectionRate(ip) {
+  return consumeRateBucket(socketRateBuckets, ip, SOCKET_RATE_WINDOW_MS, SOCKET_CONNECTION_LIMIT);
+}
+
+function consumeRateBucket(store, key, windowMs, limit) {
+  const now = Date.now();
+  const bucketKey = key || 'unknown';
+  const bucket = store.get(bucketKey);
+  if (!bucket || now - bucket.startedAt >= windowMs) {
+    store.set(bucketKey, { startedAt: now, count: 1 });
+    return true;
+  }
+  bucket.count += 1;
+  return bucket.count <= limit;
+}
+
+function cleanupRateBuckets() {
+  const now = Date.now();
+  for (const [key, bucket] of httpRateBuckets) {
+    if (now - bucket.startedAt > HTTP_RATE_WINDOW_MS * 2) httpRateBuckets.delete(key);
+  }
+  for (const [key, bucket] of socketRateBuckets) {
+    if (now - bucket.startedAt > SOCKET_RATE_WINDOW_MS * 2) socketRateBuckets.delete(key);
+  }
+}
+
+function clientIpFromRequest(req) {
+  const forwardedFor = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return forwardedFor || req.socket.remoteAddress || 'unknown';
+}
+
+function parseAllowedOrigins(value) {
+  return String(value || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+    .map((origin) => {
+      try {
+        return new URL(origin).origin;
+      } catch {
+        return '';
+      }
+    })
+    .filter(Boolean);
+}
+
+function isAllowedOrigin(origin, host) {
+  if (!origin) return true;
+
+  let parsed;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    return false;
+  }
+
+  if (ALLOWED_ORIGINS.length > 0) {
+    return ALLOWED_ORIGINS.includes(parsed.origin);
+  }
+
+  return Boolean(host && parsed.host === host);
+}
+
+setInterval(cleanupRateBuckets, 60 * 1000).unref();
 
 server.listen(PORT, () => {
   console.log(`Friends Tower Defense running at http://localhost:${PORT}`);

@@ -56,12 +56,12 @@ function runClientSmoke() {
   return new Promise((resolve, reject) => {
     const welcomed = [];
     let cards = null;
-    let latestState = null;
-    let played = false;
+    let observedUnits = 0;
+    const playedSlots = new Set();
 
     const timer = setTimeout(() => {
       reject(new Error('Smoke clients did not reach a playable state in time.'));
-    }, 5000);
+    }, 20000);
 
     clients = [
       io(url, { transports: ['websocket'] }),
@@ -80,32 +80,29 @@ function runClientSmoke() {
       });
 
       client.on('state', (state) => {
-        latestState = state;
-
-        if (!played && state.status === 'playing' && cards) {
-          played = true;
-          for (const slot of [0, 1]) {
-            const player = state.players[slot];
+        if (state.status === 'playing' && cards) {
+          const slot = welcomed[index];
+          const player = state.players[slot];
+          if (!playedSlots.has(slot) && player) {
             const handIndex = player.hand.findIndex((id) => cards[id] && cards[id].cost <= player.elixir && id !== 'kkongho');
-            if (handIndex < 0) {
-              clearTimeout(timer);
-              reject(new Error(`No affordable non-reset card for slot ${slot}.`));
-              return;
+            if (handIndex >= 0) {
+              clients[index].emit('play-card', {
+                handIndex,
+                x: 450,
+                y: slot === 0 ? 500 : 120
+              });
+              playedSlots.add(slot);
             }
-            clients[slot].emit('play-card', {
-              handIndex,
-              x: 450,
-              y: slot === 0 ? 500 : 120
-            });
           }
         }
 
-        if (played && state.units.length > 0) {
+        observedUnits = Math.max(observedUnits, state.units.length);
+        if (playedSlots.size === 2 && observedUnits > 0) {
           clearTimeout(timer);
           resolve({
             slots: welcomed,
             status: state.status,
-            units: state.units.length,
+            units: observedUnits,
             hands: state.players.map((player) => player.hand)
           });
         }
