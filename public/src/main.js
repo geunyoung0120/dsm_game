@@ -2114,7 +2114,8 @@ function tierProgressForUser(user) {
     return { ratio: 1, label: '최고 티어 달성' };
   }
 
-  const tierStart = Number.isFinite(user.tierMin) ? user.tierMin : 0;
+  const tierStartValue = Number(user.tierMin);
+  const tierStart = Number.isFinite(tierStartValue) ? tierStartValue : 0;
   const nextMin = Math.max(tierStart + 1, Number(user.nextTier.min) || tierStart + 1);
   const current = clampNumber(trophies - tierStart, 0, nextMin - tierStart);
   const ratio = (nextMin - tierStart) > 0 ? current / (nextMin - tierStart) : 1;
