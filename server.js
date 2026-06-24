@@ -237,8 +237,8 @@ const CARDS = {
     berserker: true,
     berserkerThreshold: 0.27,
     berserkerMaxHp: 900,
-    berserkerDamage: 100,
-    berserkerSpeed: 118,
+    berserkerDamage: 90,
+    berserkerSpeed: 106,
     berserkerAttackMs: 250,
     berserkerSplashRadius: 58
   },
