@@ -731,13 +731,15 @@ input:disabled {
 .room-screen,
 .encyclopedia-screen,
 .ranking-screen,
-.tier-screen {
+.tier-screen,
+.deck-screen {
   padding: 20px 0 40px;
 }
 
 .encyclopedia-header,
 .ranking-header,
 .tier-header,
+.deck-header,
 .room-header {
   display: flex;
   align-items: end;
@@ -749,9 +751,144 @@ input:disabled {
 .encyclopedia-header h1,
 .ranking-header h1,
 .tier-header h1,
+.deck-header h1,
 .room-header h1 {
   font-size: clamp(32px, 5vw, 52px);
   line-height: 1.04;
+}
+
+.deck-builder-layout {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.deck-selected-panel,
+.deck-pool-panel {
+  padding: 18px;
+}
+
+.selected-deck-list {
+  display: grid;
+  gap: 8px;
+}
+
+.selected-deck-slot,
+.deck-pool-card {
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.selected-deck-slot {
+  min-height: 62px;
+  padding: 9px 10px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-areas:
+    "badge name"
+    "badge meta";
+  align-items: center;
+  column-gap: 10px;
+}
+
+.selected-deck-slot b,
+.deck-pool-card b {
+  display: grid;
+  place-items: center;
+  color: var(--badge-ink);
+  background: var(--gold);
+  border-radius: 50%;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.selected-deck-slot b {
+  grid-area: badge;
+  width: 38px;
+  height: 38px;
+  font-size: 14px;
+}
+
+.selected-deck-slot span {
+  grid-area: name;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.selected-deck-slot small {
+  grid-area: meta;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.selected-deck-slot-empty {
+  min-height: 48px;
+  place-items: center;
+  color: var(--soft);
+  border-style: dashed;
+  font-weight: 900;
+}
+
+.deck-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.deck-pool-card {
+  min-height: 126px;
+  padding: 13px;
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+  align-content: start;
+  gap: 7px;
+  border-top: 5px solid var(--card-accent, var(--gold));
+}
+
+.deck-pool-card b {
+  width: 38px;
+  height: 38px;
+  background: var(--card-accent, var(--gold));
+  font-size: 13px;
+}
+
+.deck-pool-card span,
+.deck-pool-card small,
+.deck-pool-card em {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.deck-pool-card span {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.deck-pool-card small,
+.deck-pool-card em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.deck-pool-card-selected {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(232, 193, 92, 0.28);
+}
+
+.deck-pool-card:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
 }
 
 .tier-current-summary {
@@ -1003,6 +1140,8 @@ input:disabled {
 .character-card-johyunwoo { border-top-color: #9aa0a6; }
 .character-card-kimgeunyoung { border-top-color: #e8c547; }
 .character-card-kimrui { border-top-color: #8f5fbf; }
+.character-card-heoseon { border-top-color: #ff5b66; }
+.character-card-osj { border-top-color: #4a6f88; }
 
 .character-card h2 {
   margin: 0 0 10px;
@@ -1086,8 +1225,8 @@ input:disabled {
 }
 
 .game-frame {
-  width: min(100%, 1040px);
-  aspect-ratio: 900 / 760;
+  width: min(100%, 1120px);
+  aspect-ratio: 1120 / 760;
   overflow: hidden;
 }
 
@@ -1105,6 +1244,7 @@ canvas {
   .lobby-hero,
   .lobby-dashboard,
   .top-ranking-list,
+  .deck-builder-layout,
   .room-layout {
     grid-template-columns: 1fr;
   }
@@ -1165,6 +1305,7 @@ canvas {
   .home-actions,
   .encyclopedia-header,
   .tier-header,
+  .deck-header,
   .room-header,
   .game-toolbar,
   .room-card,

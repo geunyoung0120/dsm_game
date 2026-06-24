@@ -1,6 +1,10 @@
-const VIEW = { width: 900, height: 760 };
+const ARENA_W = 900;
+const SIDEBAR_W = 220;
+const FIELD_CENTER_X = ARENA_W / 2;
+const VIEW = { width: ARENA_W + SIDEBAR_W, height: 760 };
 const ARENA_H = 620;
 const CARD_H = 108;
+const DECK_SIZE = 8;
 const BEST_FRIEND_PAIR = ['baduk', 'johyunwoo'];
 const BEST_FRIEND_COMBO_COST = 8;
 const THEME_STORAGE_KEY = 'dsm-game-theme';
@@ -18,6 +22,8 @@ const CARD_THEME = {
   johyunwoo: { fill: 0x9aa0a6, stroke: 0xf0f2f5, short: '현' },
   kimgeunyoung: { fill: 0xe8c547, stroke: 0xfff2ad, short: '대' },
   kimrui: { fill: 0x8f5fbf, stroke: 0xe4d6ff, short: '루' },
+  heoseon: { fill: 0x323039, stroke: 0xff5b66, short: '허' },
+  osj: { fill: 0x4a6f88, stroke: 0xd9eef8, short: 'OSJ' },
   geunyoungTank: { fill: 0x5d6b73, stroke: 0xcbd3d8, short: '탱' }
 };
 
@@ -52,7 +58,7 @@ const CHARACTER_DETAILS = [
       ['이동속도', '76'],
       ['공격 주기', '없음']
     ],
-    ability: '필드에서 가장 가까운 여학생 캐릭터를 자동으로 따라가며 높은 힐량으로 체력을 회복시킨다. 여학생 캐릭터가 없으면 멈춰 서서 회복을 하지 못한다.',
+    ability: '필드에서 가장 가까운 여학생 또는 여학생으로 인식되는 캐릭터를 자동으로 따라가며 높은 힐량으로 체력을 회복시킨다. 대상이 없으면 멈춰 서서 회복을 하지 못한다.',
     appearance: '키가 작고 마른 남학생. 삭발 머리, 매우 탄 피부, 운동을 잘할 것 같은 체형이다.',
     trait: '공격하지 못하는 순수 힐러다. 힐량이 올라가 후방 지원 성능이 강해졌다.'
   },
@@ -68,11 +74,11 @@ const CHARACTER_DETAILS = [
       ['공격 주기', '1.85초'],
       ['이동속도', '40'],
       ['카오스 피해', '적 140 / 아군 29'],
-      ['절친 출격', 'HP 1040 / 공격력 93']
+      ['절친 출격', 'HP 1170 / 공격력 104']
     ],
     ability: '갑자기 예측하기 어려운 행동을 하며 범위 안 적들에게 매우 큰 피해를 준다. 같은 범위의 아군도 약한 피해를 받는다. 스킬 발동 시점은 무작위다. 조현우와 손패에 함께 있으면 8 엘릭서로 둘이 동시에 출격하며 전장에 절친 특성 문구가 뜬다.',
     appearance: '삭발에 안경을 쓴 통통한 남학생. 교복을 입고 있다.',
-    trait: 'HP가 1300으로 낮아졌지만 여전히 위험 부담이 큰 카오스 딜러다. 조현우와 절친 특성으로 나올 때는 HP와 피해량이 낮아진다.'
+    trait: 'HP가 1300으로 낮아졌지만 여전히 위험 부담이 큰 카오스 딜러다. 조현우와 절친 특성으로 나올 때는 HP와 피해량이 10% 낮아진다.'
   },
   {
     id: 'kkongho',
@@ -144,7 +150,7 @@ const CHARACTER_DETAILS = [
   {
     id: 'peach',
     name: '복숭아',
-    cost: '3',
+    cost: '2',
     type: '근접 딜러',
     stats: [
       ['HP', '585'],
@@ -156,7 +162,7 @@ const CHARACTER_DETAILS = [
     ],
     ability: '테니스 라켓을 빠르게 휘둘러 근접 단일 대상을 연속 공격한다. 한 번 피해는 낮지만 공격속도가 매우 빠르다.',
     appearance: '예쁜 여학생. 보통 키와 체형이며 교복을 입고 테니스 라켓을 들고 있다.',
-    trait: '여학생 캐릭터라 빼트맨의 회복 대상이 된다. 공격 시 테니스공 느낌의 타격 효과가 나타난다.'
+    trait: '2 엘릭서로 낮아진 빠른 근접 딜러다. 여학생 캐릭터라 빼트맨의 회복 대상이 된다.'
   },
   {
     id: 'seongjoo',
@@ -168,28 +174,29 @@ const CHARACTER_DETAILS = [
       ['공격력', '66'],
       ['사거리', '185'],
       ['공격 주기', '0.572초'],
-      ['이동속도', '42']
+      ['이동속도', '42'],
+      ['회복 대상', '가능']
     ],
     ability: '뒤쪽에서 키보드를 두드리며 원거리 공격을 한다. 공격 주기가 10% 느려졌지만 피해는 준수하고 체력이 매우 낮다.',
     appearance: '마른 남학생. 헝클어진 머리가 얼굴 전체를 가리고, 머리카락 아래 안경과 마스크를 쓰고 있다.',
-    trait: '매우 빨리 쓰러지는 후방 딜러다. 공격 템포가 살짝 느려져도 먼저 제거하지 않으면 계속 피해를 준다.'
+    trait: '남자 캐릭터지만 모두가 여학생이라고 생각해서 빼트맨의 회복 대상이 된다. 매우 빨리 쓰러지는 후방 딜러라 먼저 제거하지 않으면 계속 피해를 준다.'
   },
   {
     id: 'johyunwoo',
     name: '조현우',
-    cost: '6',
+    cost: '4',
     type: '근접 단일 딜러',
     stats: [
-      ['HP', '820'],
-      ['공격력', '110'],
+      ['HP', '656'],
+      ['공격력', '88'],
       ['사거리', '42'],
       ['공격 주기', '1.05초'],
       ['이동속도', '54'],
-      ['절친 출격', 'HP 656 / 공격력 88']
+      ['절친 출격', 'HP 590 / 공격력 79']
     ],
-    ability: '근접 거리에서 한 대상에게 단일 공격을 한다. 공격력이 110으로 낮아졌다. 박바둑과 손패에 함께 있으면 8 엘릭서로 둘이 동시에 출격하며 전장에 절친 특성 문구가 뜬다.',
+    ability: '근접 거리에서 한 대상에게 단일 공격을 한다. HP와 공격력이 20% 낮아졌고 비용은 4 엘릭서다. 박바둑과 손패에 함께 있으면 8 엘릭서로 둘이 동시에 출격하며 전장에 절친 특성 문구가 뜬다.',
     appearance: '특별히 튀는 점이 없는 아주 평범한 남학생이다.',
-    trait: '체력은 보통이고 공격력은 크게 낮아졌다. 박바둑과 절친 특성으로 나올 때는 HP와 피해량이 추가로 낮아진다.'
+    trait: '체력과 공격력이 더 낮아진 근접 단일 딜러다. 박바둑과 절친 특성으로 나올 때는 HP와 피해량이 추가로 10% 낮아진다.'
   },
   {
     id: 'kimgeunyoung',
@@ -224,6 +231,42 @@ const CHARACTER_DETAILS = [
     ability: '적 캐릭터 하나에게 달라붙어 낮아진 지속 피해로 체력을 흡수한다. 붙어 있는 동안 자신의 체력을 천천히 회복한다.',
     appearance: '눈 아래까지 내려온 헝클어진 머리의 남학생. 불안정하고 초조해 보인다.',
     trait: '붙은 대상도 이동과 공격을 계속할 수 있다. 흡혈 피해가 낮아져 제압력보다 방해 역할에 더 가까워졌다.'
+  },
+  {
+    id: 'heoseon',
+    name: '허선',
+    cost: '9',
+    type: '버서커 / 폭발형 딜러',
+    stats: [
+      ['기본 HP', '500'],
+      ['폭발 HP', '1000'],
+      ['공격력', '평소 0 / 폭발 100'],
+      ['사거리', '20'],
+      ['공격 주기', '0.25초'],
+      ['이동속도', '보통 / 폭발 매우 빠름'],
+      ['변신 조건', 'HP 30% 이하'],
+      ['변신 회복', '즉시 최대 HP 100%']
+    ],
+    ability: '평소에는 공격력이 0이고 어떤 공격도 하지 않은 채 조용히 적 쪽으로 걸어간다. HP가 30% 이하로 떨어지는 순간 자동으로 폭발 상태가 되며 최대 HP가 500에서 1000으로 두 배가 되고, 체력이 새 최대 HP의 100%로 완전히 회복된다. 폭발 상태에서는 공격력 100, 공격 주기 0.25초, 매우 빠른 이동속도로 근접 범위의 여러 대상을 동시에 공격한다.',
+    appearance: '키가 크고 마른 40대 중년 여성이다. 평소에는 침착하고 음산한 표정으로 천천히 움직이며, 폭발 상태가 되면 분노가 터진 얼굴과 어지러운 움직임으로 어두운 분위기를 몰고 다닌다.',
+    trait: '1단계에서는 완전히 무해해서 상대가 방심하기 쉽다. 한 번 폭발 상태가 되면 되돌아가지 않으며, 변신 순간의 완전 회복과 초고속 다중 공격 때문에 제거하기 매우 까다롭다.'
+  },
+  {
+    id: 'osj',
+    name: 'OSJ',
+    cost: '7',
+    type: '탱커 / 밀치기형 탱커',
+    stats: [
+      ['HP', '1000'],
+      ['공격력', '20'],
+      ['공격 범위', '전방 범위'],
+      ['밀치기 거리', '매우 큼'],
+      ['공격 주기', '1.45초'],
+      ['이동속도', '38']
+    ],
+    ability: '전방에 적이 모이면 "잡상인들 다 나가!"라고 외치며 앞쪽 범위 안의 적들을 한꺼번에 크게 밀어낸다. 피해량은 20으로 매우 낮지만, 여러 적을 동시에 뒤로 밀쳐 진형을 무너뜨리고 아군이 시간을 벌 수 있게 한다.',
+    appearance: '차분하고 선해 보이는 남자 선생님이다. 아버지 같은 분위기와 품위 있는 표정, 단정한 학교 선생님 느낌을 가진다.',
+    trait: 'HP 1000의 매우 단단한 전방 탱커다. 피해량은 낮지만 밀치기 유틸리티가 강해서 적의 돌파를 방해하고, 뒤쪽 원거리 딜러들이 안전하게 공격할 시간을 만들어 준다.'
   }
 ];
 
@@ -244,7 +287,9 @@ const ASCENSION_REACTIONS = {
   seongjoo: '키보드 정지',
   johyunwoo: '덤덤',
   kimgeunyoung: '침착',
-  kimrui: '불안'
+  kimrui: '불안',
+  heoseon: '폭발 직전',
+  osj: '퇴장 지시'
 };
 
 let phaserGame = null;
@@ -258,6 +303,8 @@ let currentSlot = null;
 let ascensionAudioUntil = 0;
 let latestRankings = [];
 let latestTiers = [];
+let deckCards = {};
+let selectedDeck = [];
 
 class BattleScene extends Phaser.Scene {
   constructor() {
@@ -322,7 +369,7 @@ class BattleScene extends Phaser.Scene {
       this.drawCards();
       this.drawOverlay();
     } else {
-      this.drawCenteredText('서버 연결 중...', VIEW.width / 2, VIEW.height / 2, 24, '#f7f2e8');
+      this.drawCenteredText('서버 연결 중...', FIELD_CENTER_X, VIEW.height / 2, 24, '#f7f2e8');
     }
 
     this.hideUnusedText();
@@ -359,37 +406,42 @@ class BattleScene extends Phaser.Scene {
 
   drawBoard() {
     this.g.fillStyle(0x273828, 1);
-    this.g.fillRect(0, 0, VIEW.width, ARENA_H);
+    this.g.fillRect(0, 0, ARENA_W, ARENA_H);
 
     this.g.fillStyle(0x334734, 1);
-    this.g.fillRect(0, 0, VIEW.width, 282);
+    this.g.fillRect(0, 0, ARENA_W, 282);
     this.g.fillStyle(0x2c593e, 1);
-    this.g.fillRect(0, 338, VIEW.width, 282);
+    this.g.fillRect(0, 338, ARENA_W, 282);
 
     this.g.fillStyle(0x487aa0, 1);
-    this.g.fillRect(0, 286, VIEW.width, 48);
+    this.g.fillRect(0, 286, ARENA_W, 48);
     this.g.lineStyle(3, 0xd8c073, 1);
-    this.g.lineBetween(0, 286, VIEW.width, 286);
-    this.g.lineBetween(0, 334, VIEW.width, 334);
+    this.g.lineBetween(0, 286, ARENA_W, 286);
+    this.g.lineBetween(0, 334, ARENA_W, 334);
 
     this.g.lineStyle(5, 0xcaa862, 1);
     this.g.lineBetween(315, 286, 315, 334);
     this.g.lineBetween(585, 286, 585, 334);
 
     this.g.lineStyle(1, 0xffffff, 0.12);
-    this.g.lineBetween(VIEW.width / 2, 0, VIEW.width / 2, ARENA_H);
+    this.g.lineBetween(FIELD_CENTER_X, 0, FIELD_CENTER_X, ARENA_H);
 
     this.g.fillStyle(0x191b1f, 1);
-    this.g.fillRect(0, ARENA_H, VIEW.width, VIEW.height - ARENA_H);
+    this.g.fillRect(0, ARENA_H, ARENA_W, VIEW.height - ARENA_H);
+
+    this.g.fillStyle(0x101318, 1);
+    this.g.fillRect(ARENA_W, 0, SIDEBAR_W, VIEW.height);
+    this.g.lineStyle(2, 0xffffff, 0.12);
+    this.g.lineBetween(ARENA_W, 0, ARENA_W, VIEW.height);
   }
 
   drawSpawnPreview() {
     if (this.slot === null || this.slot === undefined || this.selectedHandIndex === null || this.state.status !== 'playing') return;
     const zone = this.slot === 0 ? { y: 338, h: ARENA_H - 380 } : { y: 42, h: 240 };
     this.g.fillStyle(this.slot === 0 ? 0x4f8de8 : 0xe4536d, 0.13);
-    this.g.fillRect(48, zone.y, VIEW.width - 96, zone.h);
+    this.g.fillRect(48, zone.y, ARENA_W - 96, zone.h);
     this.g.lineStyle(2, this.slot === 0 ? 0xcbe1ff : 0xffd5d1, 0.7);
-    this.g.strokeRect(48, zone.y, VIEW.width - 96, zone.h);
+    this.g.strokeRect(48, zone.y, ARENA_W - 96, zone.h);
   }
 
   drawTowers() {
@@ -427,6 +479,12 @@ class BattleScene extends Phaser.Scene {
       if (unit.awakened) {
         this.g.lineStyle(3, 0xffee64, 0.9);
         this.g.strokeCircle(unit.x, unit.y, radius + 8);
+      }
+      if (unit.berserked) {
+        this.g.fillStyle(0xff2f45, 0.12);
+        this.g.fillCircle(unit.x, unit.y, radius + 17);
+        this.g.lineStyle(3, 0xff5b66, 0.9);
+        this.g.strokeCircle(unit.x, unit.y, radius + 12);
       }
       if (unit.windup) {
         this.g.lineStyle(3, 0xffffff, 0.75);
@@ -578,6 +636,26 @@ class BattleScene extends Phaser.Scene {
       this.g.strokeEllipse(x, y - 24, 20, 16);
       this.g.lineStyle(4, white, 0.85);
       this.g.lineBetween(x + dir * 8, y - 4, x + dir * 24, y - 14);
+    } else if (unit.cardId === 'osj') {
+      this.g.fillStyle(theme.fill, 1);
+      this.g.fillRoundedRect(x - 12, y - 16, 24, 39, 5);
+      this.g.strokeRoundedRect(x - 12, y - 16, 24, 39, 5);
+      this.g.fillStyle(0xd9eef8, 1);
+      this.g.fillRoundedRect(x - 9, y - 14, 18, 35, 4);
+      this.g.fillStyle(0x233f52, 1);
+      this.g.fillRect(x - 2, y - 13, 4, 34);
+      this.g.fillStyle(skin, 1);
+      this.g.fillEllipse(x, y - 31, 22, 18);
+      this.g.strokeEllipse(x, y - 31, 22, 18);
+      this.g.fillStyle(0x26201b, 1);
+      this.g.fillEllipse(x, y - 37, 22, 8);
+      this.g.lineStyle(1, dark, 1);
+      this.g.strokeCircle(x - 5, y - 31, 3);
+      this.g.strokeCircle(x + 5, y - 31, 3);
+      this.g.lineBetween(x - 2, y - 31, x + 2, y - 31);
+      this.g.lineStyle(unit.action ? 5 : 3, 0xd9eef8, unit.action ? 1 : 0.8);
+      this.g.lineBetween(x + dir * 9, y - 7, x + dir * 30, y - 8);
+      this.g.lineBetween(x - dir * 8, y - 5, x - dir * 18, y + 4);
     } else if (unit.cardId === 'kimgeunyoung') {
       this.g.fillStyle(theme.fill, 1);
       this.g.fillRoundedRect(x - 13, y - 16, 26, 38, 6);
@@ -598,6 +676,34 @@ class BattleScene extends Phaser.Scene {
       this.g.fillEllipse(x, y - 29, 25, 14);
       this.g.lineStyle(3, 0xe4d6ff, unit.attached ? 1 : 0.45);
       this.g.strokeCircle(x, y - 2, 18);
+    } else if (unit.cardId === 'heoseon') {
+      const enraged = Boolean(unit.berserked);
+      const coat = enraged ? 0x4c151c : theme.fill;
+      const face = enraged ? 0xffb4a2 : 0xd0aaa0;
+      this.g.fillStyle(coat, 1);
+      this.g.fillRoundedRect(x - 7, y - 22, 14, 45, 6);
+      this.g.strokeRoundedRect(x - 7, y - 22, 14, 45, 6);
+      this.g.lineStyle(3, enraged ? 0xff5b66 : 0x151319, 1);
+      this.g.lineBetween(x - 5, y + 22, x - 13, y + 38);
+      this.g.lineBetween(x + 5, y + 22, x + 13, y + 38);
+      this.g.fillStyle(face, 1);
+      this.g.fillEllipse(x, y - 36, 18, 24);
+      this.g.strokeEllipse(x, y - 36, 18, 24);
+      this.g.fillStyle(0x141116, 1);
+      this.g.fillEllipse(x, y - 42, 22, 17);
+      this.g.fillRect(x - 11, y - 40, 22, 18);
+      this.g.lineStyle(1, enraged ? 0xfff0f0 : dark, 1);
+      this.g.lineBetween(x - 5, y - 35, x - 2, y - 34);
+      this.g.lineBetween(x + 2, y - 34, x + 5, y - 35);
+      this.g.lineStyle(enraged ? 4 : 2, enraged ? 0xff5b66 : 0x8c8588, enraged ? 0.95 : 0.5);
+      this.g.lineBetween(x - dir * 5, y - 13, x + dir * 17, y - 25);
+      this.g.lineBetween(x + dir * 5, y - 4, x + dir * 20, y + 8);
+      if (enraged) {
+        this.g.lineStyle(2, 0xff2f45, 0.85);
+        this.g.lineBetween(x - 22, y - 45, x - 8, y - 24);
+        this.g.lineBetween(x + 20, y - 21, x + 8, y - 4);
+        this.g.lineBetween(x - 18, y + 4, x - 6, y + 23);
+      }
     } else if (unit.cardId === 'geunyoungTank') {
       const barrelEnd = x + dir * 25;
       this.g.fillStyle(0x303a3f, 1);
@@ -638,7 +744,7 @@ class BattleScene extends Phaser.Scene {
 
       if (effect.type === 'ascension-start') {
         this.g.fillStyle(0xfff6b0, 0.18 + 0.14 * Math.sin(age / 90));
-        this.g.fillRect(0, 0, VIEW.width, ARENA_H);
+        this.g.fillRect(0, 0, ARENA_W, ARENA_H);
         this.g.lineStyle(8, 0xfff2a8, alpha);
         this.g.lineBetween(effect.x, 0, effect.x, ARENA_H);
         this.g.fillStyle(0xfff7cb, 0.95);
@@ -648,11 +754,11 @@ class BattleScene extends Phaser.Scene {
         this.g.lineBetween(effect.x - 10, ARENA_H / 2 + 44, effect.x - 30, ARENA_H / 2 + 56);
         this.g.lineBetween(effect.x + 10, ARENA_H / 2 + 44, effect.x + 30, ARENA_H / 2 + 56);
         this.drawCenteredText('기도', effect.x, ARENA_H / 2 + 72, 15, '#fff7cb');
-        this.drawCenteredText('대승천', VIEW.width / 2, ARENA_H / 2, 42, '#fff7cb');
+        this.drawCenteredText('대승천', FIELD_CENTER_X, ARENA_H / 2, 42, '#fff7cb');
         this.drawAscensionReactions(alpha);
       } else if (effect.type === 'ascension-end') {
         this.g.fillStyle(0xfff8d3, alpha * 0.75);
-        this.g.fillRect(0, 0, VIEW.width, ARENA_H);
+        this.g.fillRect(0, 0, ARENA_W, ARENA_H);
       } else if (effect.type === 'sonic') {
         this.drawAttackTrail(effect, 0xffd6df, alpha, t, 4);
         if (Number.isFinite(effect.fromX) && Number.isFinite(effect.fromY)) {
@@ -675,6 +781,15 @@ class BattleScene extends Phaser.Scene {
         this.g.lineStyle(2, 0xffffff, alpha);
         this.g.lineBetween(effect.x - 30, effect.y + 30, effect.x + 15, effect.y - 38);
         this.g.lineBetween(effect.x + 20, effect.y + 28, effect.x - 10, effect.y - 42);
+      } else if (effect.type === 'berserk') {
+        this.g.fillStyle(0xff2f45, alpha * 0.18);
+        this.g.fillCircle(effect.x, effect.y, 36 + t * 96);
+        this.g.lineStyle(6, 0xff5b66, alpha);
+        this.g.strokeCircle(effect.x, effect.y, 24 + t * 92);
+        this.g.lineStyle(3, 0xffffff, alpha * 0.85);
+        this.g.lineBetween(effect.x - 42, effect.y + 38, effect.x + 24, effect.y - 52);
+        this.g.lineBetween(effect.x + 44, effect.y + 28, effect.x - 16, effect.y - 56);
+        this.drawCenteredText('폭발 상태', effect.x, Math.max(16, effect.y - 84 - t * 12), 22, '#ffccd0');
       } else if (effect.type === 'windup') {
         this.g.fillStyle(0x111318, alpha * 0.8);
         this.g.fillRoundedRect(effect.x - 29, effect.y - 54, 58, 24, 8);
@@ -714,6 +829,29 @@ class BattleScene extends Phaser.Scene {
         this.drawAttackTrail(effect, 0xfff2a8, alpha, t, 4);
         this.g.fillStyle(0xffffff, alpha);
         this.g.fillCircle(effect.x, effect.y, 8 + t * 16);
+      } else if (effect.type === 'push') {
+        const pushDir = effect.owner === 0 ? -1 : 1;
+        const range = effect.range || 96;
+        const width = effect.width || 132;
+        const frontY = effect.fromY + pushDir * (range + t * 28);
+        this.g.fillStyle(0xd9eef8, alpha * 0.12);
+        this.g.fillTriangle(effect.fromX, effect.fromY, effect.fromX - width / 2, frontY, effect.fromX + width / 2, frontY);
+        this.g.lineStyle(4, 0xd9eef8, alpha);
+        this.g.lineBetween(effect.fromX, effect.fromY, effect.fromX - width / 2, frontY);
+        this.g.lineBetween(effect.fromX, effect.fromY, effect.fromX + width / 2, frontY);
+        this.g.lineBetween(effect.fromX - width / 2, frontY, effect.fromX + width / 2, frontY);
+        this.g.lineStyle(3, 0xffffff, alpha * 0.82);
+        this.g.lineBetween(effect.fromX - 30, frontY - pushDir * 18, effect.fromX + 30, frontY - pushDir * 18);
+        this.g.lineBetween(effect.fromX - 44, frontY - pushDir * 36, effect.fromX + 44, frontY - pushDir * 36);
+        this.drawCenteredText('잡상인들 다 나가!', effect.fromX, Math.max(16, effect.fromY - 58), 15, '#d9eef8');
+      } else if (effect.type === 'berserk-hit') {
+        this.drawAttackTrail(effect, 0xff5b66, alpha, t, 5);
+        this.g.lineStyle(5, 0xff5b66, alpha);
+        this.g.strokeCircle(effect.x, effect.y, 12 + t * (effect.radius || 58));
+        this.g.lineStyle(3, 0xffffff, alpha * 0.8);
+        this.g.lineBetween(effect.x - 30, effect.y + 20, effect.x + 32, effect.y - 18);
+        this.g.lineBetween(effect.x - 24, effect.y - 22, effect.x + 28, effect.y + 18);
+        this.drawCenteredText('폭주', effect.x, effect.y - 36, 15, '#ffccd0');
       } else if (effect.type === 'hit') {
         this.drawCardHitEffect(effect, t, alpha);
       } else if (effect.type === 'spawn') {
@@ -733,7 +871,7 @@ class BattleScene extends Phaser.Scene {
         this.g.strokeCircle(effect.x, effect.y, 24 + t * 34);
         this.drawCenteredText('이탈', effect.x, effect.y - 30, 13, '#e4d6ff');
       } else if (effect.type === 'sudden-death') {
-        this.drawCenteredText('서든 데스', VIEW.width / 2, 308, 36, '#fff4a7');
+        this.drawCenteredText('서든 데스', FIELD_CENTER_X, 308, 36, '#fff4a7');
       }
     }
   }
@@ -822,38 +960,60 @@ class BattleScene extends Phaser.Scene {
     const time = formatTime(this.state.remainingMs);
     const doubleElixir = (this.state.elixirMultiplier || 1) > 1;
 
-    this.g.fillStyle(0x111318, 0.82);
-    this.g.fillRoundedRect(16, 12, 272, 66, 8);
-    this.g.fillRoundedRect(612, 12, 272, 66, 8);
-    this.g.fillRoundedRect(360, 12, 180, doubleElixir ? 74 : 58, 8);
+    const x = ARENA_W + 12;
+    const w = SIDEBAR_W - 24;
+    this.g.fillStyle(0x151922, 0.96);
+    this.g.fillRoundedRect(x, 12, w, ARENA_H - 24, 10);
+    this.g.lineStyle(2, 0xffffff, 0.13);
+    this.g.strokeRoundedRect(x, 12, w, ARENA_H - 24, 10);
 
-    this.drawText(playerTitle(p0, 1), 32, 22, 14, '#cbe1ff');
-    this.drawText(`체력 ${p0 ? p0.totalTowerHp : 0}  트로피 ${p0 ? p0.trophies : 0}`, 32, 48, 12, '#d6d0c6');
-    this.drawText(playerTitle(p1, 2), 628, 22, 14, '#ffd5d1');
-    this.drawText(`체력 ${p1 ? p1.totalTowerHp : 0}  트로피 ${p1 ? p1.trophies : 0}`, 628, 48, 12, '#d6d0c6');
-    this.drawCenteredText(this.state.suddenDeath ? '서든' : time, 450, doubleElixir ? 20 : 27, 22, '#f7f2e8');
+    this.drawText('경기 시간', x + 14, 28, 11, '#8f98a6');
+    this.drawText(this.state.suddenDeath ? '서든 데스' : time, x + 14, 44, 26, '#f7f2e8');
     if (doubleElixir) {
       this.g.fillStyle(0xb86dff, 1);
-      this.g.fillRoundedRect(424, 48, 52, 20, 6);
-      this.drawCenteredText('X2', 450, 48, 15, '#ffffff');
-      this.drawCenteredText(this.state.message || '', 450, 70, 10, '#d6d0c6');
-    } else {
-      this.drawCenteredText(this.state.message || '', 450, 54, 12, '#d6d0c6');
+      this.g.fillRoundedRect(x + 122, 50, 42, 20, 6);
+      this.drawCenteredText('X2', x + 143, 50, 14, '#ffffff');
     }
+
+    this.drawHudPlayer(p1, '위 진영', x + 12, 88, w - 24, '#ffd5d1');
+    this.drawHudPlayer(p0, '아래 진영', x + 12, 198, w - 24, '#cbe1ff');
+
+    this.drawText('상태', x + 14, 322, 11, '#8f98a6');
+    this.drawText(truncateText(this.state.message || (doubleElixir ? '더블 엘릭서' : '전투 중'), 18), x + 14, 340, 13, '#d6d0c6');
 
     if (me) {
       this.drawElixir(me.elixir);
-      this.drawText(`내 진영: ${this.slot === 0 ? '아래' : '위'}`, 32, 68, 11, '#d6d0c6');
+      this.drawText('내 진영', x + 14, 388, 11, '#8f98a6');
+      this.drawText(this.slot === 0 ? '아래' : '위', x + 14, 406, 16, '#f7f2e8');
     } else {
-      this.drawCenteredText(this.notice || '방 대기 중', 450, 650, 18, '#f7f2e8');
+      this.drawText(truncateText(this.notice || '방 대기 중', 18), x + 14, 500, 14, '#f7f2e8');
     }
   }
 
+  drawHudPlayer(player, label, x, y, w, accent) {
+    this.g.fillStyle(0x222834, 0.88);
+    this.g.fillRoundedRect(x, y, w, 92, 8);
+    this.g.lineStyle(2, 0xffffff, 0.1);
+    this.g.strokeRoundedRect(x, y, w, 92, 8);
+
+    const username = player ? player.username || label : label;
+    const tier = player && player.tier ? `${player.tierIcon || ''} ${player.tier}` : '대기';
+    const towerHp = player ? player.totalTowerHp : 0;
+    const trophies = player ? player.trophies : 0;
+
+    this.drawText(label, x + 10, y + 8, 11, accent);
+    this.drawText(truncateText(username, 17), x + 10, y + 25, 15, '#f7f2e8');
+    this.drawText(truncateText(tier, 17), x + 10, y + 47, 12, '#d6d0c6');
+    this.drawText(`타워 ${towerHp}`, x + 10, y + 67, 11, '#d6d0c6');
+    this.drawText(`트로피 ${trophies}`, x + 98, y + 67, 11, '#d6d0c6');
+  }
+
   drawElixir(elixir) {
-    const x = 603;
-    const y = 642;
-    const w = 260;
+    const x = ARENA_W + 26;
+    const y = 548;
+    const w = SIDEBAR_W - 52;
     const h = 18;
+    this.drawText('엘릭서', x, y - 22, 11, '#8f98a6');
     this.g.fillStyle(0x262b33, 1);
     this.g.fillRoundedRect(x, y, w, h, 8);
     this.g.fillStyle(0xb86dff, 1);
@@ -904,36 +1064,36 @@ class BattleScene extends Phaser.Scene {
   drawOverlay() {
     if (this.state.freezeMs > 0) {
       this.g.fillStyle(0xfff3b5, 0.11);
-      this.g.fillRect(0, 0, VIEW.width, ARENA_H);
+      this.g.fillRect(0, 0, ARENA_W, ARENA_H);
     }
 
     if (this.state.status === 'waiting') {
       this.g.fillStyle(0x0c0e11, 0.62);
-      this.g.fillRect(0, 0, VIEW.width, ARENA_H);
-      this.drawCenteredText('상대 접속 대기 중', VIEW.width / 2, 286, 30, '#f7f2e8');
-      this.drawCenteredText('다른 플레이어가 이 방에 참가하면 자동으로 시작됩니다.', VIEW.width / 2, 326, 16, '#d6d0c6');
+      this.g.fillRect(0, 0, ARENA_W, ARENA_H);
+      this.drawCenteredText('상대 접속 대기 중', FIELD_CENTER_X, 286, 30, '#f7f2e8');
+      this.drawCenteredText('다른 플레이어가 이 방에 참가하면 자동으로 시작됩니다.', FIELD_CENTER_X, 326, 16, '#d6d0c6');
     }
 
     if (this.state.status === 'ended') {
       this.g.fillStyle(0x0c0e11, 0.68);
-      this.g.fillRect(0, 0, VIEW.width, ARENA_H);
+      this.g.fillRect(0, 0, ARENA_W, ARENA_H);
       const winner = this.state.winner === null ? null : this.state.players[this.state.winner];
       const result = winner ? `${winner.username || `플레이어 ${this.state.winner + 1}`} 승리` : '무승부';
       const rematchCount = this.state.players.filter((player) => player.rematchAccepted).length;
-      this.drawCenteredText(result, VIEW.width / 2, 276, 34, '#f7f2e8');
-      this.drawCenteredText(this.state.reason || '', VIEW.width / 2, 318, 17, '#d6d0c6');
+      this.drawCenteredText(result, FIELD_CENTER_X, 276, 34, '#f7f2e8');
+      this.drawCenteredText(this.state.reason || '', FIELD_CENTER_X, 318, 17, '#d6d0c6');
       if (this.state.trophyChange) {
         const change = this.state.trophyChange;
         const sign = change.delta > 0 ? '+' : '';
-        this.drawCenteredText(`트로피 ${sign}${change.delta} | 현재 ${change.trophies}개 | ${change.tierIcon} ${change.tier}`, VIEW.width / 2, 356, 15, '#fff4a7');
+        this.drawCenteredText(`트로피 ${sign}${change.delta} | 현재 ${change.trophies}개 | ${change.tierIcon} ${change.tier}`, FIELD_CENTER_X, 356, 15, '#fff4a7');
       }
-      this.drawCenteredText(`재경기 동의 ${rematchCount}/2`, VIEW.width / 2, 386, 15, '#fff4a7');
-      this.drawCenteredText('둘 다 재경기를 누르면 같은 방에서 다시 시작합니다.', VIEW.width / 2, 414, 14, '#d6d0c6');
+      this.drawCenteredText(`재경기 동의 ${rematchCount}/2`, FIELD_CENTER_X, 386, 15, '#fff4a7');
+      this.drawCenteredText('둘 다 재경기를 누르면 같은 방에서 다시 시작합니다.', FIELD_CENTER_X, 414, 14, '#d6d0c6');
     }
   }
 
   isInOwnSpawnZone(x, y) {
-    if (x < 48 || x > VIEW.width - 48) return false;
+    if (x < 48 || x > ARENA_W - 48) return false;
     if (this.slot === 0) return y >= 338 && y <= ARENA_H - 42;
     return y >= 42 && y <= 282;
   }
@@ -945,6 +1105,8 @@ class BattleScene extends Phaser.Scene {
     if (cardId === 'bbatman') return 15;
     if (cardId === 'seongjoo') return 15;
     if (cardId === 'kimrui') return 16;
+    if (cardId === 'heoseon') return 20;
+    if (cardId === 'osj') return 22;
     if (cardId === 'geunyoungTank') return 16;
     return 18;
   }
@@ -956,6 +1118,7 @@ class BattleScene extends Phaser.Scene {
     if (type === 'sonic') return 950;
     if (type === 'chaos') return 950;
     if (type === 'awaken') return 1200;
+    if (type === 'berserk') return 1200;
     if (type === 'windup') return 820;
     if (type === 'punchline') return 1050;
     if (type === 'jimin-yushin-counter') return 1250;
@@ -964,6 +1127,8 @@ class BattleScene extends Phaser.Scene {
     if (type === 'leech') return 760;
     if (type === 'leech-detach') return 620;
     if (type === 'tower-shot') return 450;
+    if (type === 'push') return 760;
+    if (type === 'berserk-hit') return 520;
     if (type === 'hit') return 520;
     return 700;
   }
@@ -1014,6 +1179,12 @@ function formatTime(ms) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+function truncateText(value, maxLength) {
+  const text = String(value || '');
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
 function buildFallbackCards(state) {
   const cards = {};
   for (const player of state.players || []) {
@@ -1049,15 +1220,19 @@ function setupShell() {
   const encyclopediaScreen = document.getElementById('encyclopedia-screen');
   const rankingScreen = document.getElementById('ranking-screen');
   const tierScreen = document.getElementById('tier-screen');
+  const deckScreen = document.getElementById('deck-screen');
   const gameScreen = document.getElementById('game-screen');
   const startButton = document.getElementById('start-game');
+  const deckButton = document.getElementById('open-deck-builder');
   const encyclopediaButton = document.getElementById('open-encyclopedia');
   const rankingButton = document.getElementById('open-ranking');
   const tierButton = document.getElementById('open-tier-chart');
   const backRankingButton = document.getElementById('back-ranking');
   const backTierButton = document.getElementById('back-tier');
+  const backDeckButton = document.getElementById('back-deck');
   const backButton = document.getElementById('back-home');
   const backMainButton = document.getElementById('back-main');
+  const saveDeckButton = document.getElementById('save-deck');
   const logoutButton = document.getElementById('logout');
   const leaveRoomButton = document.getElementById('leave-room');
   const rematchRoomButton = document.getElementById('rematch-room');
@@ -1100,6 +1275,11 @@ function setupShell() {
     requestRooms();
   });
 
+  deckButton.addEventListener('click', async () => {
+    showScreen(deckScreen);
+    await loadDeckBuilder();
+  });
+
   encyclopediaButton.addEventListener('click', () => {
     showScreen(encyclopediaScreen);
   });
@@ -1119,6 +1299,10 @@ function setupShell() {
   });
 
   backTierButton.addEventListener('click', () => {
+    showScreen(homeScreen);
+  });
+
+  backDeckButton.addEventListener('click', () => {
     showScreen(homeScreen);
   });
 
@@ -1170,8 +1354,10 @@ function setupShell() {
     updateRematchControls(true);
   });
 
+  saveDeckButton.addEventListener('click', saveDeck);
+
   function showScreen(target) {
-    for (const screen of [authScreen, homeScreen, roomScreen, encyclopediaScreen, rankingScreen, tierScreen, gameScreen]) {
+    for (const screen of [authScreen, homeScreen, roomScreen, encyclopediaScreen, rankingScreen, tierScreen, deckScreen, gameScreen]) {
       screen.classList.toggle('hidden', screen !== target);
     }
   }
@@ -1396,6 +1582,138 @@ async function loadTiers() {
   } catch (error) {
     renderTierList(error.message || '티어표를 가져오지 못했습니다.');
   }
+}
+
+async function loadDeckBuilder() {
+  if (!currentUser) return;
+  setMessage('deck-message', '덱을 불러오는 중...');
+  try {
+    const data = await apiRequest('/api/deck');
+    deckCards = data.cards || {};
+    selectedDeck = Array.isArray(data.deck) ? [...data.deck] : [];
+    setMessage('deck-message', selectedDeck.length === DECK_SIZE ? '저장된 덱입니다.' : '카드 8장을 선택하세요.');
+    renderDeckBuilder();
+  } catch (error) {
+    setMessage('deck-message', error.message || '덱을 불러오지 못했습니다.');
+    renderDeckBuilder();
+  }
+}
+
+async function saveDeck() {
+  if (selectedDeck.length !== DECK_SIZE) {
+    setMessage('deck-message', `카드 ${DECK_SIZE}장을 선택해야 저장할 수 있습니다.`);
+    return;
+  }
+
+  const button = document.getElementById('save-deck');
+  try {
+    if (button) button.disabled = true;
+    const data = await apiRequest('/api/deck', {
+      method: 'PUT',
+      body: JSON.stringify({ deck: selectedDeck })
+    });
+    deckCards = data.cards || deckCards;
+    selectedDeck = Array.isArray(data.deck) ? [...data.deck] : selectedDeck;
+    setMessage('deck-message', '덱을 저장했습니다. 다음 경기부터 이 덱으로 시작합니다.');
+    renderDeckBuilder();
+  } catch (error) {
+    setMessage('deck-message', error.message || '덱을 저장하지 못했습니다.');
+    renderDeckBuilder();
+  }
+}
+
+function renderDeckBuilder() {
+  renderSelectedDeck();
+  renderDeckCardGrid();
+}
+
+function renderSelectedDeck() {
+  const count = document.getElementById('deck-count');
+  const list = document.getElementById('selected-deck-list');
+  const saveButton = document.getElementById('save-deck');
+  if (count) count.textContent = `${selectedDeck.length} / ${DECK_SIZE}`;
+  if (saveButton) saveButton.disabled = selectedDeck.length !== DECK_SIZE;
+  if (!list) return;
+
+  list.replaceChildren();
+  for (let i = 0; i < DECK_SIZE; i += 1) {
+    const cardId = selectedDeck[i];
+    const card = deckCards[cardId];
+    const slot = document.createElement('button');
+    slot.type = 'button';
+    slot.className = 'selected-deck-slot';
+    if (!card) {
+      slot.classList.add('selected-deck-slot-empty');
+      slot.textContent = `${i + 1}`;
+      slot.disabled = true;
+    } else {
+      const theme = CARD_THEME[cardId] || { short: '?' };
+      slot.innerHTML = `<b>${theme.short}</b><span>${card.name}</span><small>${card.cost} 엘릭서</small>`;
+      slot.addEventListener('click', () => {
+        selectedDeck.splice(i, 1);
+        setMessage('deck-message', '선택한 카드를 뺐습니다.');
+        renderDeckBuilder();
+      });
+    }
+    list.appendChild(slot);
+  }
+}
+
+function renderDeckCardGrid() {
+  const grid = document.getElementById('deck-card-grid');
+  if (!grid) return;
+  grid.replaceChildren();
+
+  const cards = Object.values(deckCards).filter((card) => card && card.id);
+  if (cards.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = '카드 목록을 불러오지 못했습니다.';
+    grid.appendChild(empty);
+    return;
+  }
+
+  for (const card of cards) {
+    grid.appendChild(deckPoolCard(card));
+  }
+}
+
+function deckPoolCard(card) {
+  const selected = selectedDeck.includes(card.id);
+  const full = selectedDeck.length >= DECK_SIZE;
+  const theme = CARD_THEME[card.id] || { fill: 0xcaa862, short: '?' };
+  const detail = CHARACTER_DETAILS.find((character) => character.id === card.id);
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'deck-pool-card';
+  if (selected) button.classList.add('deck-pool-card-selected');
+  button.disabled = full && !selected;
+  button.style.setProperty('--card-accent', `#${theme.fill.toString(16).padStart(6, '0')}`);
+
+  const badge = document.createElement('b');
+  badge.textContent = theme.short;
+  const name = document.createElement('span');
+  name.textContent = card.name;
+  const meta = document.createElement('small');
+  meta.textContent = `${card.cost} 엘릭서 · ${card.role}`;
+  const type = document.createElement('em');
+  type.textContent = detail ? detail.type : card.role;
+
+  button.append(badge, name, meta, type);
+  button.addEventListener('click', () => {
+    const index = selectedDeck.indexOf(card.id);
+    if (index >= 0) {
+      selectedDeck.splice(index, 1);
+      setMessage('deck-message', '선택한 카드를 뺐습니다.');
+    } else if (selectedDeck.length < DECK_SIZE) {
+      selectedDeck.push(card.id);
+      setMessage('deck-message', selectedDeck.length === DECK_SIZE ? '저장할 수 있습니다.' : '카드를 더 선택하세요.');
+    }
+    renderDeckBuilder();
+  });
+
+  return button;
 }
 
 function renderProfile() {

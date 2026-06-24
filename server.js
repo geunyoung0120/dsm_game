@@ -147,7 +147,7 @@ const CARDS = {
   peach: {
     id: 'peach',
     name: '복숭아',
-    cost: 3,
+    cost: 2,
     role: '근접 연타',
     maxHp: 585,
     damage: 36,
@@ -167,15 +167,16 @@ const CARDS = {
     range: 185,
     speed: 42,
     attackMs: 572,
-    radius: 15
+    radius: 15,
+    female: true
   },
   johyunwoo: {
     id: 'johyunwoo',
     name: '조현우',
-    cost: 6,
+    cost: 4,
     role: '근접 단일',
-    maxHp: 820,
-    damage: 110,
+    maxHp: 656,
+    damage: 88,
     range: 42,
     speed: 54,
     attackMs: 1050,
@@ -211,6 +212,41 @@ const CARDS = {
     attachRange: 34,
     drainPerSecond: 70,
     regenPerSecond: 52
+  },
+  heoseon: {
+    id: 'heoseon',
+    name: '허선',
+    cost: 9,
+    role: '폭발형 딜러',
+    maxHp: 500,
+    damage: 0,
+    range: 20,
+    speed: 45,
+    attackMs: 250,
+    radius: 18,
+    female: true,
+    berserker: true,
+    berserkerThreshold: 0.3,
+    berserkerMaxHp: 1000,
+    berserkerDamage: 100,
+    berserkerSpeed: 118,
+    berserkerAttackMs: 250,
+    berserkerSplashRadius: 58
+  },
+  osj: {
+    id: 'osj',
+    name: 'OSJ',
+    cost: 7,
+    role: '밀치기형 탱커',
+    maxHp: 1000,
+    damage: 20,
+    range: 96,
+    speed: 38,
+    attackMs: 1450,
+    radius: 22,
+    pusher: true,
+    pushWidth: 132,
+    pushDistance: 112
   },
   geunyoungTank: {
     id: 'geunyoungTank',
@@ -253,6 +289,13 @@ db.exec(`
     sid TEXT PRIMARY KEY,
     data TEXT NOT NULL,
     expires INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS user_decks (
+    user_id INTEGER PRIMARY KEY,
+    cards TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )
 `);
 
@@ -267,6 +310,12 @@ const statements = {
     SELECT id, username, trophies, tier
     FROM users
     ORDER BY trophies DESC, username COLLATE NOCASE ASC
+  `),
+  getDeck: db.prepare('SELECT cards FROM user_decks WHERE user_id = ?'),
+  upsertDeck: db.prepare(`
+    INSERT INTO user_decks (user_id, cards, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET cards = excluded.cards, updated_at = excluded.updated_at
   `),
   updateUserStats: db.prepare(`
     UPDATE users
@@ -440,6 +489,28 @@ app.get('/api/rankings', requireAuthApi, (req, res) => {
 
 app.get('/api/tiers', requireAuthApi, (req, res) => {
   res.json({ tiers: publicTiers(), user: publicUser(req.user) });
+});
+
+app.get('/api/deck', requireAuthApi, (req, res) => {
+  res.json({
+    deck: getSavedDeck(req.user.id) || [],
+    cards: publicPlayableCards()
+  });
+});
+
+app.put('/api/deck', requireAuthApi, (req, res) => {
+  const deck = req.body && req.body.deck;
+  const validation = validateDeck(deck);
+  if (validation.error) {
+    res.status(400).json({ error: validation.error });
+    return;
+  }
+
+  statements.upsertDeck.run(req.user.id, JSON.stringify(validation.deck), new Date().toISOString());
+  res.json({
+    deck: validation.deck,
+    cards: publicPlayableCards()
+  });
 });
 
 app.use(express.static(path.join(__dirname, 'public'), {
@@ -742,12 +813,16 @@ function clearRoomPlayer(player) {
 }
 
 function resetPlayerForMatch(player) {
-  const deck = shuffledDeck();
+  const deck = deckForPlayer(player.userId);
   player.elixir = 5;
   player.hand = deck.slice(0, 4);
   player.cycle = deck.slice(4);
   player.usedOneTimeCards = {};
   player.rematchAccepted = false;
+}
+
+function deckForPlayer(userId) {
+  return getSavedDeck(userId) || shuffledDeck();
 }
 
 function shuffledDeck() {
@@ -926,7 +1001,7 @@ function spawnCard(room, owner, cardId, x, y) {
 }
 
 function spawnBestFriendCombo(room, owner, x, y) {
-  const statMultiplier = 0.8;
+  const statMultiplier = 0.9;
   const offsets = [
     { cardId: 'baduk', x: -28, y: 0 },
     { cardId: 'johyunwoo', x: 28, y: 0 }
@@ -973,6 +1048,7 @@ function spawnUnit(room, owner, cardId, x, y, extras = {}) {
     attachedToId: null,
     attachedById: null,
     awakened: false,
+    berserked: false,
     invincibleUntil: 0,
     action: '',
     actionUntil: 0,
@@ -1081,6 +1157,11 @@ function updateUnits(room, now, deltaSeconds) {
       maybeSpawnTankMinion(room, unit, card, now);
     }
 
+    if (card.berserker && !unit.berserked) {
+      updateDormantBerserker(room, unit, card, deltaSeconds, now);
+      continue;
+    }
+
     if (unit.windupUntil) {
       resolveWindup(room, unit, card, now);
       continue;
@@ -1109,6 +1190,18 @@ function updateUnits(room, now, deltaSeconds) {
 
     performAttack(room, unit, card, target, now);
   }
+}
+
+function updateDormantBerserker(room, unit, card, deltaSeconds, now) {
+  const target = findUnitTarget(room.game, unit, card);
+  if (!target) return;
+
+  const stopDistance = getTargetRadius(target) + 2;
+  if (distance(unit, target) > stopDistance) {
+    moveToward(unit, target, getUnitSpeed(unit, card) * deltaSeconds);
+  }
+  unit.action = '평소';
+  unit.actionUntil = now + 200;
 }
 
 function updateHealer(room, unit, card, deltaSeconds, now) {
@@ -1254,6 +1347,16 @@ function performAttack(room, unit, card, target, now) {
   const game = room.game;
   const damage = getUnitDamage(unit, card);
 
+  if (unit.cardId === 'heoseon' && unit.berserked) {
+    performBerserkerAttack(room, unit, card, target, damage, now);
+    return;
+  }
+
+  if (card.pusher) {
+    performPushAttack(room, unit, card, target, damage, now);
+    return;
+  }
+
   if (unit.cardId === 'zzangga' && now >= unit.nextSkillAt) {
     const enemies = game.units.filter((other) => {
       return other.owner !== unit.owner && other.hp > 0 && distance(target, other) <= 98;
@@ -1269,6 +1372,99 @@ function performAttack(room, unit, card, target, now) {
   } else {
     applyDamage(room, target, damage, unit.owner, now);
     broadcastEffect(room, { type: 'hit', owner: unit.owner, cardId: unit.cardId, fromX: unit.x, fromY: unit.y, x: target.x, y: target.y });
+  }
+
+  unit.nextAttackAt = now + getAttackMs(unit, card);
+}
+
+function performPushAttack(room, unit, card, target, damage, now) {
+  const game = room.game;
+  const targets = getFrontPushTargets(game, unit, card);
+
+  if (targets.length === 0) {
+    applyDamage(room, target, damage, unit.owner, now);
+  } else {
+    const pushDir = unit.owner === 0 ? -1 : 1;
+    for (const enemy of targets) {
+      applyDamageToUnit(room, enemy, damage, unit.owner, now);
+      const sideStep = Math.sign(enemy.x - unit.x) * Math.min(18, card.pushDistance * 0.18);
+      enemy.x = clamp(enemy.x + sideStep, 16, ARENA.width - 16);
+      enemy.y = clamp(enemy.y + pushDir * card.pushDistance, 16, ARENA.height - 16);
+    }
+  }
+
+  unit.action = '잡상인들 다 나가!';
+  unit.actionUntil = now + 650;
+  broadcastEffect(room, {
+    type: 'push',
+    owner: unit.owner,
+    cardId: unit.cardId,
+    fromX: unit.x,
+    fromY: unit.y,
+    x: target.x,
+    y: target.y,
+    range: card.range,
+    width: card.pushWidth
+  });
+  unit.nextAttackAt = now + getAttackMs(unit, card);
+}
+
+function getFrontPushTargets(game, unit, card) {
+  const forward = unit.owner === 0 ? -1 : 1;
+  const width = card.pushWidth || 110;
+
+  return game.units.filter((other) => {
+    if (other.owner === unit.owner || other.hp <= 0) return false;
+    const otherRadius = getTargetRadius(other);
+    const forwardDistance = (other.y - unit.y) * forward;
+    if (forwardDistance < -otherRadius || forwardDistance > card.range + otherRadius) return false;
+    return Math.abs(other.x - unit.x) <= width / 2 + otherRadius;
+  });
+}
+
+function performBerserkerAttack(room, unit, card, target, damage, now) {
+  const game = room.game;
+  const splashRadius = card.berserkerSplashRadius || 0;
+  const hitUnitIds = new Set();
+  let hitCount = 0;
+
+  if (target.entity === 'tower') {
+    applyDamage(room, target, damage, unit.owner, now);
+    hitCount += 1;
+  } else if (target.entity === 'unit') {
+    hitUnitIds.add(target.id);
+  }
+
+  if (splashRadius > 0) {
+    for (const other of game.units) {
+      if (other.owner === unit.owner || other.hp <= 0) continue;
+      if (distance(target, other) <= splashRadius) {
+        hitUnitIds.add(other.id);
+      }
+    }
+  }
+
+  for (const targetId of hitUnitIds) {
+    const enemy = findEntityById(game, targetId);
+    if (enemy && enemy.entity === 'unit' && enemy.hp > 0) {
+      applyDamageToUnit(room, enemy, damage, unit.owner, now);
+      hitCount += 1;
+    }
+  }
+
+  if (hitCount > 0) {
+    unit.action = '폭주 난타';
+    unit.actionUntil = now + 180;
+    broadcastEffect(room, {
+      type: 'berserk-hit',
+      owner: unit.owner,
+      cardId: unit.cardId,
+      fromX: unit.x,
+      fromY: unit.y,
+      x: target.x,
+      y: target.y,
+      radius: splashRadius
+    });
   }
 
   unit.nextAttackAt = now + getAttackMs(unit, card);
@@ -1332,6 +1528,11 @@ function applyDamageToUnit(room, unit, amount, sourceOwner, now, options = {}) {
 
   unit.hp = Math.max(0, unit.hp - amount);
 
+  if (unit.cardId === 'heoseon' && shouldTriggerBerserker(unit)) {
+    triggerBerserker(room, unit, now);
+    return;
+  }
+
   if (unit.cardId === 'mythos' && !unit.awakened && unit.hp > 0 && unit.hp <= unit.maxHp * 0.5) {
     unit.awakened = true;
     unit.invincibleUntil = now + CARDS.mythos.awakenMs;
@@ -1339,6 +1540,22 @@ function applyDamageToUnit(room, unit, amount, sourceOwner, now, options = {}) {
     unit.actionUntil = unit.invincibleUntil;
     broadcastEffect(room, { type: 'awaken', owner: unit.owner, x: unit.x, y: unit.y });
   }
+}
+
+function shouldTriggerBerserker(unit) {
+  const card = CARDS[unit.cardId];
+  return Boolean(card && card.berserker && !unit.berserked && unit.hp <= unit.maxHp * card.berserkerThreshold);
+}
+
+function triggerBerserker(room, unit, now) {
+  const card = CARDS[unit.cardId];
+  unit.berserked = true;
+  unit.maxHp = card.berserkerMaxHp;
+  unit.hp = unit.maxHp;
+  unit.nextAttackAt = now;
+  unit.action = '폭발 상태';
+  unit.actionUntil = now + 850;
+  broadcastEffect(room, { type: 'berserk', owner: unit.owner, cardId: unit.cardId, x: unit.x, y: unit.y });
 }
 
 function detachRui(room, unit, now = Date.now(), emitEffect = true) {
@@ -1530,7 +1747,9 @@ function getTargetRadius(target) {
 }
 
 function getUnitDamage(unit, card) {
-  const damage = unit.cardId === 'mythos' && unit.awakened ? card.awakenedDamage : card.damage;
+  let damage = card.damage;
+  if (unit.cardId === 'mythos' && unit.awakened) damage = card.awakenedDamage;
+  if (card.berserker && unit.berserked) damage = card.berserkerDamage;
   return getScaledUnitValue(unit, damage);
 }
 
@@ -1540,11 +1759,13 @@ function getScaledUnitValue(unit, value) {
 
 function getUnitSpeed(unit, card) {
   if (unit.cardId === 'mythos' && unit.awakened) return card.awakenedSpeed;
+  if (card.berserker && unit.berserked) return card.berserkerSpeed;
   return card.speed;
 }
 
 function getAttackMs(unit, card) {
   if (unit.cardId === 'mythos' && unit.awakened) return card.awakenedAttackMs;
+  if (card.berserker && unit.berserked) return card.berserkerAttackMs;
   return card.attackMs;
 }
 
@@ -1674,6 +1895,7 @@ function serializeState(room, viewerSlot = null) {
       hp: Math.ceil(unit.hp),
       maxHp: unit.maxHp,
       awakened: unit.awakened,
+      berserked: unit.berserked,
       invincible: unit.invincibleUntil > now,
       attached: Boolean(unit.attachedToId),
       suppressed: Boolean(unit.attachedById),
@@ -1724,6 +1946,59 @@ function publicTiers() {
     min: tier.min,
     max: Number.isFinite(tier.max) ? tier.max : null
   }));
+}
+
+function publicPlayableCards() {
+  const cards = {};
+  for (const id of CARD_IDS) {
+    const card = CARDS[id];
+    cards[id] = {
+      id: card.id,
+      name: card.name,
+      cost: card.cost,
+      role: card.role
+    };
+  }
+  return cards;
+}
+
+function getSavedDeck(userId) {
+  if (!userId) return null;
+  const row = statements.getDeck.get(userId);
+  if (!row) return null;
+
+  try {
+    const parsed = JSON.parse(row.cards);
+    const validation = validateDeck(parsed);
+    return validation.error ? null : validation.deck;
+  } catch {
+    return null;
+  }
+}
+
+function validateDeck(value) {
+  if (!Array.isArray(value)) {
+    return { error: '덱은 카드 8장으로 구성해야 합니다.' };
+  }
+
+  const deck = value.map((cardId) => String(cardId || ''));
+  if (deck.length !== DECK_SIZE) {
+    return { error: `덱은 정확히 ${DECK_SIZE}장을 선택해야 합니다.` };
+  }
+
+  const unique = new Set(deck);
+  if (unique.size !== DECK_SIZE) {
+    return { error: '같은 카드는 덱에 한 번만 넣을 수 있습니다.' };
+  }
+
+  for (const cardId of deck) {
+    const card = CARDS[cardId];
+    if (!card || card.playable === false) {
+      return { error: '사용할 수 없는 카드가 포함되어 있습니다.' };
+    }
+  }
+
+  return { deck };
 }
 
 function refreshPlayerProfile(player) {

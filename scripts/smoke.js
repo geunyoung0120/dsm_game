@@ -11,6 +11,7 @@ const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsm-game-smoke-'));
 const smokePassword = 'test-password';
 const bestFriendPair = ['baduk', 'johyunwoo'];
 const bestFriendComboCost = 8;
+const smokeDeck = ['osj', 'heoseon', 'johyunwoo', 'seongjoo', 'peach', 'bbatman', 'jimin', 'yushin'];
 
 let serverProcess = null;
 let clients = [];
@@ -47,8 +48,14 @@ async function main() {
   await Promise.all(accounts.map(expectSessionUser));
   await expectRankings(accounts[0], accounts.map((account) => account.user.username));
   await expectTiers(accounts[0]);
+  await expectDeckSave(accounts[0], smokeDeck);
   await expectSessionUser(await login(accounts[0].user.username));
   const result = await runClientSmoke(accounts);
+  const expectedOpeningHand = smokeDeck.slice(0, 4).join('|');
+  const actualOpeningHand = (result.initialHands[0] || []).join('|');
+  if (actualOpeningHand !== expectedOpeningHand) {
+    throw new Error(`Saved deck was not used for player 1. Expected ${expectedOpeningHand}, got ${actualOpeningHand}.`);
+  }
   console.log(JSON.stringify(result));
   cleanup();
 }
@@ -184,6 +191,32 @@ async function expectTiers(account) {
   }
 }
 
+async function expectDeckSave(account, deck) {
+  const initial = await fetch(`${url}/api/deck`, {
+    headers: { Cookie: account.cookie }
+  });
+  const initialBody = await initial.json();
+  if (!initial.ok) {
+    throw new Error(initialBody.error || 'Smoke deck lookup failed.');
+  }
+  if (!Array.isArray(initialBody.deck) || !initialBody.cards || !initialBody.cards.osj) {
+    throw new Error('Smoke deck response did not include deck state and card pool.');
+  }
+
+  const response = await fetch(`${url}/api/deck`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: account.cookie },
+    body: JSON.stringify({ deck })
+  });
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(body.error || 'Smoke deck save failed.');
+  }
+  if (!Array.isArray(body.deck) || body.deck.join('|') !== deck.join('|')) {
+    throw new Error('Smoke deck save did not return the saved deck.');
+  }
+}
+
 async function runClientSmoke(accounts) {
   clients = accounts.map((account) => io(url, {
     transports: ['websocket'],
@@ -205,6 +238,7 @@ async function runClientSmoke(accounts) {
 function runPlayableSmoke(cardsByClient) {
   return new Promise((resolve, reject) => {
     const welcomedSlots = [0, 1];
+    const initialHands = [null, null];
     let observedUnits = 0;
     const playedSlots = new Set();
 
@@ -223,6 +257,9 @@ function runPlayableSmoke(cardsByClient) {
           const slot = index;
           const player = state.players[slot];
           const cards = cardsByClient[index];
+          if (!initialHands[slot] && player) {
+            initialHands[slot] = [...player.hand];
+          }
           if (!playedSlots.has(slot) && player) {
             const handIndex = player.hand.findIndex((id) => cards[id] && effectiveSmokeCost(player, cards[id]) <= player.elixir && id !== 'kkongho');
             if (handIndex >= 0) {
@@ -245,7 +282,8 @@ function runPlayableSmoke(cardsByClient) {
             status: state.status,
             room: state.room && state.room.name,
             units: observedUnits,
-            hands: state.players.map((player) => player.hand)
+            hands: state.players.map((player) => player.hand),
+            initialHands
           });
         }
       });
