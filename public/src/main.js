@@ -8,6 +8,19 @@ const DECK_SIZE = 8;
 const BEST_FRIEND_PAIR = ['baduk', 'johyunwoo'];
 const BEST_FRIEND_COMBO_COST = 8;
 const THEME_STORAGE_KEY = 'dsm-game-theme';
+const BBATMAN_HEAL_RANGE = 90;
+
+const PATCH_NOTICES = [
+  {
+    title: '6월 24일 밸런스 패치',
+    date: '2026.06.24',
+    items: [
+      '빼트맨 힐량 50% 감소, 주변 원 안 여학생 지속 회복으로 변경',
+      '복숭아 공격 속도 40% 감소',
+      'OSJ HP 20% 증가, 공격 쿨타임 2.5초로 조정'
+    ]
+  }
+];
 
 const CARD_THEME = {
   zzangga: { fill: 0xe4536d, stroke: 0xffd6df, short: '짱' },
@@ -53,14 +66,14 @@ const CHARACTER_DETAILS = [
     stats: [
       ['HP', '410'],
       ['공격력', '없음'],
-      ['힐량', '초당 105'],
-      ['힐 범위', '62'],
+      ['힐량', '초당 52.5'],
+      ['힐 범위', '90'],
       ['이동속도', '76'],
       ['공격 주기', '없음']
     ],
-    ability: '필드에서 가장 가까운 여학생 또는 여학생으로 인식되는 캐릭터를 자동으로 따라가며 높은 힐량으로 체력을 회복시킨다. 대상이 없으면 멈춰 서서 회복을 하지 못한다.',
+    ability: '주변에 회복 원을 만들고, 원 안에 있는 모든 여학생 또는 여학생으로 인식되는 아군을 계속 회복시킨다. 회복 대상이 원 밖에 있으면 가까운 대상 쪽으로 이동한다.',
     appearance: '키가 작고 마른 남학생. 삭발 머리, 매우 탄 피부, 운동을 잘할 것 같은 체형이다.',
-    trait: '공격하지 못하는 순수 힐러다. 힐량이 올라가 후방 지원 성능이 강해졌다.'
+    trait: '공격하지 못하는 순수 힐러다. 힐량은 낮아졌지만 여러 아군을 동시에 회복할 수 있다.'
   },
   {
     id: 'baduk',
@@ -156,13 +169,13 @@ const CHARACTER_DETAILS = [
       ['HP', '585'],
       ['공격력', '36'],
       ['사거리', '42'],
-      ['공격 주기', '0.43초'],
+      ['공격 주기', '0.717초'],
       ['이동속도', '57'],
       ['회복 대상', '가능']
     ],
-    ability: '테니스 라켓을 빠르게 휘둘러 근접 단일 대상을 연속 공격한다. 한 번 피해는 낮지만 공격속도가 매우 빠르다.',
+    ability: '테니스 라켓을 휘둘러 근접 단일 대상을 연속 공격한다. 이전보다 공격 속도가 느려져 2 엘릭서 근접 딜러에 맞는 압박력을 가진다.',
     appearance: '예쁜 여학생. 보통 키와 체형이며 교복을 입고 테니스 라켓을 들고 있다.',
-    trait: '2 엘릭서로 낮아진 빠른 근접 딜러다. 여학생 캐릭터라 빼트맨의 회복 대상이 된다.'
+    trait: '2 엘릭서 근접 딜러다. 여학생 캐릭터라 빼트맨의 회복 대상이 된다.'
   },
   {
     id: 'seongjoo',
@@ -257,16 +270,16 @@ const CHARACTER_DETAILS = [
     cost: '7',
     type: '탱커 / 밀치기형 탱커',
     stats: [
-      ['HP', '1000'],
+      ['HP', '1200'],
       ['공격력', '20'],
       ['공격 범위', '전방 범위'],
       ['밀치기 거리', '매우 큼'],
-      ['공격 주기', '1.45초'],
+      ['공격 주기', '2.5초'],
       ['이동속도', '38']
     ],
-    ability: '전방에 적이 모이면 "잡상인들 다 나가!"라고 외치며 앞쪽 범위 안의 적들을 한꺼번에 크게 밀어낸다. 피해량은 20으로 매우 낮지만, 여러 적을 동시에 뒤로 밀쳐 진형을 무너뜨리고 아군이 시간을 벌 수 있게 한다.',
+    ability: '전방에 적이 모이면 "잡상인들 다 나가!"라고 외치며 앞쪽 범위 안의 적들을 한꺼번에 크게 밀어낸다. 밀치기 간격은 길어졌지만 HP가 늘어 더 오래 버틴다.',
     appearance: '차분하고 선해 보이는 남자 선생님이다. 아버지 같은 분위기와 품위 있는 표정, 단정한 학교 선생님 느낌을 가진다.',
-    trait: 'HP 1000의 매우 단단한 전방 탱커다. 피해량은 낮지만 밀치기 유틸리티가 강해서 적의 돌파를 방해하고, 뒤쪽 원거리 딜러들이 안전하게 공격할 시간을 만들어 준다.'
+    trait: 'HP 1200의 매우 단단한 전방 탱커다. 피해량은 낮고 공격 쿨타임이 길어졌지만, 밀치기로 적의 돌파를 방해한다.'
   }
 ];
 
@@ -493,6 +506,13 @@ class BattleScene extends Phaser.Scene {
       if (unit.attached || unit.suppressed) {
         this.g.lineStyle(3, 0xe4d6ff, 0.9);
         this.g.strokeCircle(unit.x, unit.y, radius + 11);
+      }
+      if (unit.cardId === 'bbatman') {
+        const healing = unit.action === '범위 힐' || unit.action === '힐';
+        this.g.fillStyle(0x46b9a5, healing ? 0.11 : 0.05);
+        this.g.fillCircle(unit.x, unit.y, BBATMAN_HEAL_RANGE);
+        this.g.lineStyle(healing ? 3 : 2, 0xc7fff4, healing ? 0.82 : 0.38);
+        this.g.strokeCircle(unit.x, unit.y, BBATMAN_HEAL_RANGE);
       }
 
       this.drawCharacter(unit, theme, radius);
@@ -1246,6 +1266,7 @@ function setupShell() {
 
   initializeTheme(themeButton);
   renderCharacterGrid();
+  renderPatchNotices();
 
   setAuthMode('login');
   showScreen(authScreen);
@@ -1750,6 +1771,37 @@ function renderTopRankings(errorMessage = '') {
 
   for (const entry of topThree) {
     list.appendChild(rankingPodiumItem(entry));
+  }
+}
+
+function renderPatchNotices() {
+  const list = document.getElementById('patch-notice-list');
+  if (!list) return;
+  list.replaceChildren();
+
+  for (const notice of PATCH_NOTICES) {
+    const article = document.createElement('article');
+    article.className = 'patch-notice';
+
+    const header = document.createElement('div');
+    header.className = 'patch-notice-header';
+
+    const title = document.createElement('strong');
+    title.textContent = notice.title;
+    const date = document.createElement('time');
+    date.textContent = notice.date;
+
+    header.append(title, date);
+
+    const items = document.createElement('ul');
+    for (const itemText of notice.items) {
+      const item = document.createElement('li');
+      item.textContent = itemText;
+      items.appendChild(item);
+    }
+
+    article.append(header, items);
+    list.appendChild(article);
   }
 }
 

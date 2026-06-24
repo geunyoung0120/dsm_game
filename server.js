@@ -76,9 +76,9 @@ const CARDS = {
     attackMs: 0,
     radius: 15,
     healer: true,
-    healPerSecond: 105,
-    healRange: 62,
-    followDistance: 46
+    healPerSecond: 52.5,
+    healRange: 90,
+    followDistance: 72
   },
   baduk: {
     id: 'baduk',
@@ -153,7 +153,7 @@ const CARDS = {
     damage: 36,
     range: 42,
     speed: 57,
-    attackMs: 430,
+    attackMs: 717,
     radius: 16,
     female: true
   },
@@ -238,11 +238,11 @@ const CARDS = {
     name: 'OSJ',
     cost: 7,
     role: '밀치기형 탱커',
-    maxHp: 1000,
+    maxHp: 1200,
     damage: 20,
     range: 96,
     speed: 38,
-    attackMs: 1450,
+    attackMs: 2500,
     radius: 22,
     pusher: true,
     pushWidth: 132,
@@ -1206,12 +1206,26 @@ function updateDormantBerserker(room, unit, card, deltaSeconds, now) {
 
 function updateHealer(room, unit, card, deltaSeconds, now) {
   const game = room.game;
+  const healTargets = game.units.filter((other) => {
+    if (other.id === unit.id || other.owner !== unit.owner || other.hp <= 0) return false;
+    const otherCard = CARDS[other.cardId];
+    return otherCard && otherCard.female && distance(unit, other) <= card.healRange + getTargetRadius(other);
+  });
+
+  if (healTargets.length > 0) {
+    for (const target of healTargets) {
+      target.hp = Math.min(target.maxHp, target.hp + card.healPerSecond * deltaSeconds);
+    }
+    unit.action = '범위 힐';
+    unit.actionUntil = now + 200;
+    return;
+  }
+
   const candidates = game.units.filter((other) => {
     if (other.id === unit.id || other.owner !== unit.owner || other.hp <= 0) return false;
     const otherCard = CARDS[other.cardId];
     return otherCard && otherCard.female;
   });
-
   const target = nearest(unit, candidates);
   if (!target) {
     unit.action = '대기';
@@ -1228,7 +1242,7 @@ function updateHealer(room, unit, card, deltaSeconds, now) {
   }
 
   target.hp = Math.min(target.maxHp, target.hp + card.healPerSecond * deltaSeconds);
-  unit.action = '힐';
+  unit.action = '범위 힐';
   unit.actionUntil = now + 200;
 }
 
