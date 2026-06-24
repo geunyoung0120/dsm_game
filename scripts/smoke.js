@@ -231,6 +231,7 @@ async function runClientSmoke(accounts) {
 
   const welcomed = await Promise.all(clients.map((client) => once(client, 'welcome')));
   const cardsByClient = welcomed.map((payload) => payload.cards);
+  expectHeoseonNerf(cardsByClient[0]);
 
   clients[0].emit('create-room', { name: '스모크 테스트 방', password: '' });
   const joined = await once(clients[0], 'room-joined', '1v1 host room-joined');
@@ -357,6 +358,32 @@ function effectiveSmokeCost(player, card) {
     return bestFriendComboCost;
   }
   return card.cost;
+}
+
+function expectHeoseonNerf(cards) {
+  const heoseon = cards && cards.heoseon;
+  if (!heoseon) {
+    throw new Error('Smoke welcome payload did not include Heoseon.');
+  }
+
+  const expected = {
+    maxHp: 450,
+    range: 18,
+    speed: 41,
+    radius: 16,
+    berserkerThreshold: 0.27,
+    berserkerMaxHp: 900,
+    berserkerDamage: 90,
+    berserkerSpeed: 106,
+    berserkerAttackMs: 275,
+    berserkerSplashRadius: 52
+  };
+
+  for (const [key, value] of Object.entries(expected)) {
+    if (heoseon[key] !== value) {
+      throw new Error(`Heoseon ${key} expected ${value}, got ${heoseon[key]}.`);
+    }
+  }
 }
 
 function once(client, eventName, label = eventName) {
