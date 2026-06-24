@@ -39,6 +39,7 @@ const TOWER_HP = {
 const BEST_FRIEND_PAIR = ['baduk', 'johyunwoo'];
 const BEST_FRIEND_COMBO_COST = 8;
 const KKONGHO_MAX_ELIXIR_BONUS = 2;
+const DEFAULT_DEPLOY_DELAY_MS = 650;
 const ROOM_MODES = {
   '1v1': { key: '1v1', label: '1대1', maxPlayers: 2 },
   '2v2': { key: '2v2', label: '2대2', maxPlayers: 4 }
@@ -788,6 +789,7 @@ function createGameState(mode = '1v1') {
     players: Array.from({ length: definition.maxPlayers }, (_, slot) => createPlayer(slot)),
     towers: [],
     units: [],
+    pendingSpawns: [],
     nextUnitId: 1,
     startedAt: 0,
     endsAt: 0,
@@ -914,6 +916,7 @@ function startMatch(room) {
   game.message = '전투 중';
   game.towers = createTowers(room.mode);
   game.units = [];
+  game.pendingSpawns = [];
   game.nextUnitId = 1;
   game.startedAt = now;
   game.endsAt = now + GAME_DURATION_MS;
@@ -966,7 +969,7 @@ function playCard(room, slot, payload = {}) {
 
   if (bestFriendCombo) {
     broadcastEffect(room, { type: 'best-friend-combo', owner: player.team, x, y });
-    spawnBestFriendCombo(room, player.team, x, y);
+    queueBestFriendCombo(room, player.team, x, y);
     broadcastState(room);
     return;
   }
@@ -978,7 +981,7 @@ function playCard(room, slot, payload = {}) {
     return;
   }
 
-  spawnCard(room, player.team, card.id, x, y);
+  queueSpawnCard(room, player.team, card.id, x, y);
   broadcastState(room);
 }
 
@@ -1010,39 +1013,48 @@ function advanceHandSlots(player, handIndexes, requeuePlayedCards) {
   }
 }
 
-function spawnCard(room, owner, cardId, x, y) {
+function queueSpawnCard(room, owner, cardId, x, y, extras = {}) {
+  const card = CARDS[cardId];
+  if (!card) return;
+  const delayMs = extras.delayMs || getDeployDelayMs(cardId);
+  room.game.pendingSpawns.push({
+    owner,
+    cardId,
+    x,
+    y,
+    extras: extras.unitExtras || {},
+    readyAt: Date.now() + delayMs
+  });
+  broadcastEffect(room, { type: 'deploy', owner, cardId, x, y, delayMs, label: deployLabel(cardId) });
+}
+
+function spawnCard(room, owner, cardId, x, y, extras = {}) {
   const card = CARDS[cardId];
   const count = card.spawnCount || 1;
   const offsets = formationOffsets(count);
 
   for (let i = 0; i < count; i += 1) {
-    spawnUnit(room, owner, cardId, x + offsets[i].x, y + offsets[i].y);
+    spawnUnit(room, owner, cardId, x + offsets[i].x, y + offsets[i].y, extras);
   }
 
   broadcastEffect(room, { type: 'spawn', owner, cardId, x, y });
 }
 
-function spawnBestFriendCombo(room, owner, x, y) {
-  const statMultiplier = 0.9;
+function queueBestFriendCombo(room, owner, x, y) {
   const offsets = [
     { cardId: 'baduk', x: -28, y: 0 },
     { cardId: 'johyunwoo', x: 28, y: 0 }
   ];
 
   for (const offset of offsets) {
-    const card = CARDS[offset.cardId];
-    const maxHp = Math.max(1, Math.round(card.maxHp * statMultiplier));
     const comboX = clamp(x + offset.x, 48, ARENA.width - 48);
-    const unit = spawnUnit(room, owner, offset.cardId, comboX, y, {
-      hp: maxHp,
-      maxHp,
-      statMultiplier,
-      action: '절친 출격',
-      actionUntil: Date.now() + 700
+    queueSpawnCard(room, owner, offset.cardId, comboX, y, {
+      delayMs: 760,
+      unitExtras: {
+        action: '절친 출격',
+        actionDurationMs: 700
+      }
     });
-    if (unit) {
-      broadcastEffect(room, { type: 'spawn', owner, cardId: offset.cardId, x: comboX, y });
-    }
   }
 }
 
@@ -1052,6 +1064,7 @@ function spawnUnit(room, owner, cardId, x, y, extras = {}) {
   if (!card || !card.maxHp) return null;
 
   const now = Date.now();
+  const { actionDurationMs, ...unitExtras } = extras;
   const unit = {
     entity: 'unit',
     id: `u${game.nextUnitId++}`,
@@ -1074,8 +1087,11 @@ function spawnUnit(room, owner, cardId, x, y, extras = {}) {
     invincibleUntil: 0,
     action: '',
     actionUntil: 0,
-    ...extras
+    ...unitExtras
   };
+  if (actionDurationMs && unit.action && !unit.actionUntil) {
+    unit.actionUntil = now + actionDurationMs;
+  }
   game.units.push(unit);
   return unit;
 }
@@ -1102,6 +1118,59 @@ function triggerAscension(room, owner, x, y) {
   broadcastEffect(room, { type: 'ascension-start', owner, x, y });
 }
 
+function processPendingSpawns(room, now) {
+  const game = room.game;
+  if (!Array.isArray(game.pendingSpawns) || game.pendingSpawns.length === 0) return;
+
+  const remaining = [];
+  for (const pending of game.pendingSpawns) {
+    if (pending.readyAt > now) {
+      remaining.push(pending);
+      continue;
+    }
+    spawnCard(room, pending.owner, pending.cardId, pending.x, pending.y, pending.extras);
+  }
+  game.pendingSpawns = remaining;
+}
+
+function getDeployDelayMs(cardId) {
+  const delays = {
+    yushin: 520,
+    peach: 560,
+    seongjoo: 600,
+    bbatman: 680,
+    jimin: 700,
+    johyunwoo: 720,
+    zzangga: 760,
+    kimrui: 780,
+    baduk: 820,
+    osj: 880,
+    mythos: 900,
+    heoseon: 920,
+    kimgeunyoung: 950
+  };
+  return delays[cardId] || DEFAULT_DEPLOY_DELAY_MS;
+}
+
+function deployLabel(cardId) {
+  const labels = {
+    zzangga: '폭소 준비',
+    bbatman: '회복 원 전개',
+    baduk: '혼돈 등장',
+    yushin: '군단 집결',
+    jimin: '드립 장전',
+    mythos: '기운 상승',
+    peach: '라켓 준비',
+    seongjoo: '키보드 부팅',
+    johyunwoo: '절친 출격',
+    kimgeunyoung: '탱크 호출',
+    kimrui: '흡혈 접근',
+    heoseon: '폭발 예고',
+    osj: '퇴장 준비'
+  };
+  return labels[cardId] || '소환 준비';
+}
+
 setInterval(() => {
   const now = Date.now();
   for (const room of rooms.values()) {
@@ -1126,6 +1195,7 @@ function tickGame(room, now, deltaSeconds) {
       if (unit.cardId === 'kimrui') detachRui(room, unit, now, false);
     }
     game.units = [];
+    game.pendingSpawns = [];
     game.pendingAscensionAt = 0;
     broadcastEffect(room, { type: 'ascension-end' });
   }
@@ -1133,6 +1203,8 @@ function tickGame(room, now, deltaSeconds) {
   if (game.freezeUntil > now) {
     return;
   }
+
+  processPendingSpawns(room, now);
 
   const elixirMultiplier = getElixirMultiplier(game, now);
   for (const player of game.players) {
@@ -1327,7 +1399,7 @@ function updateBadukChaos(room, unit, card, now) {
   const targets = game.units.filter((other) => other.id !== unit.id && other.hp > 0 && distance(unit, other) <= card.chaosRadius);
   for (const target of targets) {
     const baseDamage = target.owner === unit.owner ? card.chaosFriendlyDamage : card.chaosEnemyDamage;
-    const damage = getScaledUnitValue(unit, baseDamage);
+    const damage = Math.round(baseDamage);
     applyDamageToUnit(room, target, damage, unit.owner, now);
   }
 
@@ -1802,11 +1874,7 @@ function getUnitDamage(unit, card) {
   let damage = card.damage;
   if (unit.cardId === 'mythos' && unit.awakened) damage = card.awakenedDamage;
   if (card.berserker && unit.berserked) damage = card.berserkerDamage;
-  return getScaledUnitValue(unit, damage);
-}
-
-function getScaledUnitValue(unit, value) {
-  return Math.round(value * (unit.statMultiplier || 1));
+  return Math.round(damage);
 }
 
 function getUnitSpeed(unit, card) {

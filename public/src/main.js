@@ -16,6 +16,20 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: '소환 임팩트와 절친 특성 개선',
+    date: '2026.06.24',
+    items: [
+      '카드 소환 시 바로 등장하지 않고 짧은 소환 임팩트 후 등장',
+      '캐릭터별 특성에 맞는 소환 준비 문구와 이펙트 추가',
+      '박바둑·조현우 절친 특성의 스탯 감소 제거'
+    ],
+    details: [
+      '일반 유닛은 카드 사용 후 약 0.5~0.95초의 배치 시간이 지나야 전장에 등장한다.',
+      '유신은 군단 집결, 빼트맨은 회복 원 전개, 대.근.영은 탱크 호출처럼 카드별 소환 문구와 색상 이펙트가 표시된다.',
+      '박바둑과 조현우가 절친 특성으로 함께 나올 때 더 이상 HP와 공격력이 낮아지지 않고 각 카드의 기본 스탯 그대로 등장한다.'
+    ]
+  },
+  {
     title: '로그인 오류 긴급 수정',
     date: '2026.06.24',
     items: [
@@ -154,11 +168,11 @@ const CHARACTER_DETAILS = [
       ['공격 주기', '1.85초'],
       ['이동속도', '40'],
       ['카오스 피해', '적 140 / 아군 29'],
-      ['절친 출격', 'HP 1170 / 공격력 104']
+      ['절친 출격', '8 엘릭서 / 스탯 감소 없음']
     ],
-    ability: '갑자기 예측하기 어려운 행동을 하며 범위 안 적들에게 매우 큰 피해를 준다. 같은 범위의 아군도 약한 피해를 받는다. 스킬 발동 시점은 무작위다. 조현우와 손패에 함께 있으면 8 엘릭서로 둘이 동시에 출격하며 전장에 절친 특성 문구가 뜬다.',
+    ability: '갑자기 예측하기 어려운 행동을 하며 범위 안 적들에게 매우 큰 피해를 준다. 같은 범위의 아군도 약한 피해를 받는다. 스킬 발동 시점은 무작위다. 조현우와 손패에 함께 있으면 8 엘릭서로 둘이 동시에 기본 스탯 그대로 출격하며 전장에 절친 특성 문구가 뜬다.',
     appearance: '삭발에 안경을 쓴 통통한 남학생. 교복을 입고 있다.',
-    trait: 'HP가 1300으로 낮아졌지만 여전히 위험 부담이 큰 카오스 딜러다. 조현우와 절친 특성으로 나올 때는 HP와 피해량이 10% 낮아진다.'
+    trait: 'HP가 1300으로 낮아졌지만 여전히 위험 부담이 큰 카오스 딜러다. 조현우와 절친 특성으로 나올 때도 스탯은 낮아지지 않는다.'
   },
   {
     id: 'kkongho',
@@ -273,11 +287,11 @@ const CHARACTER_DETAILS = [
       ['사거리', '42'],
       ['공격 주기', '1.05초'],
       ['이동속도', '54'],
-      ['절친 출격', 'HP 590 / 공격력 79']
+      ['절친 출격', '8 엘릭서 / 스탯 감소 없음']
     ],
-    ability: '근접 거리에서 한 대상에게 단일 공격을 한다. HP와 공격력이 20% 낮아졌고 비용은 4 엘릭서다. 박바둑과 손패에 함께 있으면 8 엘릭서로 둘이 동시에 출격하며 전장에 절친 특성 문구가 뜬다.',
+    ability: '근접 거리에서 한 대상에게 단일 공격을 한다. HP와 공격력이 20% 낮아졌고 비용은 4 엘릭서다. 박바둑과 손패에 함께 있으면 8 엘릭서로 둘이 동시에 기본 스탯 그대로 출격하며 전장에 절친 특성 문구가 뜬다.',
     appearance: '특별히 튀는 점이 없는 아주 평범한 남학생이다.',
-    trait: '체력과 공격력이 더 낮아진 근접 단일 딜러다. 박바둑과 절친 특성으로 나올 때는 HP와 피해량이 추가로 10% 낮아진다.'
+    trait: '체력과 공격력이 더 낮아진 근접 단일 딜러다. 박바둑과 절친 특성으로 나올 때도 스탯은 낮아지지 않는다.'
   },
   {
     id: 'kimgeunyoung',
@@ -944,6 +958,8 @@ class BattleScene extends Phaser.Scene {
         this.drawCenteredText('폭주', effect.x, effect.y - 36, 15, '#ffccd0');
       } else if (effect.type === 'hit') {
         this.drawCardHitEffect(effect, t, alpha);
+      } else if (effect.type === 'deploy') {
+        this.drawDeployEffect(effect, t, alpha);
       } else if (effect.type === 'spawn') {
         this.g.lineStyle(3, 0xffffff, alpha);
         this.g.strokeCircle(effect.x, effect.y, 16 + t * 36);
@@ -1019,6 +1035,74 @@ class BattleScene extends Phaser.Scene {
     } else {
       this.g.fillStyle(0xffffff, alpha);
       this.g.fillCircle(effect.x, effect.y, 8 + t * 16);
+    }
+  }
+
+  drawDeployEffect(effect, t, alpha) {
+    const theme = CARD_THEME[effect.cardId] || { fill: 0xe8c15c, stroke: 0xffffff, short: '?' };
+    const pulse = 1 + Math.sin(t * Math.PI * 5) * 0.08;
+    const radius = 24 + t * 18;
+    this.g.fillStyle(theme.fill, alpha * 0.12);
+    this.g.fillCircle(effect.x, effect.y, radius * pulse);
+    this.g.lineStyle(4, theme.stroke, alpha * 0.85);
+    this.g.strokeCircle(effect.x, effect.y, radius);
+    this.g.lineStyle(2, 0xffffff, alpha * 0.72);
+    this.g.strokeCircle(effect.x, effect.y, 11 + t * 34);
+    this.g.lineBetween(effect.x - 28, effect.y, effect.x + 28, effect.y);
+    this.g.lineBetween(effect.x, effect.y - 28, effect.x, effect.y + 28);
+    this.drawDeploySigil(effect, t, alpha, theme);
+    this.g.fillStyle(0x111318, alpha * 0.82);
+    this.g.fillRoundedRect(effect.x - 52, Math.max(10, effect.y - 62), 104, 24, 8);
+    this.g.lineStyle(2, theme.stroke, alpha * 0.8);
+    this.g.strokeRoundedRect(effect.x - 52, Math.max(10, effect.y - 62), 104, 24, 8);
+    this.drawCenteredText(effect.label || '소환 준비', effect.x, Math.max(14, effect.y - 58), 12, '#ffffff');
+  }
+
+  drawDeploySigil(effect, t, alpha, theme) {
+    const x = effect.x;
+    const y = effect.y;
+    this.g.lineStyle(3, theme.stroke, alpha * 0.9);
+    this.g.fillStyle(theme.fill, alpha * 0.28);
+
+    if (effect.cardId === 'yushin') {
+      this.g.fillCircle(x - 14, y + 6, 8 + t * 4);
+      this.g.fillCircle(x, y - 8, 8 + t * 4);
+      this.g.fillCircle(x + 14, y + 6, 8 + t * 4);
+    } else if (effect.cardId === 'bbatman') {
+      this.g.strokeCircle(x, y, 34 + t * 8);
+      this.g.lineBetween(x - 18, y, x + 18, y);
+      this.g.lineBetween(x, y - 18, x, y + 18);
+    } else if (effect.cardId === 'kimgeunyoung') {
+      this.g.fillRoundedRect(x - 22, y - 9, 44, 18, 5);
+      this.g.fillRoundedRect(x - 12, y - 19, 24, 12, 4);
+      this.g.lineBetween(x + 8, y - 13, x + 31, y - 19);
+    } else if (effect.cardId === 'osj') {
+      const pushDir = effect.owner === 0 ? -1 : 1;
+      const tipY = y - pushDir * 25;
+      const baseY = y + pushDir * 15;
+      this.g.lineBetween(x, tipY, x - 26, baseY);
+      this.g.lineBetween(x, tipY, x + 26, baseY);
+      this.g.lineBetween(x - 26, baseY, x + 26, baseY);
+      this.g.lineBetween(x - 20, y + pushDir * 26, x + 20, y + pushDir * 26);
+    } else if (effect.cardId === 'heoseon') {
+      for (let i = 0; i < 6; i += 1) {
+        const angle = (Math.PI * 2 * i) / 6;
+        this.g.lineBetween(x, y, x + Math.cos(angle) * (20 + t * 16), y + Math.sin(angle) * (20 + t * 16));
+      }
+    } else if (effect.cardId === 'peach') {
+      this.g.strokeCircle(x - 8, y - 6, 13 + t * 4);
+      this.g.lineBetween(x + 3, y + 4, x + 22, y + 23);
+    } else if (effect.cardId === 'baduk') {
+      this.g.strokeCircle(x - 9, y, 13 + t * 5);
+      this.g.strokeCircle(x + 12, y, 13 + t * 5);
+      this.g.fillCircle(x - 5, y - 4, 3);
+      this.g.fillCircle(x + 8, y + 5, 3);
+    } else if (effect.cardId === 'johyunwoo') {
+      this.g.lineBetween(x - 24, y + 22, x + 24, y - 22);
+      this.g.lineBetween(x - 12, y + 23, x + 28, y - 14);
+    } else {
+      this.g.fillCircle(x, y, 14 + t * 4);
+      this.drawCenteredText(theme.short || '?', x, y - 6, 13, '#ffffff');
     }
   }
 
@@ -1220,6 +1304,7 @@ class BattleScene extends Phaser.Scene {
     if (type === 'punchline') return 1050;
     if (type === 'jimin-yushin-counter') return 1250;
     if (type === 'best-friend-combo') return 1300;
+    if (type === 'deploy') return 1100;
     if (type === 'summon-minion') return 700;
     if (type === 'leech') return 760;
     if (type === 'leech-detach') return 620;
