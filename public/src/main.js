@@ -2118,7 +2118,7 @@ function tierProgressForUser(user) {
   const tierStart = Number.isFinite(tierStartValue) ? tierStartValue : 0;
   const nextMin = Math.max(tierStart + 1, Number(user.nextTier.min) || tierStart + 1);
   const current = clampNumber(trophies - tierStart, 0, nextMin - tierStart);
-  const ratio = (nextMin - tierStart) > 0 ? current / (nextMin - tierStart) : 1;
+  const ratio = clampNumber((nextMin - tierStart) > 0 ? current / (nextMin - tierStart) : 1, 0, 1);
   const remaining = Math.max(0, nextMin - trophies);
   return {
     ratio,
