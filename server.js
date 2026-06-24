@@ -132,7 +132,7 @@ const CARDS = {
     range: 134,
     speed: 44,
     attackMs: 1225,
-    radius: 18,
+    radius: 16,
     windupMs: 180
   },
   mythos: {

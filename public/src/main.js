@@ -1343,7 +1343,7 @@ class BattleScene extends Phaser.Scene {
     if (cardId === 'bbatman') return 15;
     if (cardId === 'seongjoo') return 15;
     if (cardId === 'kimrui') return 16;
-    if (cardId === 'heoseon') return 20;
+    if (cardId === 'heoseon') return 18;
     if (cardId === 'osj') return 22;
     if (cardId === 'geunyoungTank') return 16;
     return 18;
