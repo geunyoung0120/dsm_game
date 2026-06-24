@@ -10,6 +10,10 @@ const BEST_FRIEND_COMBO_COST = 8;
 const THEME_STORAGE_KEY = 'dsm-game-theme';
 const BBATMAN_HEAL_RANGE = 90;
 
+function clampNumber(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 const PATCH_NOTICES = [
   {
     title: '야클 로고와 성장 표시 개선',
