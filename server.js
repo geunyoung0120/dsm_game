@@ -76,7 +76,7 @@ const CARDS = {
     attackMs: 0,
     radius: 15,
     healer: true,
-    healPerSecond: 70,
+    healPerSecond: 105,
     healRange: 62,
     followDistance: 46
   },
@@ -121,12 +121,12 @@ const CARDS = {
     cost: 4,
     role: '단일 폭딜',
     maxHp: 650,
-    damage: 296,
+    damage: 150,
     range: 134,
     speed: 44,
     attackMs: 1225,
     radius: 18,
-    windupMs: 380
+    windupMs: 180
   },
   mythos: {
     id: 'mythos',
@@ -199,7 +199,7 @@ const CARDS = {
   kimrui: {
     id: 'kimrui',
     name: '김루이',
-    cost: 3,
+    cost: 4,
     role: '흡혈 부착',
     maxHp: 430,
     damage: 0,
@@ -922,13 +922,26 @@ function spawnCard(room, owner, cardId, x, y) {
 }
 
 function spawnBestFriendCombo(room, owner, x, y) {
+  const statMultiplier = 0.8;
   const offsets = [
     { cardId: 'baduk', x: -28, y: 0 },
     { cardId: 'johyunwoo', x: 28, y: 0 }
   ];
 
   for (const offset of offsets) {
-    spawnCard(room, owner, offset.cardId, clamp(x + offset.x, 48, ARENA.width - 48), y + offset.y);
+    const card = CARDS[offset.cardId];
+    const maxHp = Math.max(1, Math.round(card.maxHp * statMultiplier));
+    const comboX = clamp(x + offset.x, 48, ARENA.width - 48);
+    const unit = spawnUnit(room, owner, offset.cardId, comboX, y, {
+      hp: maxHp,
+      maxHp,
+      statMultiplier,
+      action: '절친 출격',
+      actionUntil: Date.now() + 700
+    });
+    if (unit) {
+      broadcastEffect(room, { type: 'spawn', owner, cardId: offset.cardId, x: comboX, y });
+    }
   }
 }
 
@@ -1042,12 +1055,9 @@ function updateUnits(room, now, deltaSeconds) {
     const card = CARDS[unit.cardId];
     if (!card) continue;
 
-    if (unit.attachedById && findEntityById(game, unit.attachedById)) {
-      unit.action = '묶임';
-      unit.actionUntil = now + 200;
-      continue;
+    if (unit.attachedById && !findEntityById(game, unit.attachedById)) {
+      unit.attachedById = null;
     }
-    unit.attachedById = null;
 
     if (card.healer) {
       updateHealer(room, unit, card, deltaSeconds, now);
@@ -1178,7 +1188,8 @@ function updateBadukChaos(room, unit, card, now) {
 
   const targets = game.units.filter((other) => other.id !== unit.id && other.hp > 0 && distance(unit, other) <= card.chaosRadius);
   for (const target of targets) {
-    const damage = target.owner === unit.owner ? card.chaosFriendlyDamage : card.chaosEnemyDamage;
+    const baseDamage = target.owner === unit.owner ? card.chaosFriendlyDamage : card.chaosEnemyDamage;
+    const damage = getScaledUnitValue(unit, baseDamage);
     applyDamageToUnit(room, target, damage, unit.owner, now);
   }
 
@@ -1315,17 +1326,7 @@ function applyDamageToUnit(room, unit, amount, sourceOwner, now, options = {}) {
     detachRui(room, unit, now);
   }
 
-  const previousHp = unit.hp;
   unit.hp = Math.max(0, unit.hp - amount);
-
-  if (unit.cardId === 'jimin' && unit.windupUntil && unit.hp < previousHp) {
-    unit.windupUntil = 0;
-    unit.windupTargetId = null;
-    unit.action = '취소';
-    unit.actionUntil = now + 450;
-    unit.nextAttackAt = now + 900;
-    broadcastEffect(room, { type: 'interrupt', owner: unit.owner, x: unit.x, y: unit.y });
-  }
 
   if (unit.cardId === 'mythos' && !unit.awakened && unit.hp > 0 && unit.hp <= unit.maxHp * 0.5) {
     unit.awakened = true;
@@ -1525,8 +1526,12 @@ function getTargetRadius(target) {
 }
 
 function getUnitDamage(unit, card) {
-  if (unit.cardId === 'mythos' && unit.awakened) return card.awakenedDamage;
-  return card.damage;
+  const damage = unit.cardId === 'mythos' && unit.awakened ? card.awakenedDamage : card.damage;
+  return getScaledUnitValue(unit, damage);
+}
+
+function getScaledUnitValue(unit, value) {
+  return Math.round(value * (unit.statMultiplier || 1));
 }
 
 function getUnitSpeed(unit, card) {
