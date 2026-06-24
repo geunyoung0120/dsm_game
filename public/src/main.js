@@ -3,6 +3,7 @@ const ARENA_H = 620;
 const CARD_H = 108;
 const BEST_FRIEND_PAIR = ['baduk', 'johyunwoo'];
 const BEST_FRIEND_COMBO_COST = 8;
+const THEME_STORAGE_KEY = 'dsm-game-theme';
 
 const CARD_THEME = {
   zzangga: { fill: 0xe4536d, stroke: 0xffd6df, short: '짱' },
@@ -61,16 +62,17 @@ const CHARACTER_DETAILS = [
     cost: '8',
     type: '카오스 / 리스크 딜러',
     stats: [
-      ['HP', '1540'],
+      ['HP', '1300'],
       ['공격력', '116'],
       ['사거리', '74'],
       ['공격 주기', '1.85초'],
       ['이동속도', '40'],
-      ['카오스 피해', '적 140 / 아군 29']
+      ['카오스 피해', '적 140 / 아군 29'],
+      ['절친 출격', 'HP 1040 / 공격력 93']
     ],
     ability: '갑자기 예측하기 어려운 행동을 하며 범위 안 적들에게 매우 큰 피해를 준다. 같은 범위의 아군도 약한 피해를 받는다. 스킬 발동 시점은 무작위다. 조현우와 손패에 함께 있으면 8 엘릭서로 둘이 동시에 출격하며 전장에 절친 특성 문구가 뜬다.',
     appearance: '삭발에 안경을 쓴 통통한 남학생. 교복을 입고 있다.',
-    trait: '체력이 매우 높고 위험 부담이 크다. 조현우와 절친 특성으로 나올 때는 HP와 피해량이 낮아진다.'
+    trait: 'HP가 1300으로 낮아졌지만 여전히 위험 부담이 큰 카오스 딜러다. 조현우와 절친 특성으로 나올 때는 HP와 피해량이 낮아진다.'
   },
   {
     id: 'kkongho',
@@ -1040,6 +1042,7 @@ function hasBestFriendCombo(player) {
 }
 
 function setupShell() {
+  const themeButton = document.getElementById('theme-toggle');
   const authScreen = document.getElementById('auth-screen');
   const homeScreen = document.getElementById('home-screen');
   const roomScreen = document.getElementById('room-screen');
@@ -1066,6 +1069,7 @@ function setupShell() {
   const createRoomForm = document.getElementById('create-room-form');
   const refreshRoomsButton = document.getElementById('refresh-rooms');
 
+  initializeTheme(themeButton);
   renderCharacterGrid();
 
   setAuthMode('login');
@@ -1188,6 +1192,29 @@ function setupShell() {
 
   window.showHomeScreen = () => showScreen(homeScreen);
   window.showRoomScreen = () => showScreen(roomScreen);
+}
+
+function initializeTheme(button) {
+  const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+  const theme = savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'dark';
+  applyTheme(theme, button);
+
+  if (!button) return;
+  button.addEventListener('click', () => {
+    const nextTheme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+    localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+    applyTheme(nextTheme, button);
+  });
+}
+
+function applyTheme(theme, button) {
+  document.documentElement.dataset.theme = theme;
+  if (!button) return;
+
+  const isLight = theme === 'light';
+  button.textContent = isLight ? '다크 모드' : '라이트 모드';
+  button.setAttribute('aria-label', isLight ? '다크 모드 켜기' : '라이트 모드 켜기');
+  button.setAttribute('aria-pressed', String(isLight));
 }
 
 function startGame() {

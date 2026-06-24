@@ -85,7 +85,7 @@ const CARDS = {
     name: '박바둑',
     cost: 8,
     role: '카오스 딜러',
-    maxHp: 1540,
+    maxHp: 1300,
     damage: 116,
     range: 74,
     speed: 40,
