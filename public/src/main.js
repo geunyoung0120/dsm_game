@@ -157,7 +157,6 @@ let latestState = null;
 let currentUser = null;
 let currentRoom = null;
 let currentSlot = null;
-let authMode = 'login';
 let ascensionAudioUntil = 0;
 
 class BattleScene extends Phaser.Scene {
@@ -901,9 +900,8 @@ function setupShell() {
   const backMainButton = document.getElementById('back-main');
   const logoutButton = document.getElementById('logout');
   const leaveRoomButton = document.getElementById('leave-room');
-  const authForm = document.getElementById('auth-form');
-  const showLogin = document.getElementById('show-login');
-  const showSignup = document.getElementById('show-signup');
+  const loginForm = document.getElementById('login-form');
+  const signupForm = document.getElementById('signup-form');
   const createRoomForm = document.getElementById('create-room-form');
   const refreshRoomsButton = document.getElementById('refresh-rooms');
 
@@ -912,12 +910,14 @@ function setupShell() {
   showScreen(authScreen);
   loadSession();
 
-  showLogin.addEventListener('click', () => setAuthMode('login'));
-  showSignup.addEventListener('click', () => setAuthMode('signup'));
-
-  authForm.addEventListener('submit', async (event) => {
+  loginForm.addEventListener('submit', async (event) => {
     event.preventDefault();
-    await submitAuth();
+    await submitAuth('login', 'login-message');
+  });
+
+  signupForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    await submitAuth('signup', 'signup-message');
   });
 
   startButton.addEventListener('click', () => {
@@ -948,6 +948,7 @@ function setupShell() {
     currentRoom = null;
     currentSlot = null;
     latestState = null;
+    resetAuthForms();
     showScreen(authScreen);
   });
 
@@ -1010,25 +1011,19 @@ async function loadSession() {
     connectSocket();
     window.showHomeScreen();
   } catch {
-    currentUser = null;
+    // Unauthenticated visitors stay on the auth screen. Do not clear a login that just completed.
   }
 }
 
-function setAuthMode(mode) {
-  authMode = mode;
-  const isLogin = mode === 'login';
-  document.getElementById('show-login').classList.toggle('active', isLogin);
-  document.getElementById('show-signup').classList.toggle('active', !isLogin);
-  document.getElementById('auth-submit').textContent = isLogin ? '로그인' : '회원가입';
-  document.getElementById('auth-password').autocomplete = isLogin ? 'current-password' : 'new-password';
-  setMessage('auth-message', '');
-}
-
-async function submitAuth() {
-  const username = document.getElementById('auth-username').value;
-  const password = document.getElementById('auth-password').value;
+async function submitAuth(type, messageId) {
+  const username = document.getElementById(`${type}-username`).value.trim();
+  const password = document.getElementById(`${type}-password`).value;
+  const form = document.getElementById(`${type}-form`);
+  const submitButton = form ? form.querySelector('button[type="submit"]') : null;
   try {
-    const data = await apiRequest(`/api/${authMode}`, {
+    clearAuthMessages();
+    if (submitButton) submitButton.disabled = true;
+    const data = await apiRequest(`/api/${type}`, {
       method: 'POST',
       body: JSON.stringify({ username, password })
     });
@@ -1036,9 +1031,25 @@ async function submitAuth() {
     renderProfile();
     connectSocket();
     window.showHomeScreen();
+    resetAuthForms();
   } catch (error) {
-    setMessage('auth-message', error.message || '처리하지 못했습니다.');
+    setMessage(messageId, error.message || '처리하지 못했습니다.');
+  } finally {
+    if (submitButton) submitButton.disabled = false;
   }
+}
+
+function clearAuthMessages() {
+  setMessage('login-message', '');
+  setMessage('signup-message', '');
+}
+
+function resetAuthForms() {
+  const loginForm = document.getElementById('login-form');
+  const signupForm = document.getElementById('signup-form');
+  if (loginForm) loginForm.reset();
+  if (signupForm) signupForm.reset();
+  clearAuthMessages();
 }
 
 async function apiRequest(url, options = {}) {
