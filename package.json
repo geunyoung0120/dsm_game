@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "check:client": "node scripts/check-client-globals.js",
     "smoke": "node scripts/smoke.js"
   },
   "dependencies": {
