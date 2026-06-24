@@ -13,8 +13,9 @@ const server = http.createServer(app);
 
 const PORT = process.env.PORT || 3000;
 const ALLOWED_ORIGINS = parseAllowedOrigins(process.env.ALLOWED_ORIGINS || process.env.PUBLIC_ORIGIN || '');
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const DATA_DIR = resolveDataDir();
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, 'game.sqlite');
+const DB_DIR = path.dirname(DB_PATH);
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-session-secret-change-before-production';
 const HTTP_RATE_WINDOW_MS = 60 * 1000;
 const HTTP_RATE_LIMIT = Number(process.env.HTTP_RATE_LIMIT || 240);
@@ -123,9 +124,9 @@ const CARDS = {
     damage: 370,
     range: 134,
     speed: 44,
-    attackMs: 2450,
+    attackMs: 1225,
     radius: 18,
-    windupMs: 760
+    windupMs: 380
   },
   mythos: {
     id: 'mythos',
@@ -231,7 +232,8 @@ const DECK_SIZE = 8;
 const DECK_COST_MIN = 40;
 const DECK_COST_MAX = 55;
 
-fs.mkdirSync(DATA_DIR, { recursive: true });
+fs.mkdirSync(DB_DIR, { recursive: true });
+warnIfDatabaseIsEphemeral();
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
@@ -1907,9 +1909,22 @@ function isAllowedOrigin(origin, host) {
   return Boolean(host && parsed.host === host);
 }
 
+function resolveDataDir() {
+  return process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, 'data');
+}
+
+function warnIfDatabaseIsEphemeral() {
+  const hasExplicitPersistentPath = Boolean(process.env.DB_PATH || process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH);
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (isProduction && !hasExplicitPersistentPath) {
+    console.warn('WARNING: SQLite database is using the app filesystem. Attach a Railway Volume or set DATA_DIR/DB_PATH to keep accounts after deploys.');
+  }
+}
+
 setInterval(cleanupRateBuckets, 60 * 1000).unref();
 setInterval(cleanupEndedRooms, 5 * 60 * 1000).unref();
 
 server.listen(PORT, () => {
   console.log(`Friends Tower Defense running at http://localhost:${PORT}`);
+  console.log(`SQLite database path: ${DB_PATH}`);
 });

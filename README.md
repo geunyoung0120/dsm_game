@@ -57,12 +57,22 @@ npm start
 
 Railway는 `PORT` 환경 변수를 자동으로 넣어주므로 별도 포트 설정 없이 `npm start`로 실행하면 됩니다.
 
+계정과 세션은 SQLite 파일에 저장됩니다. Railway에서 배포할 때 계정을 유지하려면 서비스에 Volume을 붙여야 합니다. Volume이 붙으면 Railway가 `RAILWAY_VOLUME_MOUNT_PATH`를 자동으로 제공하고, 서버는 그 경로의 `game.sqlite`를 사용합니다. Volume이 없으면 배포 때 앱 파일시스템이 새로 만들어져 기존 계정이 사라질 수 있습니다.
+
 보안 강화를 위해 Railway 환경 변수에 아래 값을 추가하는 것을 권장합니다.
 
 ```bash
 ALLOWED_ORIGINS=https://배포된-도메인
 SESSION_SECRET=충분히-긴-랜덤-문자열
 NODE_ENV=production
+```
+
+직접 경로를 지정하려면 아래 환경 변수 중 하나를 추가하면 됩니다.
+
+```bash
+DATA_DIR=/app/data
+# 또는
+DB_PATH=/app/data/game.sqlite
 ```
 
 `ALLOWED_ORIGINS`를 설정하면 해당 도메인에서 온 Socket.io 접속만 허용합니다. 여러 도메인을 허용해야 하면 쉼표로 구분합니다.
