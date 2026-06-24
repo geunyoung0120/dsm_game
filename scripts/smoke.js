@@ -45,6 +45,7 @@ async function main() {
     signup(`연습유저${Date.now()}B`)
   ]);
   await Promise.all(accounts.map(expectSessionUser));
+  await expectRankings(accounts[0], accounts.map((account) => account.user.username));
   await expectSessionUser(await login(accounts[0].user.username));
   const result = await runClientSmoke(accounts);
   console.log(JSON.stringify(result));
@@ -140,6 +141,25 @@ async function expectSessionUser(account) {
   }
   if (!body.user || body.user.username !== account.user.username) {
     throw new Error('Smoke session user did not match the authenticated account.');
+  }
+}
+
+async function expectRankings(account, expectedUsernames) {
+  const response = await fetch(`${url}/api/rankings`, {
+    headers: { Cookie: account.cookie }
+  });
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(body.error || 'Smoke rankings lookup failed.');
+  }
+  if (!Array.isArray(body.rankings)) {
+    throw new Error('Smoke rankings response did not include a rankings array.');
+  }
+  for (const username of expectedUsernames) {
+    const entry = body.rankings.find((ranking) => ranking.username === username);
+    if (!entry || !entry.rank || !entry.tier || !Number.isInteger(entry.trophies)) {
+      throw new Error('Smoke rankings did not include the expected user entry.');
+    }
   }
 }
 

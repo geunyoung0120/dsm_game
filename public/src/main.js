@@ -116,9 +116,9 @@ const CHARACTER_DETAILS = [
     name: '대.근.영',
     cost: '10',
     type: '탱커 소환 + 근접 딜러',
-    ability: '이동하는 동안 약 1.7초마다 탱커 하수인을 하나씩 소환한다. 근접 거리에서는 묵직한 킥복싱 단일 공격을 한다.',
+    ability: '전장에 있는 동안 항상 2초마다 광주 탱크를 하나씩 소환한다. 근접 거리에서는 묵직한 킥복싱 단일 공격을 한다.',
     appearance: '잘생긴 남학생이다.',
-    trait: '한 경기에서 한 번만 사용할 수 있다. 본체와 탱커 하수인으로 라인을 압박하지만, 이전보다 소환 속도와 전투력이 낮아졌다.'
+    trait: '한 경기에서 한 번만 사용할 수 있다. 광주 탱크는 탱크 차체와 포신 형태로 등장하며, 대.근.영이 멈춰 있어도 계속 소환된다.'
   },
   {
     id: 'kimrui',
@@ -160,6 +160,7 @@ let currentUser = null;
 let currentRoom = null;
 let currentSlot = null;
 let ascensionAudioUntil = 0;
+let latestRankings = [];
 
 class BattleScene extends Phaser.Scene {
   constructor() {
@@ -501,14 +502,25 @@ class BattleScene extends Phaser.Scene {
       this.g.lineStyle(3, 0xe4d6ff, unit.attached ? 1 : 0.45);
       this.g.strokeCircle(x, y - 2, 18);
     } else if (unit.cardId === 'geunyoungTank') {
+      const barrelEnd = x + dir * 25;
+      this.g.fillStyle(0x303a3f, 1);
+      this.g.fillRoundedRect(x - 18, y - 9, 36, 18, 5);
+      this.g.lineStyle(3, 0xcbd3d8, 1);
+      this.g.strokeRoundedRect(x - 18, y - 9, 36, 18, 5);
       this.g.fillStyle(theme.fill, 1);
-      this.g.fillRoundedRect(x - 11, y - 11, 22, 28, 5);
-      this.g.strokeRoundedRect(x - 11, y - 11, 22, 28, 5);
+      this.g.fillRoundedRect(x - 10, y - 15, 20, 18, 5);
+      this.g.strokeRoundedRect(x - 10, y - 15, 20, 18, 5);
       this.g.fillStyle(0xaeb7bd, 1);
-      this.g.fillRoundedRect(x - 9, y - 23, 18, 12, 4);
-      this.g.strokeRoundedRect(x - 9, y - 23, 18, 12, 4);
-      this.g.lineStyle(3, 0xcbd3d8, 0.85);
-      this.g.lineBetween(x - 16, y + 3, x + 16, y + 3);
+      this.g.fillRoundedRect(x - 7, y - 12, 14, 12, 4);
+      this.g.strokeRoundedRect(x - 7, y - 12, 14, 12, 4);
+      this.g.lineStyle(5, 0xcbd3d8, 1);
+      this.g.lineBetween(x + dir * 5, y - 7, barrelEnd, y - 7);
+      this.g.fillStyle(0xcbd3d8, 1);
+      this.g.fillCircle(barrelEnd, y - 7, 3);
+      this.g.fillStyle(0x171d20, 1);
+      this.g.fillCircle(x - 11, y + 8, 4);
+      this.g.fillCircle(x, y + 9, 4);
+      this.g.fillCircle(x + 11, y + 8, 4);
     } else {
       this.g.fillStyle(theme.fill, 1);
       this.g.fillRoundedRect(x - radius, y - radius, radius * 2, radius * 2, 6);
@@ -810,6 +822,7 @@ class BattleScene extends Phaser.Scene {
       this.g.fillRect(0, 0, VIEW.width, ARENA_H);
       const winner = this.state.winner === null ? null : this.state.players[this.state.winner];
       const result = winner ? `${winner.username || `플레이어 ${this.state.winner + 1}`} 승리` : '무승부';
+      const rematchCount = this.state.players.filter((player) => player.rematchAccepted).length;
       this.drawCenteredText(result, VIEW.width / 2, 276, 34, '#f7f2e8');
       this.drawCenteredText(this.state.reason || '', VIEW.width / 2, 318, 17, '#d6d0c6');
       if (this.state.trophyChange) {
@@ -817,7 +830,8 @@ class BattleScene extends Phaser.Scene {
         const sign = change.delta > 0 ? '+' : '';
         this.drawCenteredText(`트로피 ${sign}${change.delta} | 현재 ${change.trophies}개 | ${change.tierIcon} ${change.tier}`, VIEW.width / 2, 356, 15, '#fff4a7');
       }
-      this.drawCenteredText('위쪽 버튼으로 로비에 돌아갈 수 있습니다.', VIEW.width / 2, 386, 14, '#d6d0c6');
+      this.drawCenteredText(`재경기 동의 ${rematchCount}/2`, VIEW.width / 2, 386, 15, '#fff4a7');
+      this.drawCenteredText('둘 다 재경기를 누르면 같은 방에서 다시 시작합니다.', VIEW.width / 2, 414, 14, '#d6d0c6');
     }
   }
 
@@ -935,13 +949,17 @@ function setupShell() {
   const homeScreen = document.getElementById('home-screen');
   const roomScreen = document.getElementById('room-screen');
   const encyclopediaScreen = document.getElementById('encyclopedia-screen');
+  const rankingScreen = document.getElementById('ranking-screen');
   const gameScreen = document.getElementById('game-screen');
   const startButton = document.getElementById('start-game');
   const encyclopediaButton = document.getElementById('open-encyclopedia');
+  const rankingButton = document.getElementById('open-ranking');
+  const backRankingButton = document.getElementById('back-ranking');
   const backButton = document.getElementById('back-home');
   const backMainButton = document.getElementById('back-main');
   const logoutButton = document.getElementById('logout');
   const leaveRoomButton = document.getElementById('leave-room');
+  const rematchRoomButton = document.getElementById('rematch-room');
   const loginForm = document.getElementById('login-form');
   const signupForm = document.getElementById('signup-form');
   const showSignupButton = document.getElementById('show-signup');
@@ -984,6 +1002,15 @@ function setupShell() {
     showScreen(encyclopediaScreen);
   });
 
+  rankingButton.addEventListener('click', async () => {
+    showScreen(rankingScreen);
+    await loadRankings();
+  });
+
+  backRankingButton.addEventListener('click', () => {
+    showScreen(homeScreen);
+  });
+
   backButton.addEventListener('click', () => {
     showScreen(homeScreen);
   });
@@ -1022,12 +1049,18 @@ function setupShell() {
     currentRoom = null;
     currentSlot = null;
     latestState = null;
+    updateRematchControls();
     showScreen(roomScreen);
     requestRooms();
   });
 
+  rematchRoomButton.addEventListener('click', () => {
+    if (socket) socket.emit('request-rematch');
+    updateRematchControls(true);
+  });
+
   function showScreen(target) {
-    for (const screen of [authScreen, homeScreen, roomScreen, encyclopediaScreen, gameScreen]) {
+    for (const screen of [authScreen, homeScreen, roomScreen, encyclopediaScreen, rankingScreen, gameScreen]) {
       screen.classList.toggle('hidden', screen !== target);
     }
   }
@@ -1072,6 +1105,7 @@ async function loadSession() {
     const data = await apiRequest('/api/me');
     currentUser = data.user;
     renderProfile();
+    await loadRankings();
     connectSocket();
     window.showHomeScreen();
   } catch {
@@ -1105,6 +1139,7 @@ function finishAuth(user) {
   currentSlot = null;
   latestState = null;
   renderProfile();
+  loadRankings();
   window.showHomeScreen();
   resetAuthForms();
   connectSocket();
@@ -1152,6 +1187,7 @@ function connectSocket() {
   socket.on('profile', (profile) => {
     currentUser = profile;
     renderProfile();
+    loadRankings();
   });
   socket.on('rooms', renderRoomList);
   socket.on('room-joined', (payload) => {
@@ -1165,6 +1201,7 @@ function connectSocket() {
     currentRoom = null;
     currentSlot = null;
     latestState = null;
+    updateRematchControls();
     window.showRoomScreen();
   });
   socket.on('room-error', (message) => {
@@ -1174,6 +1211,7 @@ function connectSocket() {
     latestState = state;
     if (state.room) currentRoom = state.room;
     updateGameRoomTitle();
+    updateRematchControls();
     if (activeScene) activeScene.receiveState(state);
   });
   socket.on('effect', (effect) => {
@@ -1198,6 +1236,19 @@ async function requestRooms() {
   }
 }
 
+async function loadRankings() {
+  if (!currentUser) return;
+  try {
+    const data = await apiRequest('/api/rankings');
+    latestRankings = data.rankings || [];
+    renderTopRankings();
+    renderRankingList();
+  } catch (error) {
+    renderTopRankings(error.message || '랭킹을 가져오지 못했습니다.');
+    renderRankingList(error.message || '랭킹을 가져오지 못했습니다.');
+  }
+}
+
 function renderProfile() {
   const summary = document.getElementById('profile-summary');
   if (!summary || !currentUser) return;
@@ -1206,6 +1257,87 @@ function renderProfile() {
     profileStat('트로피', `${currentUser.trophies}개`),
     profileStat('티어', `${currentUser.tierIcon} ${currentUser.tier}`)
   );
+}
+
+function renderTopRankings(errorMessage = '') {
+  const list = document.getElementById('top-ranking-list');
+  if (!list) return;
+  list.replaceChildren();
+
+  if (errorMessage) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = errorMessage;
+    list.appendChild(empty);
+    return;
+  }
+
+  const topThree = latestRankings.slice(0, 3);
+  if (topThree.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = '아직 랭킹이 없습니다.';
+    list.appendChild(empty);
+    return;
+  }
+
+  for (const entry of topThree) {
+    list.appendChild(rankingPodiumItem(entry));
+  }
+}
+
+function rankingPodiumItem(entry) {
+  const item = document.createElement('article');
+  item.className = `ranking-podium ranking-podium-${entry.rank}`;
+
+  const rank = document.createElement('strong');
+  rank.textContent = `${entry.rank}등`;
+  const name = document.createElement('span');
+  name.textContent = entry.username;
+  const tier = document.createElement('small');
+  tier.textContent = `${entry.tierIcon} ${entry.tier}`;
+
+  item.append(rank, name, tier);
+  return item;
+}
+
+function renderRankingList(errorMessage = '') {
+  const list = document.getElementById('ranking-list');
+  if (!list) return;
+  list.replaceChildren();
+
+  if (errorMessage) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = errorMessage;
+    list.appendChild(empty);
+    return;
+  }
+
+  if (latestRankings.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = '아직 랭킹이 없습니다.';
+    list.appendChild(empty);
+    return;
+  }
+
+  for (const entry of latestRankings) {
+    const row = document.createElement('article');
+    row.className = 'ranking-row';
+    const rank = document.createElement('strong');
+    rank.textContent = `${entry.rank}`;
+    const info = document.createElement('div');
+    const name = document.createElement('span');
+    name.textContent = entry.username;
+    const tier = document.createElement('small');
+    tier.textContent = `${entry.tierIcon} ${entry.tier}`;
+    const trophies = document.createElement('b');
+    trophies.textContent = `${entry.trophies}개`;
+    info.append(name, tier);
+    row.append(rank, info, trophies);
+    list.appendChild(row);
+  }
 }
 
 function profileStat(label, value) {
@@ -1272,6 +1404,21 @@ function updateGameRoomTitle() {
   const roomName = currentRoom ? currentRoom.name : '전투 대기';
   const side = currentSlot === 0 ? '아래 진영' : currentSlot === 1 ? '위 진영' : '대기';
   title.textContent = `${roomName} · ${side}`;
+}
+
+function updateRematchControls(optimistic = false) {
+  const button = document.getElementById('rematch-room');
+  if (!button) return;
+
+  const state = latestState;
+  const player = state && currentSlot !== null && currentSlot !== undefined ? state.players[currentSlot] : null;
+  const opponent = state && currentSlot !== null && currentSlot !== undefined ? state.players[1 - currentSlot] : null;
+  const canRequest = Boolean(state && state.status === 'ended' && player && player.connected && opponent && opponent.connected);
+  const accepted = optimistic || Boolean(player && player.rematchAccepted);
+
+  button.classList.toggle('hidden', !canRequest);
+  button.disabled = !canRequest || accepted;
+  button.textContent = accepted ? '상대 동의 대기' : '재경기';
 }
 
 function setMessage(id, message) {

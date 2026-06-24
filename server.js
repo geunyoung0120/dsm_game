@@ -194,7 +194,7 @@ const CARDS = {
     radius: 24,
     oneUse: true,
     tankMinionId: 'geunyoungTank',
-    spawnMinionMs: 1700
+    spawnMinionMs: 2000
   },
   kimrui: {
     id: 'kimrui',
@@ -214,11 +214,11 @@ const CARDS = {
   },
   geunyoungTank: {
     id: 'geunyoungTank',
-    name: '근영 탱커',
+    name: '광주 탱크',
     cost: 0,
     role: '소환 탱커',
     playable: false,
-    maxHp: 520,
+    maxHp: 312,
     damage: 42,
     range: 36,
     speed: 41,
@@ -263,6 +263,11 @@ const statements = {
   `),
   getUserByUsername: db.prepare('SELECT * FROM users WHERE username = ?'),
   getUserById: db.prepare('SELECT * FROM users WHERE id = ?'),
+  listRankings: db.prepare(`
+    SELECT id, username, trophies, tier
+    FROM users
+    ORDER BY trophies DESC, username COLLATE NOCASE ASC
+  `),
   updateUserStats: db.prepare(`
     UPDATE users
     SET trophies = ?, tier = ?, loss_counter = ?, updated_at = ?
@@ -429,6 +434,10 @@ app.get('/api/rooms', requireAuthApi, (req, res) => {
   res.json({ rooms: publicRooms() });
 });
 
+app.get('/api/rankings', requireAuthApi, (req, res) => {
+  res.json({ rankings: publicRankings() });
+});
+
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, filePath) => {
     if (['.html', '.js', '.css'].includes(path.extname(filePath))) {
@@ -518,13 +527,14 @@ io.on('connection', (socket) => {
     playCard(room, slot, payload);
   });
 
+  socket.on('request-rematch', () => {
+    if (!canUseSocketAction(socket)) return;
+    requestRematch(socket);
+  });
+
   socket.on('restart', () => {
-    const room = socket.data.roomId ? rooms.get(socket.data.roomId) : null;
-    if (!room || room.game.status !== 'ended' || getConnectedPlayerCount(room) !== 2) {
-      registerBadSocketEvent(socket);
-      return;
-    }
-    startMatch(room);
+    if (!canUseSocketAction(socket)) return;
+    requestRematch(socket);
   });
 
   socket.on('disconnect', () => {
@@ -635,9 +645,12 @@ function leaveCurrentRoom(socket, options = {}) {
       player.socketId = null;
       if (room.game.status === 'playing') {
         endMatch(room, 1 - slot, '상대 연결 종료');
+        if (getConnectedPlayerCount(room) === 0) {
+          rooms.delete(room.id);
+        }
       } else {
         clearRoomPlayer(player);
-        if (getKnownPlayerCount(room) === 0) {
+        if (getConnectedPlayerCount(room) === 0 || getKnownPlayerCount(room) === 0) {
           rooms.delete(room.id);
         } else {
           room.game.status = 'waiting';
@@ -714,7 +727,8 @@ function createPlayer(slot) {
     elixir: 5,
     hand: [],
     cycle: [],
-    usedOneTimeCards: {}
+    usedOneTimeCards: {},
+    rematchAccepted: false
   };
 }
 
@@ -729,6 +743,7 @@ function resetPlayerForMatch(player) {
   player.hand = deck.slice(0, 4);
   player.cycle = deck.slice(4);
   player.usedOneTimeCards = {};
+  player.rematchAccepted = false;
 }
 
 function shuffledDeck() {
@@ -1048,6 +1063,10 @@ function updateUnits(room, now, deltaSeconds) {
       updateBadukChaos(room, unit, card, now);
     }
 
+    if (card.tankMinionId) {
+      maybeSpawnTankMinion(room, unit, card, now);
+    }
+
     if (unit.windupUntil) {
       resolveWindup(room, unit, card, now);
       continue;
@@ -1059,9 +1078,6 @@ function updateUnits(room, now, deltaSeconds) {
     const distanceToTarget = distance(unit, target);
     const attackRange = card.range + getTargetRadius(target);
     if (distanceToTarget > attackRange) {
-      if (card.tankMinionId) {
-        maybeSpawnTankMinion(room, unit, card, now);
-      }
       moveToward(unit, target, getUnitSpeed(unit, card) * deltaSeconds);
       continue;
     }
@@ -1393,10 +1409,42 @@ function endMatch(room, winner, reason) {
   game.message = winner === null ? `무승부: ${reason}` : `${game.players[winner].username || `플레이어 ${winner + 1}`} 승리: ${reason}`;
   game.freezeUntil = 0;
   game.pendingAscensionAt = 0;
+  for (const player of game.players) {
+    player.rematchAccepted = false;
+  }
   settleTrophies(room, winner, reason);
   broadcastEffect(room, { type: 'match-end', winner, reason });
   broadcastState(room);
   emitRooms();
+}
+
+function requestRematch(socket) {
+  const room = socket.data.roomId ? rooms.get(socket.data.roomId) : null;
+  const slot = socket.data.slot;
+  if (!room || slot === null || slot === undefined || room.game.status !== 'ended') {
+    registerBadSocketEvent(socket);
+    return;
+  }
+  if (getConnectedPlayerCount(room) !== 2) {
+    socket.emit('room-error', '상대가 방에 있어야 재경기를 할 수 있습니다.');
+    return;
+  }
+
+  const player = room.game.players[slot];
+  if (!player || !player.connected || player.socketId !== socket.id) {
+    registerBadSocketEvent(socket);
+    return;
+  }
+
+  player.rematchAccepted = true;
+  const ready = room.game.players.every((candidate) => candidate.connected && candidate.rematchAccepted);
+  if (ready) {
+    startMatch(room);
+    return;
+  }
+
+  room.game.message = '재경기 동의 대기 중';
+  broadcastState(room);
 }
 
 function settleTrophies(room, winner, reason) {
@@ -1596,6 +1644,7 @@ function serializeState(room, viewerSlot = null) {
       hand: player.slot === viewerSlot ? player.hand : [],
       handSize: player.hand.filter(Boolean).length,
       usedOneTimeCards: Object.keys(player.usedOneTimeCards || {}),
+      rematchAccepted: Boolean(player.rematchAccepted),
       totalTowerHp: totalTowerHp(game, player.slot)
     })),
     towers: game.towers.map((tower) => ({
@@ -1642,6 +1691,20 @@ function publicUser(user) {
     tierKey: tier.key,
     lossCounter: Math.max(0, Number(user.loss_counter) || 0)
   };
+}
+
+function publicRankings() {
+  return statements.listRankings.all().map((user, index) => {
+    const trophies = Math.max(0, Number(user.trophies) || 0);
+    const tier = getTierForTrophies(trophies);
+    return {
+      rank: index + 1,
+      username: user.username,
+      trophies,
+      tier: tier.name,
+      tierIcon: tier.icon
+    };
+  });
 }
 
 function refreshPlayerProfile(player) {

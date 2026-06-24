@@ -421,6 +421,63 @@ input:disabled {
   gap: 16px;
 }
 
+.ranking-preview {
+  padding: 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.ranking-preview-title {
+  margin-bottom: 12px;
+}
+
+.top-ranking-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ranking-podium {
+  min-width: 0;
+  min-height: 92px;
+  padding: 13px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-left: 5px solid var(--gold);
+  border-radius: 8px;
+}
+
+.ranking-podium-2 {
+  border-left-color: #aeb7bd;
+}
+
+.ranking-podium-3 {
+  border-left-color: #b7855f;
+}
+
+.ranking-podium strong,
+.ranking-row strong {
+  color: var(--gold);
+}
+
+.ranking-podium span {
+  min-width: 0;
+  font-size: 19px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.ranking-podium small {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .lobby-hero {
   min-height: 306px;
   padding: 34px;
@@ -596,11 +653,13 @@ input:disabled {
 }
 
 .room-screen,
-.encyclopedia-screen {
+.encyclopedia-screen,
+.ranking-screen {
   padding: 20px 0 40px;
 }
 
 .encyclopedia-header,
+.ranking-header,
 .room-header {
   display: flex;
   align-items: end;
@@ -610,9 +669,53 @@ input:disabled {
 }
 
 .encyclopedia-header h1,
+.ranking-header h1,
 .room-header h1 {
   font-size: clamp(32px, 5vw, 52px);
   line-height: 1.04;
+}
+
+.ranking-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ranking-row {
+  min-height: 74px;
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.ranking-row strong {
+  font-size: 22px;
+}
+
+.ranking-row div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.ranking-row span {
+  font-size: 18px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.ranking-row small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.ranking-row b {
+  color: var(--ink);
+  font-size: 17px;
 }
 
 .room-layout {
@@ -758,6 +861,12 @@ input:disabled {
   font-weight: 900;
 }
 
+.game-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .game-frame {
   width: min(100%, 1040px);
   aspect-ratio: 900 / 760;
@@ -777,6 +886,7 @@ canvas {
   .auth-layout,
   .lobby-hero,
   .lobby-dashboard,
+  .top-ranking-list,
   .room-layout {
     grid-template-columns: 1fr;
   }
