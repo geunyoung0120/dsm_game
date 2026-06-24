@@ -16,6 +16,18 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: '로그인 오류 긴급 수정',
+    date: '2026.06.24',
+    items: [
+      '로그인 직후 clamp is not defined 오류 수정',
+      '티어 진행 바 계산 안정성 보강'
+    ],
+    details: [
+      '내 프로필의 다음 티어 진행 바를 계산하는 클라이언트 코드가 서버 전용 clamp 함수 이름을 잘못 참조하던 문제를 고쳤다.',
+      '티어 시작값과 진행률을 브라우저에서 안전하게 숫자로 정규화하고 0~100% 범위 안에 고정했다.'
+    ]
+  },
+  {
     title: '야클 로고와 성장 표시 개선',
     date: '2026.06.24',
     items: [
