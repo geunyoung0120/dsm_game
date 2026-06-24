@@ -118,6 +118,7 @@ body {
 .home-screen,
 .room-screen,
 .encyclopedia-screen,
+.update-history-screen,
 .tier-screen,
 .game-screen {
   width: min(100%, 1080px);
@@ -789,6 +790,7 @@ input:disabled {
 .room-screen,
 .encyclopedia-screen,
 .ranking-screen,
+.update-history-screen,
 .tier-screen,
 .deck-screen {
   padding: 20px 0 40px;
@@ -796,6 +798,7 @@ input:disabled {
 
 .encyclopedia-header,
 .ranking-header,
+.update-history-header,
 .tier-header,
 .deck-header,
 .room-header {
@@ -808,11 +811,17 @@ input:disabled {
 
 .encyclopedia-header h1,
 .ranking-header h1,
+.update-history-header h1,
 .tier-header h1,
 .deck-header h1,
 .room-header h1 {
   font-size: clamp(32px, 5vw, 52px);
   line-height: 1.04;
+}
+
+.update-history-list {
+  display: grid;
+  gap: 12px;
 }
 
 .deck-builder-layout {
@@ -1380,6 +1389,7 @@ canvas {
 
   .home-actions,
   .encyclopedia-header,
+  .update-history-header,
   .tier-header,
   .deck-header,
   .room-header,

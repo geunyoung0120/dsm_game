@@ -325,12 +325,18 @@ async function expectTwoVersusTwoRoom(accounts) {
   if (!state.room || state.room.playerCount !== 4 || state.room.maxPlayers !== 4) {
     throw new Error('2v2 room state did not report all four players.');
   }
+  const kingTower = state.towers.find((tower) => tower.type === 'king');
+  const princessTower = state.towers.find((tower) => tower.type === 'princess-left');
+  if (!kingTower || kingTower.maxHp !== 13800 || !princessTower || princessTower.maxHp !== 8100) {
+    throw new Error('2v2 tower HP did not use the expected 1.5x values.');
+  }
 
   for (const client of clients) client.disconnect();
   return {
     status: state.status,
     players: state.players.length,
-    teams: state.players.map((player) => player.team)
+    teams: state.players.map((player) => player.team),
+    kingTowerHp: kingTower.maxHp
   };
 }
 

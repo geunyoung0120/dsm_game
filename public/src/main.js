@@ -12,6 +12,15 @@ const BBATMAN_HEAL_RANGE = 90;
 
 const PATCH_NOTICES = [
   {
+    title: '6월 24일 밸런스와 공지 개선',
+    date: '2026.06.24',
+    items: [
+      '메인에는 최신 공지만 보이고 업데이트 목록에서 역대 공지를 날짜순으로 확인 가능',
+      '꽁호 사용자는 해당 경기 최대 엘릭서가 12로 증가',
+      '성주, 빼트맨, 대.근.영, 광주 탱크 밸런스 조정 및 2대2 타워 HP 1.5배 적용'
+    ]
+  },
+  {
     title: '2대2 모드와 덱 화면 개편',
     date: '2026.06.24',
     items: [
@@ -75,12 +84,13 @@ const CHARACTER_DETAILS = [
     stats: [
       ['HP', '410'],
       ['공격력', '없음'],
-      ['힐량', '초당 52.5'],
+      ['힐량', '초당 47.25'],
       ['힐 범위', '90'],
+      ['자가 피해', '초당 8'],
       ['이동속도', '76'],
       ['공격 주기', '없음']
     ],
-    ability: '주변에 회복 원을 만들고, 원 안에 있는 모든 여학생 또는 여학생으로 인식되는 아군을 계속 회복시킨다. 회복 대상이 원 밖에 있으면 가까운 대상 쪽으로 이동한다.',
+    ability: '주변에 회복 원을 만들고, 원 안에 있는 모든 여학생 또는 여학생으로 인식되는 아군을 계속 회복시킨다. 회복 대상이 원 밖에 있으면 가까운 대상 쪽으로 이동한다. 전장에 있는 동안에는 시간이 지날수록 체력이 조금씩 줄어든다.',
     appearance: '키가 작고 마른 남학생. 삭발 머리, 매우 탄 피부, 운동을 잘할 것 같은 체형이다.',
     trait: '공격하지 못하는 순수 힐러다. 힐량은 낮아졌지만 여러 아군을 동시에 회복할 수 있다.'
   },
@@ -112,9 +122,10 @@ const CHARACTER_DETAILS = [
       ['공격력', '없음'],
       ['효과', '모든 유닛 제거'],
       ['사용 제한', '1회용'],
-      ['타워 피해', '없음']
+      ['타워 피해', '없음'],
+      ['사용자 보너스', '최대 엘릭서 12']
     ],
-    ability: '소환되면 화면이 멈추고 전장 중앙에서 기도한다. 하늘에서 거대한 빛이 떨어져 모든 유닛이 승천해 사라진다. 꽁호 자신도 함께 사라진다.',
+    ability: '소환되면 화면이 멈추고 전장 중앙에서 기도한다. 하늘에서 거대한 빛이 떨어져 모든 유닛이 승천해 사라진다. 꽁호 자신도 함께 사라진다. 사용자는 그 경기 동안 최대 엘릭서가 12로 증가한다.',
     appearance: '안경을 쓴 평범한 남학생. 전형적인 기독교 학생 느낌이다.',
     trait: '한 경기에서 한 번만 사용할 수 있다. 타워에는 피해를 주지 않고 유닛만 제거한다.'
   },
@@ -192,7 +203,7 @@ const CHARACTER_DETAILS = [
     cost: '3',
     type: '원거리 딜러',
     stats: [
-      ['HP', '280'],
+      ['HP', '224'],
       ['공격력', '66'],
       ['사거리', '185'],
       ['공격 주기', '0.572초'],
@@ -201,7 +212,7 @@ const CHARACTER_DETAILS = [
     ],
     ability: '뒤쪽에서 키보드를 두드리며 원거리 공격을 한다. 공격 주기가 10% 느려졌지만 피해는 준수하고 체력이 매우 낮다.',
     appearance: '마른 남학생. 헝클어진 머리가 얼굴 전체를 가리고, 머리카락 아래 안경과 마스크를 쓰고 있다.',
-    trait: '남자 캐릭터지만 모두가 여학생이라고 생각해서 빼트맨의 회복 대상이 된다. 매우 빨리 쓰러지는 후방 딜러라 먼저 제거하지 않으면 계속 피해를 준다.'
+    trait: '남자 캐릭터지만 모두가 여학생이라고 생각해서 빼트맨의 회복 대상이 된다. 체력이 더 낮아져 빠르게 잡히지만 방치하면 계속 피해를 준다.'
   },
   {
     id: 'johyunwoo',
@@ -226,14 +237,14 @@ const CHARACTER_DETAILS = [
     cost: '10',
     type: '탱커 소환 + 근접 딜러',
     stats: [
-      ['HP', '1800'],
+      ['HP', '2160'],
       ['공격력', '90'],
       ['사거리', '43'],
       ['공격 주기', '1.155초'],
       ['이동속도', '41'],
-      ['광주 탱크', 'HP 300 / 공격력 38']
+      ['광주 탱크', '1.5초마다 HP 240 / 공격력 36']
     ],
-    ability: '전장에 있는 동안 항상 2초마다 HP 300의 광주 탱크를 하나씩 소환한다. 본체는 HP 1800, 공격력 90의 근접 단일 공격을 한다.',
+    ability: '전장에 있는 동안 항상 1.5초마다 HP 240의 광주 탱크를 하나씩 소환한다. 본체는 HP 2160, 공격력 90의 근접 단일 공격을 한다.',
     appearance: '잘생긴 남학생이다.',
     trait: '한 경기에서 한 번만 사용할 수 있다. 본체는 더 튼튼하지만 공격력이 낮아졌고, 광주 탱크는 탱크 차체와 포신 형태로 등장한다.'
   },
@@ -1011,7 +1022,7 @@ class BattleScene extends Phaser.Scene {
     this.drawText(truncateText(this.state.message || (doubleElixir ? '더블 엘릭서' : '전투 중'), 18), x + 14, 368, 13, '#d6d0c6');
 
     if (me) {
-      this.drawElixir(me.elixir);
+      this.drawElixir(me.elixir, me.maxElixir || 10);
       this.drawText('내 진영', x + 14, 416, 11, '#8f98a6');
       this.drawText(teamName(me.team), x + 14, 434, 16, '#f7f2e8');
     } else {
@@ -1044,7 +1055,7 @@ class BattleScene extends Phaser.Scene {
     });
   }
 
-  drawElixir(elixir) {
+  drawElixir(elixir, maxElixir = 10) {
     const x = ARENA_W + 26;
     const y = 548;
     const w = SIDEBAR_W - 52;
@@ -1053,8 +1064,8 @@ class BattleScene extends Phaser.Scene {
     this.g.fillStyle(0x262b33, 1);
     this.g.fillRoundedRect(x, y, w, h, 8);
     this.g.fillStyle(0xb86dff, 1);
-    this.g.fillRoundedRect(x, y, w * Phaser.Math.Clamp(elixir / 10, 0, 1), h, 8);
-    this.drawCenteredText(`${elixir.toFixed(1)} / 10`, x + w / 2, y + 1, 13, '#ffffff');
+    this.g.fillRoundedRect(x, y, w * Phaser.Math.Clamp(elixir / maxElixir, 0, 1), h, 8);
+    this.drawCenteredText(`${elixir.toFixed(1)} / ${maxElixir}`, x + w / 2, y + 1, 13, '#ffffff');
   }
 
   drawCards() {
@@ -1258,6 +1269,7 @@ function setupShell() {
   const themeButton = document.getElementById('theme-toggle');
   const authScreen = document.getElementById('auth-screen');
   const homeScreen = document.getElementById('home-screen');
+  const updateHistoryScreen = document.getElementById('update-history-screen');
   const roomScreen = document.getElementById('room-screen');
   const encyclopediaScreen = document.getElementById('encyclopedia-screen');
   const rankingScreen = document.getElementById('ranking-screen');
@@ -1268,7 +1280,9 @@ function setupShell() {
   const deckButton = document.getElementById('open-deck-builder');
   const encyclopediaButton = document.getElementById('open-encyclopedia');
   const rankingButton = document.getElementById('open-ranking');
+  const updateHistoryButton = document.getElementById('open-update-history');
   const tierButton = document.getElementById('open-tier-chart');
+  const backUpdateHistoryButton = document.getElementById('back-update-history');
   const backRankingButton = document.getElementById('back-ranking');
   const backTierButton = document.getElementById('back-tier');
   const backDeckButton = document.getElementById('back-deck');
@@ -1332,9 +1346,18 @@ function setupShell() {
     await loadRankings();
   });
 
+  updateHistoryButton.addEventListener('click', () => {
+    renderUpdateHistory();
+    showScreen(updateHistoryScreen);
+  });
+
   tierButton.addEventListener('click', async () => {
     showScreen(tierScreen);
     await loadTiers();
+  });
+
+  backUpdateHistoryButton.addEventListener('click', () => {
+    showScreen(homeScreen);
   });
 
   backRankingButton.addEventListener('click', () => {
@@ -1401,7 +1424,7 @@ function setupShell() {
   saveDeckButton.addEventListener('click', saveDeck);
 
   function showScreen(target) {
-    for (const screen of [authScreen, homeScreen, roomScreen, encyclopediaScreen, rankingScreen, tierScreen, deckScreen, gameScreen]) {
+    for (const screen of [authScreen, homeScreen, updateHistoryScreen, roomScreen, encyclopediaScreen, rankingScreen, tierScreen, deckScreen, gameScreen]) {
       screen.classList.toggle('hidden', screen !== target);
     }
   }
@@ -1814,30 +1837,44 @@ function renderPatchNotices() {
   if (!list) return;
   list.replaceChildren();
 
-  for (const notice of PATCH_NOTICES) {
-    const article = document.createElement('article');
-    article.className = 'patch-notice';
-
-    const header = document.createElement('div');
-    header.className = 'patch-notice-header';
-
-    const title = document.createElement('strong');
-    title.textContent = notice.title;
-    const date = document.createElement('time');
-    date.textContent = notice.date;
-
-    header.append(title, date);
-
-    const items = document.createElement('ul');
-    for (const itemText of notice.items) {
-      const item = document.createElement('li');
-      item.textContent = itemText;
-      items.appendChild(item);
-    }
-
-    article.append(header, items);
-    list.appendChild(article);
+  if (PATCH_NOTICES.length > 0) {
+    list.appendChild(patchNoticeArticle(PATCH_NOTICES[0]));
   }
+}
+
+function renderUpdateHistory() {
+  const list = document.getElementById('update-history-list');
+  if (!list) return;
+  list.replaceChildren();
+
+  for (const notice of PATCH_NOTICES) {
+    list.appendChild(patchNoticeArticle(notice));
+  }
+}
+
+function patchNoticeArticle(notice) {
+  const article = document.createElement('article');
+  article.className = 'patch-notice';
+
+  const header = document.createElement('div');
+  header.className = 'patch-notice-header';
+
+  const title = document.createElement('strong');
+  title.textContent = notice.title;
+  const date = document.createElement('time');
+  date.textContent = notice.date;
+
+  header.append(title, date);
+
+  const items = document.createElement('ul');
+  for (const itemText of notice.items) {
+    const item = document.createElement('li');
+    item.textContent = itemText;
+    items.appendChild(item);
+  }
+
+  article.append(header, items);
+  return article;
 }
 
 function renderTierList(errorMessage = '') {

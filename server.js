@@ -38,6 +38,7 @@ const TOWER_HP = {
 };
 const BEST_FRIEND_PAIR = ['baduk', 'johyunwoo'];
 const BEST_FRIEND_COMBO_COST = 8;
+const KKONGHO_MAX_ELIXIR_BONUS = 2;
 const ROOM_MODES = {
   '1v1': { key: '1v1', label: '1대1', maxPlayers: 2 },
   '2v2': { key: '2v2', label: '2대2', maxPlayers: 4 }
@@ -80,9 +81,10 @@ const CARDS = {
     attackMs: 0,
     radius: 15,
     healer: true,
-    healPerSecond: 52.5,
+    healPerSecond: 47.25,
     healRange: 90,
-    followDistance: 72
+    followDistance: 72,
+    decayPerSecond: 8
   },
   baduk: {
     id: 'baduk',
@@ -166,7 +168,7 @@ const CARDS = {
     name: '성주',
     cost: 3,
     role: '원거리 딜러',
-    maxHp: 280,
+    maxHp: 224,
     damage: 66,
     range: 185,
     speed: 42,
@@ -191,7 +193,7 @@ const CARDS = {
     name: '대.근.영',
     cost: 10,
     role: '탱커 소환',
-    maxHp: 1800,
+    maxHp: 2160,
     damage: 90,
     range: 43,
     speed: 41,
@@ -199,7 +201,7 @@ const CARDS = {
     radius: 24,
     oneUse: true,
     tankMinionId: 'geunyoungTank',
-    spawnMinionMs: 2000
+    spawnMinionMs: 1500
   },
   kimrui: {
     id: 'kimrui',
@@ -258,8 +260,8 @@ const CARDS = {
     cost: 0,
     role: '소환 탱커',
     playable: false,
-    maxHp: 300,
-    damage: 38,
+    maxHp: 240,
+    damage: 36,
     range: 32,
     speed: 37,
     attackMs: 1155,
@@ -814,6 +816,7 @@ function createPlayer(slot) {
     socketId: null,
     connected: false,
     elixir: 5,
+    maxElixir: MAX_ELIXIR,
     hand: [],
     cycle: [],
     usedOneTimeCards: {},
@@ -829,6 +832,7 @@ function clearRoomPlayer(player) {
 function resetPlayerForMatch(player) {
   const deck = deckForPlayer(player.userId);
   player.elixir = 5;
+  player.maxElixir = MAX_ELIXIR;
   player.hand = deck.slice(0, 4);
   player.cycle = deck.slice(4);
   player.usedOneTimeCards = {};
@@ -859,20 +863,22 @@ function shuffle(items) {
   return items;
 }
 
-function createTowers() {
+function createTowers(mode = '1v1') {
+  const hpMultiplier = mode === '2v2' ? 1.5 : 1;
   return [
-    createTower(0, 'king', ARENA.width / 2, 560),
-    createTower(0, 'princess-left', 255, 492),
-    createTower(0, 'princess-right', 645, 492),
-    createTower(1, 'king', ARENA.width / 2, 60),
-    createTower(1, 'princess-left', 255, 128),
-    createTower(1, 'princess-right', 645, 128)
+    createTower(0, 'king', ARENA.width / 2, 560, hpMultiplier),
+    createTower(0, 'princess-left', 255, 492, hpMultiplier),
+    createTower(0, 'princess-right', 645, 492, hpMultiplier),
+    createTower(1, 'king', ARENA.width / 2, 60, hpMultiplier),
+    createTower(1, 'princess-left', 255, 128, hpMultiplier),
+    createTower(1, 'princess-right', 645, 128, hpMultiplier)
   ];
 }
 
-function createTower(owner, type, x, y) {
+function createTower(owner, type, x, y, hpMultiplier = 1) {
   const isKing = type === 'king';
-  const maxHp = isKing ? TOWER_HP.king : TOWER_HP.princess;
+  const baseHp = isKing ? TOWER_HP.king : TOWER_HP.princess;
+  const maxHp = Math.round(baseHp * hpMultiplier);
   return {
     entity: 'tower',
     id: `p${owner}-${type}`,
@@ -906,7 +912,7 @@ function startMatch(room) {
   const now = Date.now();
   game.status = 'playing';
   game.message = '전투 중';
-  game.towers = createTowers();
+  game.towers = createTowers(room.mode);
   game.units = [];
   game.nextUnitId = 1;
   game.startedAt = now;
@@ -966,6 +972,7 @@ function playCard(room, slot, payload = {}) {
   }
 
   if (card.id === 'kkongho') {
+    player.maxElixir = Math.max(player.maxElixir || MAX_ELIXIR, MAX_ELIXIR + KKONGHO_MAX_ELIXIR_BONUS);
     triggerAscension(room, player.team, x, y);
     broadcastState(room);
     return;
@@ -1129,7 +1136,7 @@ function tickGame(room, now, deltaSeconds) {
 
   const elixirMultiplier = getElixirMultiplier(game, now);
   for (const player of game.players) {
-    player.elixir = Math.min(MAX_ELIXIR, player.elixir + ELIXIR_PER_SECOND * elixirMultiplier * deltaSeconds);
+    player.elixir = Math.min(player.maxElixir || MAX_ELIXIR, player.elixir + ELIXIR_PER_SECOND * elixirMultiplier * deltaSeconds);
   }
 
   updateUnits(room, now, deltaSeconds);
@@ -1149,6 +1156,11 @@ function updateUnits(room, now, deltaSeconds) {
 
     const card = CARDS[unit.cardId];
     if (!card) continue;
+
+    if (card.decayPerSecond) {
+      unit.hp = Math.max(0, unit.hp - card.decayPerSecond * deltaSeconds);
+      if (unit.hp <= 0) continue;
+    }
 
     if (unit.attachedById && !findEntityById(game, unit.attachedById)) {
       unit.attachedById = null;
@@ -1914,6 +1926,7 @@ function serializeState(room, viewerSlot = null) {
       tierIcon: player.tierIcon,
       connected: player.connected,
       elixir: Number(player.elixir.toFixed(2)),
+      maxElixir: player.maxElixir || MAX_ELIXIR,
       hand: player.slot === viewerSlot ? player.hand : [],
       handSize: player.hand.filter(Boolean).length,
       usedOneTimeCards: Object.keys(player.usedOneTimeCards || {}),
