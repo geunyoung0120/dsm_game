@@ -8,15 +8,74 @@
   </head>
   <body>
     <main class="shell">
-      <section id="home-screen" class="home-screen">
+      <section id="auth-screen" class="auth-screen">
+        <div class="home-panel auth-panel">
+          <p class="eyebrow">계정 입장</p>
+          <h1>친구들의 타워 디펜스</h1>
+          <div class="auth-tabs" role="tablist" aria-label="계정 메뉴">
+            <button id="show-login" type="button" class="tab active">로그인</button>
+            <button id="show-signup" type="button" class="tab secondary">회원가입</button>
+          </div>
+          <form id="auth-form" class="stack-form">
+            <label>
+              <span>이름</span>
+              <input id="auth-username" name="username" autocomplete="username" maxlength="20" required />
+            </label>
+            <label>
+              <span>비밀번호</span>
+              <input id="auth-password" name="password" type="password" autocomplete="current-password" maxlength="72" required />
+            </label>
+            <button id="auth-submit" type="submit">로그인</button>
+          </form>
+          <p id="auth-message" class="form-message" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section id="home-screen" class="home-screen hidden">
         <div class="home-panel">
           <p class="eyebrow">실시간 1대1 타워 디펜스</p>
           <h1>친구들의 타워 디펜스</h1>
-          <p class="home-copy">두 명이 접속하면 자동으로 경기가 시작됩니다. 12장 카드풀에서 8장을 뽑아 싸웁니다.</p>
+          <div id="profile-summary" class="profile-summary"></div>
+          <p class="home-copy">방을 만들거나 참가하면 두 명이 모였을 때 자동으로 경기가 시작됩니다.</p>
           <div class="home-actions">
             <button id="start-game" type="button">게임 시작</button>
             <button id="open-encyclopedia" type="button" class="secondary">캐릭터 확인</button>
+            <button id="logout" type="button" class="secondary">로그아웃</button>
           </div>
+        </div>
+      </section>
+
+      <section id="room-screen" class="room-screen hidden">
+        <header class="room-header">
+          <div>
+            <p class="eyebrow">대전 방</p>
+            <h1>방 선택</h1>
+          </div>
+          <button id="back-main" type="button" class="secondary">뒤로가기</button>
+        </header>
+        <div class="room-layout">
+          <section class="room-create">
+            <h2>방 만들기</h2>
+            <form id="create-room-form" class="stack-form">
+              <label>
+                <span>방 이름</span>
+                <input id="room-name" name="roomName" maxlength="24" required />
+              </label>
+              <label>
+                <span>방 비밀번호</span>
+                <input id="room-password" name="roomPassword" type="password" maxlength="32" placeholder="없으면 비워두기" />
+              </label>
+              <button type="submit">방 만들기</button>
+            </form>
+            <p id="room-message" class="form-message" aria-live="polite"></p>
+          </section>
+          <section class="room-list-panel">
+            <div class="room-list-title">
+              <h2>대기 중인 방</h2>
+              <button id="refresh-rooms" type="button" class="secondary">새로고침</button>
+            </div>
+            <div id="room-list" class="room-list"></div>
+          </section>
         </div>
       </section>
 
@@ -31,8 +90,14 @@
         <div id="character-grid" class="character-grid"></div>
       </section>
 
-      <section id="game-frame" class="game-frame hidden">
-        <div id="game"></div>
+      <section id="game-screen" class="game-screen hidden">
+        <div class="game-toolbar">
+          <div id="game-room-title">전투 대기</div>
+          <button id="leave-room" type="button" class="secondary">로비로 나가기</button>
+        </div>
+        <div id="game-frame" class="game-frame">
+          <div id="game"></div>
+        </div>
       </section>
     </main>
     <script src="/socket.io/socket.io.js"></script>

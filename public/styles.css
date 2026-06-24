@@ -31,11 +31,15 @@ body {
   display: none !important;
 }
 
+.auth-screen,
 .home-screen,
-.encyclopedia-screen {
+.room-screen,
+.encyclopedia-screen,
+.game-screen {
   width: min(100%, 1040px);
 }
 
+.auth-screen,
 .home-screen {
   min-height: min(720px, calc(100vh - 32px));
   display: grid;
@@ -48,6 +52,10 @@ body {
   background: #1d2024;
   border: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.38);
+}
+
+.auth-panel {
+  width: min(100%, 520px);
 }
 
 .eyebrow {
@@ -77,6 +85,40 @@ h1 {
   margin-top: 28px;
 }
 
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.profile-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.profile-stat {
+  min-height: 74px;
+  padding: 12px;
+  background: #262b33;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+}
+
+.profile-stat span {
+  display: block;
+  color: #bfc6d1;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.profile-stat strong {
+  display: block;
+  margin-top: 7px;
+  font-size: 19px;
+}
+
 button {
   min-height: 44px;
   padding: 0 18px;
@@ -89,6 +131,17 @@ button {
   cursor: pointer;
 }
 
+button.tab {
+  background: #2f343b;
+  color: #f7f2e8;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+button.tab.active {
+  background: #f7f2e8;
+  color: #111318;
+}
+
 button.secondary {
   background: #2f343b;
   color: #f7f2e8;
@@ -99,11 +152,54 @@ button:hover {
   filter: brightness(1.08);
 }
 
+.stack-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.stack-form label {
+  display: grid;
+  gap: 7px;
+  color: #d6d0c6;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: #121417;
+  color: #f7f2e8;
+  font: inherit;
+}
+
+input:focus {
+  outline: 2px solid #caa862;
+  outline-offset: 2px;
+}
+
+.form-message {
+  min-height: 20px;
+  margin: 12px 0 0;
+  color: #ffd5d1;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
 .encyclopedia-screen {
   padding: 20px 0 40px;
 }
 
-.encyclopedia-header {
+.room-screen {
+  padding: 20px 0 40px;
+}
+
+.encyclopedia-header,
+.room-header {
   display: flex;
   align-items: end;
   justify-content: space-between;
@@ -111,8 +207,71 @@ button:hover {
   margin-bottom: 20px;
 }
 
-.encyclopedia-header h1 {
+.encyclopedia-header h1,
+.room-header h1 {
   font-size: clamp(30px, 5vw, 48px);
+}
+
+.room-layout {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.room-create,
+.room-list-panel {
+  padding: 18px;
+  background: #1d2024;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.room-create h2,
+.room-list-panel h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.room-list-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.room-list {
+  display: grid;
+  gap: 10px;
+}
+
+.empty-list {
+  margin: 0;
+  padding: 24px;
+  color: #d6d0c6;
+  background: #262b33;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+}
+
+.room-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  background: #262b33;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+}
+
+.room-card h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.room-meta {
+  margin: 6px 0 0;
+  color: #bfc6d1;
+  font-size: 13px;
 }
 
 .character-grid {
@@ -165,6 +324,20 @@ button:hover {
   line-height: 1.55;
 }
 
+.game-screen {
+  padding: 16px 0;
+}
+
+.game-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: #f7f2e8;
+  font-weight: 800;
+}
+
 .game-frame {
   width: min(100%, 1040px);
   aspect-ratio: 900 / 760;
@@ -192,10 +365,22 @@ canvas {
     padding: 24px;
   }
 
+.profile-summary,
+.room-layout {
+    grid-template-columns: 1fr;
+  }
+
   .home-actions,
-  .encyclopedia-header {
+  .encyclopedia-header,
+  .room-header,
+  .game-toolbar,
+  .room-card {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .room-card {
+    display: flex;
   }
 
   button {

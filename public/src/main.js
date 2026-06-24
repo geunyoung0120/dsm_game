@@ -134,7 +134,31 @@ const TOWER_THEME = {
   1: { fill: 0xd94f45, stroke: 0xffd5d1 }
 };
 
+const ASCENSION_REACTIONS = {
+  zzangga: '폭소',
+  bbatman: '당황',
+  baduk: '무표정',
+  kkongho: '평온',
+  yushin: '돌진',
+  jimin: '드립 중단',
+  mythos: '각성?',
+  peach: '놀람',
+  seongjoo: '키보드 정지',
+  johyunwoo: '덤덤',
+  kimgeunyoung: '침착',
+  kimrui: '불안'
+};
+
 let phaserGame = null;
+let socket = null;
+let activeScene = null;
+let serverCards = {};
+let latestState = null;
+let currentUser = null;
+let currentRoom = null;
+let currentSlot = null;
+let authMode = 'login';
+let ascensionAudioUntil = 0;
 
 class BattleScene extends Phaser.Scene {
   constructor() {
@@ -153,29 +177,36 @@ class BattleScene extends Phaser.Scene {
 
   create() {
     this.g = this.add.graphics();
-    this.socket = io();
-
-    this.socket.on('welcome', (payload) => {
-      this.slot = payload.slot;
-      this.cards = payload.cards || {};
+    this.socket = getSocket();
+    this.slot = currentSlot;
+    this.cards = serverCards;
+    activeScene = this;
+    if (latestState) {
+      this.receiveState(latestState);
+    }
+    this.events.once('shutdown', () => {
+      if (activeScene === this) activeScene = null;
     });
-
-    this.socket.on('notice', (message) => {
-      this.notice = message;
-    });
-
-    this.socket.on('state', (state) => {
-      this.state = state;
-      if (!this.cards || Object.keys(this.cards).length === 0) {
-        this.cards = buildFallbackCards(state);
-      }
-    });
-
-    this.socket.on('effect', (effect) => {
-      this.effects.push({ ...effect, bornAt: this.time.now });
-    });
-
     this.input.on('pointerdown', (pointer) => this.handlePointer(pointer));
+  }
+
+  receiveWelcome(payload) {
+    this.cards = payload.cards || {};
+  }
+
+  receiveState(state) {
+    this.state = state;
+    this.slot = currentSlot;
+    if (!this.cards || Object.keys(this.cards).length === 0) {
+      this.cards = buildFallbackCards(state);
+    }
+  }
+
+  receiveEffect(effect) {
+    if (effect.type === 'ascension-start') {
+      playAscensionTone();
+    }
+    this.effects.push({ ...effect, bornAt: this.time ? this.time.now : 0 });
   }
 
   update() {
@@ -199,7 +230,7 @@ class BattleScene extends Phaser.Scene {
   }
 
   handlePointer(pointer) {
-    if (!this.state || this.slot === null || this.slot === undefined) return;
+    if (!this.socket || !this.state || this.slot === null || this.slot === undefined) return;
 
     const cardIndex = this.cardBounds.findIndex((bounds) => {
       return pointer.x >= bounds.x && pointer.x <= bounds.x + bounds.w && pointer.y >= bounds.y && pointer.y <= bounds.y + bounds.h;
@@ -500,7 +531,15 @@ class BattleScene extends Phaser.Scene {
         this.g.fillRect(0, 0, VIEW.width, ARENA_H);
         this.g.lineStyle(8, 0xfff2a8, alpha);
         this.g.lineBetween(effect.x, 0, effect.x, ARENA_H);
+        this.g.fillStyle(0xfff7cb, 0.95);
+        this.g.fillCircle(effect.x, ARENA_H / 2 + 22, 16);
+        this.g.fillRoundedRect(effect.x - 12, ARENA_H / 2 + 38, 24, 28, 7);
+        this.g.lineStyle(3, 0xfff7cb, 0.95);
+        this.g.lineBetween(effect.x - 10, ARENA_H / 2 + 44, effect.x - 30, ARENA_H / 2 + 56);
+        this.g.lineBetween(effect.x + 10, ARENA_H / 2 + 44, effect.x + 30, ARENA_H / 2 + 56);
+        this.drawCenteredText('기도', effect.x, ARENA_H / 2 + 72, 15, '#fff7cb');
         this.drawCenteredText('대승천', VIEW.width / 2, ARENA_H / 2, 42, '#fff7cb');
+        this.drawAscensionReactions(alpha);
       } else if (effect.type === 'ascension-end') {
         this.g.fillStyle(0xfff8d3, alpha * 0.75);
         this.g.fillRect(0, 0, VIEW.width, ARENA_H);
@@ -624,6 +663,16 @@ class BattleScene extends Phaser.Scene {
     }
   }
 
+  drawAscensionReactions(alpha) {
+    if (!this.state || !this.state.units) return;
+    for (const unit of this.state.units) {
+      const label = ASCENSION_REACTIONS[unit.cardId] || '승천';
+      this.g.lineStyle(2, 0xfff7cb, alpha * 0.7);
+      this.g.lineBetween(unit.x, unit.y - 18, unit.x, Math.max(12, unit.y - 60));
+      this.drawCenteredText(label, unit.x, Math.max(8, unit.y - 76), 11, '#fff7cb');
+    }
+  }
+
   drawAttackTrail(effect, color, alpha, t, width) {
     if (!Number.isFinite(effect.fromX) || !Number.isFinite(effect.fromY)) return;
 
@@ -643,12 +692,14 @@ class BattleScene extends Phaser.Scene {
     const doubleElixir = (this.state.elixirMultiplier || 1) > 1;
 
     this.g.fillStyle(0x111318, 0.82);
-    this.g.fillRoundedRect(16, 12, 260, 58, 8);
-    this.g.fillRoundedRect(624, 12, 260, 58, 8);
+    this.g.fillRoundedRect(16, 12, 272, 66, 8);
+    this.g.fillRoundedRect(612, 12, 272, 66, 8);
     this.g.fillRoundedRect(360, 12, 180, doubleElixir ? 74 : 58, 8);
 
-    this.drawText(`1번 체력 ${p0 ? p0.totalTowerHp : 0}`, 32, 24, 16, '#cbe1ff');
-    this.drawText(`2번 체력 ${p1 ? p1.totalTowerHp : 0}`, 640, 24, 16, '#ffd5d1');
+    this.drawText(playerTitle(p0, 1), 32, 22, 14, '#cbe1ff');
+    this.drawText(`체력 ${p0 ? p0.totalTowerHp : 0}  트로피 ${p0 ? p0.trophies : 0}`, 32, 48, 12, '#d6d0c6');
+    this.drawText(playerTitle(p1, 2), 628, 22, 14, '#ffd5d1');
+    this.drawText(`체력 ${p1 ? p1.totalTowerHp : 0}  트로피 ${p1 ? p1.trophies : 0}`, 628, 48, 12, '#d6d0c6');
     this.drawCenteredText(this.state.suddenDeath ? '서든' : time, 450, doubleElixir ? 20 : 27, 22, '#f7f2e8');
     if (doubleElixir) {
       this.g.fillStyle(0xb86dff, 1);
@@ -661,9 +712,9 @@ class BattleScene extends Phaser.Scene {
 
     if (me) {
       this.drawElixir(me.elixir);
-      this.drawText(`내 진영: ${this.slot === 0 ? '아래' : '위'}`, 32, 50, 12, '#d6d0c6');
+      this.drawText(`내 진영: ${this.slot === 0 ? '아래' : '위'}`, 32, 68, 11, '#d6d0c6');
     } else {
-      this.drawCenteredText(this.notice || '관전 중', 450, 650, 18, '#f7f2e8');
+      this.drawCenteredText(this.notice || '방 대기 중', 450, 650, 18, '#f7f2e8');
     }
   }
 
@@ -727,16 +778,22 @@ class BattleScene extends Phaser.Scene {
       this.g.fillStyle(0x0c0e11, 0.62);
       this.g.fillRect(0, 0, VIEW.width, ARENA_H);
       this.drawCenteredText('상대 접속 대기 중', VIEW.width / 2, 286, 30, '#f7f2e8');
-      this.drawCenteredText('두 번째 브라우저 탭을 열면 자동으로 시작됩니다.', VIEW.width / 2, 326, 16, '#d6d0c6');
+      this.drawCenteredText('다른 플레이어가 이 방에 참가하면 자동으로 시작됩니다.', VIEW.width / 2, 326, 16, '#d6d0c6');
     }
 
     if (this.state.status === 'ended') {
       this.g.fillStyle(0x0c0e11, 0.68);
       this.g.fillRect(0, 0, VIEW.width, ARENA_H);
-      const result = this.state.winner === null ? '무승부' : `플레이어 ${this.state.winner + 1} 승리`;
+      const winner = this.state.winner === null ? null : this.state.players[this.state.winner];
+      const result = winner ? `${winner.username || `플레이어 ${this.state.winner + 1}`} 승리` : '무승부';
       this.drawCenteredText(result, VIEW.width / 2, 276, 34, '#f7f2e8');
       this.drawCenteredText(this.state.reason || '', VIEW.width / 2, 318, 17, '#d6d0c6');
-      this.drawCenteredText('새 경기를 시작하려면 새로고침하거나 서버를 재시작하세요.', VIEW.width / 2, 358, 14, '#d6d0c6');
+      if (this.state.trophyChange) {
+        const change = this.state.trophyChange;
+        const sign = change.delta > 0 ? '+' : '';
+        this.drawCenteredText(`트로피 ${sign}${change.delta} | 현재 ${change.trophies}개 | ${change.tierIcon} ${change.tier}`, VIEW.width / 2, 356, 15, '#fff4a7');
+      }
+      this.drawCenteredText('위쪽 버튼으로 로비에 돌아갈 수 있습니다.', VIEW.width / 2, 386, 14, '#d6d0c6');
     }
   }
 
@@ -833,33 +890,99 @@ function buildFallbackCards(state) {
 }
 
 function setupShell() {
+  const authScreen = document.getElementById('auth-screen');
   const homeScreen = document.getElementById('home-screen');
+  const roomScreen = document.getElementById('room-screen');
   const encyclopediaScreen = document.getElementById('encyclopedia-screen');
-  const gameFrame = document.getElementById('game-frame');
+  const gameScreen = document.getElementById('game-screen');
   const startButton = document.getElementById('start-game');
   const encyclopediaButton = document.getElementById('open-encyclopedia');
   const backButton = document.getElementById('back-home');
+  const backMainButton = document.getElementById('back-main');
+  const logoutButton = document.getElementById('logout');
+  const leaveRoomButton = document.getElementById('leave-room');
+  const authForm = document.getElementById('auth-form');
+  const showLogin = document.getElementById('show-login');
+  const showSignup = document.getElementById('show-signup');
+  const createRoomForm = document.getElementById('create-room-form');
+  const refreshRoomsButton = document.getElementById('refresh-rooms');
 
   renderCharacterGrid();
 
+  showScreen(authScreen);
+  loadSession();
+
+  showLogin.addEventListener('click', () => setAuthMode('login'));
+  showSignup.addEventListener('click', () => setAuthMode('signup'));
+
+  authForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    await submitAuth();
+  });
+
   startButton.addEventListener('click', () => {
-    homeScreen.classList.add('hidden');
-    encyclopediaScreen.classList.add('hidden');
-    gameFrame.classList.remove('hidden');
-    startGame();
+    showScreen(roomScreen);
+    connectSocket();
+    requestRooms();
   });
 
   encyclopediaButton.addEventListener('click', () => {
-    homeScreen.classList.add('hidden');
-    gameFrame.classList.add('hidden');
-    encyclopediaScreen.classList.remove('hidden');
+    showScreen(encyclopediaScreen);
   });
 
   backButton.addEventListener('click', () => {
-    encyclopediaScreen.classList.add('hidden');
-    gameFrame.classList.add('hidden');
-    homeScreen.classList.remove('hidden');
+    showScreen(homeScreen);
   });
+
+  backMainButton.addEventListener('click', () => {
+    showScreen(homeScreen);
+  });
+
+  logoutButton.addEventListener('click', async () => {
+    if (socket) {
+      socket.disconnect();
+      socket = null;
+    }
+    await apiRequest('/api/logout', { method: 'POST' });
+    currentUser = null;
+    currentRoom = null;
+    currentSlot = null;
+    latestState = null;
+    showScreen(authScreen);
+  });
+
+  createRoomForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const name = document.getElementById('room-name').value;
+    const password = document.getElementById('room-password').value;
+    connectSocket();
+    getSocket().emit('create-room', { name, password });
+  });
+
+  refreshRoomsButton.addEventListener('click', requestRooms);
+
+  leaveRoomButton.addEventListener('click', () => {
+    if (socket) socket.emit('leave-room');
+    currentRoom = null;
+    currentSlot = null;
+    latestState = null;
+    showScreen(roomScreen);
+    requestRooms();
+  });
+
+  function showScreen(target) {
+    for (const screen of [authScreen, homeScreen, roomScreen, encyclopediaScreen, gameScreen]) {
+      screen.classList.toggle('hidden', screen !== target);
+    }
+  }
+
+  window.showGameScreen = () => {
+    showScreen(gameScreen);
+    startGame();
+  };
+
+  window.showHomeScreen = () => showScreen(homeScreen);
+  window.showRoomScreen = () => showScreen(roomScreen);
 }
 
 function startGame() {
@@ -877,6 +1000,240 @@ function startGame() {
     },
     scene: BattleScene
   });
+}
+
+async function loadSession() {
+  try {
+    const data = await apiRequest('/api/me');
+    currentUser = data.user;
+    renderProfile();
+    connectSocket();
+    window.showHomeScreen();
+  } catch {
+    currentUser = null;
+  }
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  const isLogin = mode === 'login';
+  document.getElementById('show-login').classList.toggle('active', isLogin);
+  document.getElementById('show-signup').classList.toggle('active', !isLogin);
+  document.getElementById('auth-submit').textContent = isLogin ? '로그인' : '회원가입';
+  document.getElementById('auth-password').autocomplete = isLogin ? 'current-password' : 'new-password';
+  setMessage('auth-message', '');
+}
+
+async function submitAuth() {
+  const username = document.getElementById('auth-username').value;
+  const password = document.getElementById('auth-password').value;
+  try {
+    const data = await apiRequest(`/api/${authMode}`, {
+      method: 'POST',
+      body: JSON.stringify({ username, password })
+    });
+    currentUser = data.user;
+    renderProfile();
+    connectSocket();
+    window.showHomeScreen();
+  } catch (error) {
+    setMessage('auth-message', error.message || '처리하지 못했습니다.');
+  }
+}
+
+async function apiRequest(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    ...options
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || '요청에 실패했습니다.');
+  }
+  return data;
+}
+
+function connectSocket() {
+  if (socket && socket.connected) return socket;
+  if (socket) socket.disconnect();
+
+  socket = io({ transports: ['websocket'] });
+  socket.on('welcome', (payload) => {
+    serverCards = payload.cards || {};
+    if (payload.user) {
+      currentUser = payload.user;
+      renderProfile();
+    }
+    if (activeScene) activeScene.receiveWelcome(payload);
+  });
+  socket.on('profile', (profile) => {
+    currentUser = profile;
+    renderProfile();
+  });
+  socket.on('rooms', renderRoomList);
+  socket.on('room-joined', (payload) => {
+    currentRoom = payload.room;
+    currentSlot = payload.slot;
+    setMessage('room-message', '');
+    updateGameRoomTitle();
+    window.showGameScreen();
+  });
+  socket.on('room-left', () => {
+    currentRoom = null;
+    currentSlot = null;
+    latestState = null;
+    window.showRoomScreen();
+  });
+  socket.on('room-error', (message) => {
+    setMessage('room-message', message);
+  });
+  socket.on('state', (state) => {
+    latestState = state;
+    if (state.room) currentRoom = state.room;
+    updateGameRoomTitle();
+    if (activeScene) activeScene.receiveState(state);
+  });
+  socket.on('effect', (effect) => {
+    if (activeScene) activeScene.receiveEffect(effect);
+  });
+  socket.on('connect_error', (error) => {
+    setMessage('room-message', error.message || '서버에 연결하지 못했습니다.');
+  });
+  return socket;
+}
+
+function getSocket() {
+  return socket;
+}
+
+async function requestRooms() {
+  try {
+    const data = await apiRequest('/api/rooms');
+    renderRoomList(data.rooms || []);
+  } catch (error) {
+    setMessage('room-message', error.message || '방 목록을 가져오지 못했습니다.');
+  }
+}
+
+function renderProfile() {
+  const summary = document.getElementById('profile-summary');
+  if (!summary || !currentUser) return;
+  summary.replaceChildren(
+    profileStat('이름', currentUser.username),
+    profileStat('트로피', `${currentUser.trophies}개`),
+    profileStat('티어', `${currentUser.tierIcon} ${currentUser.tier}`)
+  );
+}
+
+function profileStat(label, value) {
+  const item = document.createElement('div');
+  item.className = 'profile-stat';
+  const caption = document.createElement('span');
+  caption.textContent = label;
+  const content = document.createElement('strong');
+  content.textContent = value;
+  item.append(caption, content);
+  return item;
+}
+
+function renderRoomList(rooms) {
+  const list = document.getElementById('room-list');
+  if (!list) return;
+  list.replaceChildren();
+
+  if (!rooms || rooms.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = '대기 중인 방이 없습니다.';
+    list.appendChild(empty);
+    return;
+  }
+
+  for (const room of rooms) {
+    const card = document.createElement('article');
+    card.className = 'room-card';
+
+    const info = document.createElement('div');
+    const title = document.createElement('h3');
+    title.textContent = `${room.locked ? '잠금 ' : ''}${room.name}`;
+    const meta = document.createElement('p');
+    meta.className = 'room-meta';
+    meta.textContent = `${room.playerCount}/${room.maxPlayers}명 대기`;
+    info.append(title, meta);
+
+    const password = document.createElement('input');
+    password.type = 'password';
+    password.maxLength = 32;
+    password.placeholder = room.locked ? '비밀번호' : '공개 방';
+    password.disabled = !room.locked;
+
+    const joinButton = document.createElement('button');
+    joinButton.type = 'button';
+    joinButton.textContent = '참가';
+    joinButton.addEventListener('click', () => {
+      connectSocket();
+      getSocket().emit('join-room', {
+        roomId: room.id,
+        password: password.value
+      });
+    });
+
+    card.append(info, password, joinButton);
+    list.appendChild(card);
+  }
+}
+
+function updateGameRoomTitle() {
+  const title = document.getElementById('game-room-title');
+  if (!title) return;
+  const roomName = currentRoom ? currentRoom.name : '전투 대기';
+  const side = currentSlot === 0 ? '아래 진영' : currentSlot === 1 ? '위 진영' : '대기';
+  title.textContent = `${roomName} · ${side}`;
+}
+
+function setMessage(id, message) {
+  const target = document.getElementById(id);
+  if (target) target.textContent = message || '';
+}
+
+function playerTitle(player, fallbackNumber) {
+  if (!player) return `${fallbackNumber}번`;
+  const name = player.username || `${fallbackNumber}번`;
+  const tier = player.tier ? `${player.tierIcon || ''} ${player.tier}` : '';
+  return `${name} ${tier}`.trim();
+}
+
+function playAscensionTone() {
+  const now = Date.now();
+  if (now < ascensionAudioUntil) return;
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return;
+
+  const context = new AudioContext();
+  const master = context.createGain();
+  master.gain.setValueAtTime(0.0001, context.currentTime);
+  master.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 0.08);
+  master.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 2.3);
+  master.connect(context.destination);
+
+  const notes = [392, 523.25, 659.25, 783.99, 1046.5];
+  notes.forEach((frequency, index) => {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.0001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.18, context.currentTime + 0.12 + index * 0.06);
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 1.5 + index * 0.12);
+    oscillator.connect(gain);
+    gain.connect(master);
+    oscillator.start(context.currentTime + index * 0.04);
+    oscillator.stop(context.currentTime + 2.4);
+  });
+
+  setTimeout(() => context.close(), 2600);
+  ascensionAudioUntil = now + 2600;
 }
 
 function renderCharacterGrid() {
