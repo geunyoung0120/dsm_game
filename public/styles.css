@@ -1740,6 +1740,89 @@ html[data-theme="light"] .lobby-hero {
   overflow: hidden;
 }
 
+.battle-chat-panel {
+  width: min(100%, 1120px);
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--card-shadow);
+}
+
+.battle-chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.battle-chat-head strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.battle-chat-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.battle-chat-log {
+  height: 118px;
+  padding: 8px;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.battle-chat-empty {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.battle-chat-message {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.battle-chat-meta {
+  color: var(--soft);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.battle-chat-message.team .battle-chat-meta {
+  color: var(--gold);
+}
+
+.battle-chat-text {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.battle-chat-form {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 72px;
+  gap: 8px;
+}
+
+.battle-chat-form select,
+.battle-chat-form input,
+.battle-chat-form button {
+  min-height: 38px;
+}
+
 #game {
   width: 100%;
   height: 100%;
@@ -1759,6 +1842,14 @@ canvas {
   .deck-builder-layout,
   .room-layout {
     grid-template-columns: 1fr;
+  }
+
+  .battle-chat-form {
+    grid-template-columns: 84px minmax(0, 1fr);
+  }
+
+  .battle-chat-form button {
+    grid-column: 1 / -1;
   }
 
   .auth-intro {

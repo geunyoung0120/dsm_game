@@ -16,6 +16,22 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: '전투 채팅과 대.근.영 왕의 귀환',
+    date: '2026.06.25',
+    items: [
+      '전투 중 전체 채팅 추가, 2대2 팀 채팅 추가',
+      '대.근.영 등장 시 왕의 귀환 임팩트와 전투 시간 +30초',
+      '대.근.영 공격력 10% 감소, 광주 탱크 공격력 40% 감소'
+    ],
+    details: [
+      '전투 화면 아래 채팅창에서 상대와 대화할 수 있다. 2대2에서는 전체 채팅과 같은 팀에게만 보이는 팀 채팅을 선택할 수 있다.',
+      '대.근.영이 실제로 전장에 등장하면 왕의 귀환 임팩트가 깔리고 전투 시간이 30초 추가된다.',
+      '대.근.영이 X2 또는 X3 엘릭서 구간에 등장해 시간이 60초 또는 20초 밖으로 밀려나도, 추가된 30초 동안 당시 배율이 유지된다.',
+      '대.근.영 본체 공격력은 99에서 89로 낮췄고, 광주 탱크 공격력은 32에서 19로 낮췄다.',
+      '양쪽 킹타워가 같은 판정 틱에 동시에 파괴되면 특정 진영 승리가 아니라 무승부로 처리된다.'
+    ]
+  },
+  {
     title: '타워 집중과 힐 밸런스 조정',
     date: '2026.06.25',
     items: [
@@ -439,15 +455,16 @@ const CHARACTER_DETAILS = [
     type: '탱커 소환 + 근접 딜러',
     stats: [
       ['HP', '2376'],
-      ['공격력', '99'],
+      ['공격력', '89'],
       ['사거리', '43'],
       ['공격 주기', '1.155초'],
       ['이동속도', '41'],
-      ['광주 탱크', '1.5초마다 HP 211 / 공격력 32']
+      ['광주 탱크', '1.5초마다 HP 211 / 공격력 19'],
+      ['출격 효과', '전투 시간 +30초']
     ],
-    ability: '전장에 있는 동안 항상 1.5초마다 HP 211의 광주 탱크를 하나씩 소환한다. 본체는 HP 2376, 공격력 99의 근접 단일 공격을 한다.',
+    ability: '전장에 등장하는 순간 왕의 귀환 임팩트가 깔리며 전투 시간이 30초 추가된다. X2 또는 X3 엘릭서 구간에 등장했다면 추가된 30초 동안 그 배율이 유지된다. 전장에 있는 동안 항상 1.5초마다 HP 211, 공격력 19의 광주 탱크를 하나씩 소환한다. 본체는 HP 2376, 공격력 89의 근접 단일 공격을 한다.',
     appearance: '잘생긴 남학생이다.',
-    trait: '한 경기에서 한 번만 사용할 수 있다. 본체와 광주 탱크의 HP와 공격력이 10%씩 올라 후반 압박력이 조금 좋아졌다.'
+    trait: '한 경기에서 한 번만 사용할 수 있다. 본체와 광주 탱크의 공격력은 낮아졌지만, 전투 시간을 늘려 후반 변수를 만드는 카드가 됐다.'
   },
   {
     id: 'kimrui',
@@ -561,6 +578,7 @@ let latestSpectatorRooms = [];
 let deckCards = {};
 let selectedDeck = [];
 let showingSpectatorRooms = false;
+let battleChatMessages = [];
 
 class BattleScene extends Phaser.Scene {
   constructor() {
@@ -1233,6 +1251,8 @@ class BattleScene extends Phaser.Scene {
         this.g.lineStyle(3, 0xcbd3d8, alpha);
         this.g.strokeCircle(effect.x, effect.y, 12 + t * 30);
         this.drawCenteredText('호위', effect.x, effect.y - 26, 13, '#cbd3d8');
+      } else if (effect.type === 'king-return') {
+        this.drawKingReturnEffect(effect, t, alpha);
       } else if (effect.type === 'leech') {
         this.drawAttackTrail(effect, 0xe4d6ff, alpha, t, 3);
         this.g.lineStyle(4, 0xe4d6ff, alpha);
@@ -1301,6 +1321,46 @@ class BattleScene extends Phaser.Scene {
     } else {
       this.g.fillStyle(0xffffff, alpha);
       this.g.fillCircle(effect.x, effect.y, 8 + t * 16);
+    }
+  }
+
+  drawKingReturnEffect(effect, t, alpha) {
+    const x = FIELD_CENTER_X;
+    const y = ARENA_H / 2;
+    const ring = 90 + t * 190;
+    this.g.fillStyle(0xe8c547, alpha * 0.12);
+    this.g.fillCircle(x, y, ring);
+    this.g.lineStyle(8, 0xfff2ad, alpha);
+    this.g.strokeCircle(x, y, 58 + t * 78);
+    this.g.lineStyle(3, 0xffffff, alpha * 0.85);
+    for (let i = 0; i < 12; i += 1) {
+      const angle = (Math.PI * 2 * i) / 12;
+      const inner = 72 + t * 26;
+      const outer = 168 + t * 82;
+      this.g.lineBetween(
+        x + Math.cos(angle) * inner,
+        y + Math.sin(angle) * inner,
+        x + Math.cos(angle) * outer,
+        y + Math.sin(angle) * outer
+      );
+    }
+    this.g.fillStyle(0xe8c547, alpha * 0.92);
+    this.g.beginPath();
+    this.g.moveTo(x - 52, y - 20);
+    this.g.lineTo(x - 28, y - 58);
+    this.g.lineTo(x - 6, y - 24);
+    this.g.lineTo(x + 18, y - 62);
+    this.g.lineTo(x + 48, y - 20);
+    this.g.lineTo(x + 42, y + 22);
+    this.g.lineTo(x - 46, y + 22);
+    this.g.closePath();
+    this.g.fillPath();
+    this.g.lineStyle(4, 0xfff2ad, alpha);
+    this.g.strokePath();
+    this.drawCenteredText('왕의 귀환', x, y + 56, 30, '#fff2ad');
+    this.drawCenteredText('+30초', x, y + 90, 22, '#ffffff');
+    if (effect.multiplier > 1) {
+      this.drawCenteredText(`X${effect.multiplier} 유지`, x, y + 118, 17, '#f4ff91');
     }
   }
 
@@ -1642,6 +1702,7 @@ class BattleScene extends Phaser.Scene {
     if (type === 'best-friend-combo') return 1300;
     if (type === 'deploy') return 1100;
     if (type === 'summon-minion') return 700;
+    if (type === 'king-return') return 1800;
     if (type === 'leech') return 760;
     if (type === 'leech-detach') return 620;
     if (type === 'tower-shot') return 450;
@@ -1916,6 +1977,11 @@ function setupShell() {
     updateRematchControls(true);
   });
 
+  const battleChatForm = document.getElementById('battle-chat-form');
+  if (battleChatForm) {
+    battleChatForm.addEventListener('submit', sendBattleChat);
+  }
+
   saveDeckButton.addEventListener('click', saveDeck);
 
   function showScreen(target) {
@@ -2095,6 +2161,7 @@ function connectSocket() {
     currentRoom = payload.room;
     currentSlot = payload.slot;
     isSpectating = false;
+    resetBattleChat();
     setMessage('room-message', '');
     updateGameRoomTitle();
     window.showGameScreen();
@@ -2103,6 +2170,7 @@ function connectSocket() {
     currentRoom = payload.room;
     currentSlot = null;
     isSpectating = true;
+    resetBattleChat();
     setMessage('room-message', '');
     updateGameRoomTitle();
     window.showGameScreen();
@@ -2112,6 +2180,7 @@ function connectSocket() {
     currentSlot = null;
     isSpectating = false;
     latestState = null;
+    resetBattleChat();
     updateRematchControls();
     window.showRoomScreen();
   });
@@ -2122,9 +2191,16 @@ function connectSocket() {
     latestState = state;
     if (state.room) currentRoom = state.room;
     isSpectating = Boolean(state.spectator);
+    syncBattleChatMessages(state.chatMessages || []);
     updateGameRoomTitle();
     updateRematchControls();
     if (activeScene) activeScene.receiveState(state);
+  });
+  socket.on('battle-chat', (message) => {
+    appendBattleChatMessage(message);
+  });
+  socket.on('chat-error', (message) => {
+    setMessage('room-message', message || '');
   });
   socket.on('effect', (effect) => {
     if (activeScene) activeScene.receiveEffect(effect);
@@ -2745,6 +2821,96 @@ function watchRoom(room) {
   getSocket().emit('watch-room', { roomId: room.id });
 }
 
+function sendBattleChat(event) {
+  event.preventDefault();
+  if (!socket || !latestState || isSpectating) return;
+
+  const input = document.getElementById('battle-chat-input');
+  const channelSelect = document.getElementById('battle-chat-channel');
+  const text = input ? input.value.trim() : '';
+  if (!text) return;
+
+  socket.emit('battle-chat', {
+    channel: channelSelect ? channelSelect.value : 'all',
+    text
+  });
+  if (input) input.value = '';
+}
+
+function syncBattleChatMessages(messages) {
+  battleChatMessages = Array.isArray(messages) ? messages.slice(-60) : [];
+  renderBattleChat();
+}
+
+function appendBattleChatMessage(message) {
+  if (!message || !message.id) return;
+  if (battleChatMessages.some((existing) => existing.id === message.id)) return;
+  battleChatMessages.push(message);
+  battleChatMessages = battleChatMessages.slice(-60);
+  renderBattleChat();
+}
+
+function resetBattleChat() {
+  battleChatMessages = [];
+  renderBattleChat();
+}
+
+function renderBattleChat() {
+  const log = document.getElementById('battle-chat-log');
+  if (!log) return;
+
+  log.innerHTML = '';
+  if (battleChatMessages.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'battle-chat-empty';
+    empty.textContent = '아직 채팅이 없습니다.';
+    log.append(empty);
+  } else {
+    for (const message of battleChatMessages) {
+      const row = document.createElement('div');
+      row.className = `battle-chat-message ${message.channel === 'team' ? 'team' : 'all'}`;
+
+      const meta = document.createElement('div');
+      meta.className = 'battle-chat-meta';
+      meta.textContent = `${message.channel === 'team' ? '팀' : '전체'} · ${message.username || '플레이어'}`;
+
+      const text = document.createElement('div');
+      text.className = 'battle-chat-text';
+      text.textContent = message.text || '';
+
+      row.append(meta, text);
+      log.append(row);
+    }
+  }
+  log.scrollTop = log.scrollHeight;
+  updateBattleChatControls();
+}
+
+function updateBattleChatControls() {
+  const status = document.getElementById('battle-chat-status');
+  const channelSelect = document.getElementById('battle-chat-channel');
+  const input = document.getElementById('battle-chat-input');
+  const sendButton = document.getElementById('battle-chat-send');
+  const player = latestState && currentSlot !== null && currentSlot !== undefined ? latestState.players[currentSlot] : null;
+  const canSend = Boolean(latestState && latestState.status === 'playing' && player && player.connected && !isSpectating);
+  const isTeamMode = Boolean(latestState && latestState.mode === '2v2');
+
+  if (channelSelect) {
+    channelSelect.disabled = !canSend || !isTeamMode;
+    if (!isTeamMode) channelSelect.value = 'all';
+  }
+  if (input) {
+    input.disabled = !canSend;
+    input.placeholder = isSpectating ? '관전 중에는 채팅할 수 없습니다.' : '메시지 입력';
+  }
+  if (sendButton) sendButton.disabled = !canSend;
+  if (status) {
+    if (isSpectating) status.textContent = '관전';
+    else if (isTeamMode) status.textContent = '전체 / 팀';
+    else status.textContent = '전체';
+  }
+}
+
 function roomTeamEntries(room) {
   if (Array.isArray(room.teams) && room.teams.length > 0) return room.teams;
   const capacity = 2;
@@ -2774,6 +2940,7 @@ function updateGameRoomTitle() {
   const side = isSpectating ? `관전 · 관전자 수: ${latestState ? latestState.spectatorCount || 0 : currentRoom && currentRoom.spectatorCount || 0}` : statePlayer ? teamName(statePlayer.team) : '대기';
   const mode = currentRoom && currentRoom.modeLabel ? currentRoom.modeLabel : '';
   title.textContent = `${roomName}${mode ? ` · ${mode}` : ''} · ${side}`;
+  updateBattleChatControls();
 }
 
 function updateRematchControls(optimistic = false) {

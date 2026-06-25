@@ -23,6 +23,9 @@ const SOCKET_RATE_WINDOW_MS = 60 * 1000;
 const SOCKET_CONNECTION_LIMIT = Number(process.env.SOCKET_CONNECTION_LIMIT || 30);
 const SOCKET_BAD_EVENT_LIMIT = 12;
 const PLAY_CARD_MIN_INTERVAL_MS = 80;
+const CHAT_MIN_INTERVAL_MS = 700;
+const CHAT_MAX_LENGTH = 120;
+const CHAT_HISTORY_LIMIT = 60;
 const ARENA = { width: 900, height: 620 };
 const TICK_MS = 50;
 const BROADCAST_MS = 100;
@@ -35,6 +38,7 @@ const TRIPLE_ELIXIR_REMAINING_MS = 20000;
 const DOUBLE_ELIXIR_MULTIPLIER = 2;
 const TRIPLE_ELIXIR_MULTIPLIER = 3;
 const MAX_SPECTATORS_PER_ROOM = 2;
+const KIMGEUNYOUNG_TIME_EXTENSION_MS = 30000;
 const TOWER_HP = {
   king: 9200,
   princess: 5400
@@ -212,14 +216,15 @@ const CARDS = {
     cost: 10,
     role: '탱커 소환',
     maxHp: 2376,
-    damage: 99,
+    damage: 89,
     range: 43,
     speed: 41,
     attackMs: 1155,
     radius: 24,
     oneUse: true,
     tankMinionId: 'geunyoungTank',
-    spawnMinionMs: 1500
+    spawnMinionMs: 1500,
+    timeExtensionMs: KIMGEUNYOUNG_TIME_EXTENSION_MS
   },
   kimrui: {
     id: 'kimrui',
@@ -295,7 +300,7 @@ const CARDS = {
     role: '소환 탱커',
     playable: false,
     maxHp: 211,
-    damage: 32,
+    damage: 19,
     range: 32,
     speed: 37,
     attackMs: 1155,
@@ -600,6 +605,7 @@ io.use((socket, next) => {
   socket.data.roomId = null;
   socket.data.spectatingRoomId = null;
   socket.data.lastPlayCardAt = 0;
+  socket.data.lastChatAt = 0;
   socket.data.badEventCount = 0;
   next();
 });
@@ -652,6 +658,11 @@ io.on('connection', (socket) => {
       return;
     }
     playCard(room, slot, payload);
+  });
+
+  socket.on('battle-chat', (payload = {}) => {
+    if (!canUseSocketAction(socket)) return;
+    sendBattleChat(socket, payload);
   });
 
   socket.on('request-rematch', () => {
@@ -804,6 +815,99 @@ function joinSpectatorRoom(socket, payload) {
   emitRooms();
 }
 
+function sendBattleChat(socket, payload = {}) {
+  const room = socket.data.roomId ? rooms.get(socket.data.roomId) : null;
+  const slot = socket.data.slot;
+  if (!room || slot === null || slot === undefined || room.game.status !== 'playing') {
+    registerBadSocketEvent(socket);
+    return;
+  }
+
+  const now = Date.now();
+  if (now - (socket.data.lastChatAt || 0) < CHAT_MIN_INTERVAL_MS) {
+    socket.emit('chat-error', '채팅은 잠시 후 다시 보낼 수 있습니다.');
+    return;
+  }
+
+  const player = room.game.players[slot];
+  if (!player || !player.connected || player.socketId !== socket.id) {
+    registerBadSocketEvent(socket);
+    return;
+  }
+
+  const text = normalizeChatText(payload.text);
+  if (!text) return;
+
+  const requestedChannel = payload.channel === 'team' ? 'team' : 'all';
+  const channel = room.mode === '2v2' ? requestedChannel : 'all';
+  const message = {
+    id: `m${room.game.nextChatId++}`,
+    at: now,
+    channel,
+    targetTeam: channel === 'team' ? player.team : null,
+    senderSlot: player.slot,
+    senderTeam: player.team,
+    username: player.username || '플레이어',
+    text
+  };
+
+  socket.data.lastChatAt = now;
+  room.game.chatMessages.push(message);
+  if (room.game.chatMessages.length > CHAT_HISTORY_LIMIT) {
+    room.game.chatMessages = room.game.chatMessages.slice(-CHAT_HISTORY_LIMIT);
+  }
+  broadcastBattleChat(room, message);
+}
+
+function normalizeChatText(value) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, CHAT_MAX_LENGTH);
+}
+
+function broadcastBattleChat(room, message) {
+  const socketIds = io.sockets.adapter.rooms.get(roomChannel(room.id));
+  if (!socketIds) return;
+  const publicMessage = publicChatMessage(message);
+  for (const socketId of socketIds) {
+    const socket = io.of('/').sockets.get(socketId);
+    if (socket && canSeeChatMessage(room, socket, message)) {
+      socket.emit('battle-chat', publicMessage);
+    }
+  }
+}
+
+function canSeeChatMessage(room, socket, message) {
+  if (message.channel !== 'team') return true;
+  if (socket.data.roomId !== room.id) return false;
+  const slot = socket.data.slot;
+  const player = slot !== null && slot !== undefined ? room.game.players[slot] : null;
+  return Boolean(player && player.team === message.targetTeam);
+}
+
+function visibleChatMessages(room, viewerSlot = null, spectator = false) {
+  const viewer = !spectator && viewerSlot !== null && viewerSlot !== undefined
+    ? room.game.players[viewerSlot]
+    : null;
+  return (room.game.chatMessages || [])
+    .filter((message) => message.channel !== 'team' || (viewer && viewer.team === message.targetTeam))
+    .map(publicChatMessage);
+}
+
+function publicChatMessage(message) {
+  return {
+    id: message.id,
+    at: message.at,
+    channel: message.channel,
+    team: message.targetTeam,
+    senderSlot: message.senderSlot,
+    senderTeam: message.senderTeam,
+    username: message.username,
+    text: message.text
+  };
+}
+
 function assignSocketToRoom(socket, room, requestedTeam = null) {
   const user = statements.getUserById.get(socket.data.user.id);
   if (!user) {
@@ -932,14 +1036,18 @@ function createGameState(mode = '1v1') {
     units: [],
     spellZones: [],
     pendingSpawns: [],
+    chatMessages: [],
     nextUnitId: 1,
     nextSpellId: 1,
+    nextChatId: 1,
     startedAt: 0,
     endsAt: 0,
     suddenDeath: false,
     suddenDeathEndsAt: 0,
     freezeUntil: 0,
     pendingAscensionAt: 0,
+    elixirBoostLockedUntil: 0,
+    elixirBoostLockedMultiplier: 1,
     lastTickAt: Date.now(),
     lastBroadcastAt: 0,
     winner: null,
@@ -1061,14 +1169,18 @@ function startMatch(room) {
   game.units = [];
   game.spellZones = [];
   game.pendingSpawns = [];
+  game.chatMessages = [];
   game.nextUnitId = 1;
   game.nextSpellId = 1;
+  game.nextChatId = 1;
   game.startedAt = now;
   game.endsAt = now + GAME_DURATION_MS;
   game.suddenDeath = false;
   game.suddenDeathEndsAt = 0;
   game.freezeUntil = 0;
   game.pendingAscensionAt = 0;
+  game.elixirBoostLockedUntil = 0;
+  game.elixirBoostLockedMultiplier = 1;
   game.winner = null;
   game.reason = '';
   game.trophyChanges = null;
@@ -1193,12 +1305,17 @@ function spawnCard(room, owner, cardId, x, y, extras = {}) {
   const card = CARDS[cardId];
   const count = card.spawnCount || 1;
   const offsets = formationOffsets(count);
+  const spawnedUnits = [];
 
   for (let i = 0; i < count; i += 1) {
-    spawnUnit(room, owner, cardId, x + offsets[i].x, y + offsets[i].y, extras);
+    const unit = spawnUnit(room, owner, cardId, x + offsets[i].x, y + offsets[i].y, extras);
+    if (unit) spawnedUnits.push(unit);
   }
 
   broadcastEffect(room, { type: 'spawn', owner, cardId, x, y });
+  if (cardId === 'kimgeunyoung' && spawnedUnits.length > 0) {
+    triggerKingReturn(room, owner, spawnedUnits[0].x, spawnedUnits[0].y, card);
+  }
 }
 
 function queueBestFriendCombo(room, owner, x, y) {
@@ -1355,7 +1472,7 @@ function deployLabel(cardId) {
     peach: '라켓 준비',
     seongjoo: '키보드 부팅',
     johyunwoo: '절친 출격',
-    kimgeunyoung: '탱크 호출',
+    kimgeunyoung: '왕의 귀환',
     kimrui: '흡혈 접근',
     heoseon: '폭발 예고',
     taegeonBumperCar: '범퍼 시동',
@@ -1696,6 +1813,41 @@ function maybeSpawnTankMinion(room, unit, card, now) {
   if (minion) {
     broadcastEffect(room, { type: 'summon-minion', owner: unit.owner, cardId: card.tankMinionId, x: minion.x, y: minion.y });
   }
+}
+
+function triggerKingReturn(room, owner, x, y, card) {
+  const game = room.game;
+  if (game.status !== 'playing') return;
+
+  const now = Date.now();
+  const extensionMs = card.timeExtensionMs || 0;
+  if (extensionMs <= 0) return;
+
+  const multiplierBeforeExtension = getElixirMultiplier(game, now);
+  if (game.suddenDeath) {
+    game.suddenDeathEndsAt += extensionMs;
+  } else {
+    game.endsAt += extensionMs;
+  }
+
+  if (multiplierBeforeExtension > 1) {
+    game.elixirBoostLockedUntil = Math.max(game.elixirBoostLockedUntil || 0, now + extensionMs);
+    game.elixirBoostLockedMultiplier = Math.max(game.elixirBoostLockedMultiplier || 1, multiplierBeforeExtension);
+  }
+
+  game.message = multiplierBeforeExtension > 1
+    ? `왕의 귀환: +30초, X${multiplierBeforeExtension} 유지`
+    : '왕의 귀환: 전투 시간 +30초';
+  broadcastEffect(room, {
+    type: 'king-return',
+    owner,
+    cardId: 'kimgeunyoung',
+    x,
+    y,
+    extensionMs,
+    multiplier: multiplierBeforeExtension
+  });
+  broadcastState(room);
 }
 
 function resolveWindup(room, unit, card, now) {
@@ -2059,9 +2211,13 @@ function removeDeadUnits(room) {
 
 function checkWinConditions(room, now) {
   const game = room.game;
-  const destroyedKing = game.towers.find((tower) => tower.type === 'king' && tower.hp <= 0);
-  if (destroyedKing) {
-    endMatch(room, getOpponentTeam(destroyedKing.owner), '킹타워 파괴');
+  const destroyedKings = game.towers.filter((tower) => tower.type === 'king' && tower.hp <= 0);
+  if (destroyedKings.length >= 2) {
+    endMatch(room, null, '양쪽 킹타워 파괴');
+    return;
+  }
+  if (destroyedKings.length === 1) {
+    endMatch(room, getOpponentTeam(destroyedKings[0].owner), '킹타워 파괴');
     return;
   }
 
@@ -2307,9 +2463,13 @@ function getElixirMultiplier(game, now) {
   const endsAt = game.suddenDeath ? game.suddenDeathEndsAt : game.endsAt;
   if (!endsAt) return 1;
   const remainingMs = endsAt - now;
-  if (remainingMs <= TRIPLE_ELIXIR_REMAINING_MS) return TRIPLE_ELIXIR_MULTIPLIER;
-  if (game.suddenDeath || remainingMs <= DOUBLE_ELIXIR_REMAINING_MS) return DOUBLE_ELIXIR_MULTIPLIER;
-  return 1;
+  let multiplier = 1;
+  if (remainingMs <= TRIPLE_ELIXIR_REMAINING_MS) multiplier = TRIPLE_ELIXIR_MULTIPLIER;
+  else if (game.suddenDeath || remainingMs <= DOUBLE_ELIXIR_REMAINING_MS) multiplier = DOUBLE_ELIXIR_MULTIPLIER;
+  if ((game.elixirBoostLockedUntil || 0) > now) {
+    multiplier = Math.max(multiplier, game.elixirBoostLockedMultiplier || 1);
+  }
+  return multiplier;
 }
 
 function broadcastEffect(room, effect) {
@@ -2356,6 +2516,7 @@ function serializeState(room, viewerSlot = null, options = {}) {
     remainingMs: Math.max(0, (game.suddenDeath ? game.suddenDeathEndsAt : game.endsAt) - now),
     suddenDeath: game.suddenDeath,
     elixirMultiplier: getElixirMultiplier(game, now),
+    chatMessages: visibleChatMessages(room, viewerSlot, spectator),
     freezeMs: Math.max(0, game.freezeUntil - now),
     trophyChange: spectator || viewerSlot === null || viewerSlot === undefined ? null : game.trophyChanges && game.trophyChanges[viewerSlot],
     players: game.players.map((player) => ({

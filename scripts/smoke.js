@@ -346,6 +346,7 @@ async function expectTwoVersusTwoRoom(accounts, spectatorAccounts) {
     throw new Error('2v2 tower HP did not use the expected 1.5x values.');
   }
 
+  const chatResult = await expectBattleChatFlow(clients);
   const spectatorResult = await expectSpectatorFlow(hostJoin.room.id, spectatorAccounts);
 
   for (const client of clients) client.disconnect();
@@ -355,8 +356,27 @@ async function expectTwoVersusTwoRoom(accounts, spectatorAccounts) {
     teams: state.players.map((player) => player.team),
     rejectedFullTeam: true,
     kingTowerHp: kingTower.maxHp,
+    chat: chatResult,
     spectator: spectatorResult
   };
+}
+
+async function expectBattleChatFlow(roomClients) {
+  const allMessage = `전체-${Date.now()}`;
+  const allReceivedByBottom = onceBattleChat(roomClients[2], (message) => message.channel === 'all' && message.text === allMessage, 'all chat on opposing team');
+  roomClients[0].emit('battle-chat', { channel: 'all', text: allMessage });
+  await allReceivedByBottom;
+
+  await delay(750);
+
+  const teamMessage = `팀-${Date.now()}`;
+  const teamReceivedByMate = onceBattleChat(roomClients[1], (message) => message.channel === 'team' && message.text === teamMessage, 'team chat on same team');
+  const notReceivedByBottom = expectNoBattleChat(roomClients[2], (message) => message.channel === 'team' && message.text === teamMessage, 'opposing team chat leak');
+  roomClients[0].emit('battle-chat', { channel: 'team', text: teamMessage });
+  await teamReceivedByMate;
+  await notReceivedByBottom;
+
+  return true;
 }
 
 async function expectSpectatorFlow(roomId, accounts) {
@@ -459,6 +479,12 @@ function expectHeoseonNerf(cards) {
   if (!cards.seongjoo || cards.seongjoo.attackMs !== 686) {
     throw new Error('Seongjoo attack speed nerf was not present.');
   }
+  if (!cards.kimgeunyoung || cards.kimgeunyoung.damage !== 89 || cards.kimgeunyoung.timeExtensionMs !== 30000) {
+    throw new Error('Kim Geunyoung return tuning was not present.');
+  }
+  if (!cards.geunyoungTank || cards.geunyoungTank.damage !== 19) {
+    throw new Error('Geunyoung tank damage tuning was not present.');
+  }
 }
 
 function once(client, eventName, label = eventName) {
@@ -500,6 +526,45 @@ function waitForState(client, predicate, label = 'matching state') {
       clearTimeout(timer);
       client.off('state', handleState);
       reject(error);
+    }
+  });
+}
+
+function onceBattleChat(client, predicate, label = 'battle chat') {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Timed out waiting for ${label}.`)), 5000);
+    client.on('battle-chat', handleMessage);
+    client.once('connect_error', handleError);
+
+    function handleMessage(message) {
+      if (!predicate(message)) return;
+      clearTimeout(timer);
+      client.off('battle-chat', handleMessage);
+      client.off('connect_error', handleError);
+      resolve(message);
+    }
+
+    function handleError(error) {
+      clearTimeout(timer);
+      client.off('battle-chat', handleMessage);
+      reject(error);
+    }
+  });
+}
+
+function expectNoBattleChat(client, predicate, label = 'unexpected battle chat', timeoutMs = 700) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      client.off('battle-chat', handleMessage);
+      resolve();
+    }, timeoutMs);
+    client.on('battle-chat', handleMessage);
+
+    function handleMessage(message) {
+      if (!predicate(message)) return;
+      clearTimeout(timer);
+      client.off('battle-chat', handleMessage);
+      reject(new Error(`Received ${label}.`));
     }
   });
 }
