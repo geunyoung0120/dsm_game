@@ -5,6 +5,12 @@ const VIEW = { width: ARENA_W + SIDEBAR_W, height: 760 };
 const ARENA_H = 620;
 const CARD_H = 108;
 const DECK_SIZE = 8;
+const DEPLOY_X_MIN = 48;
+const DEPLOY_X_MAX = ARENA_W - 48;
+const TOP_DEPLOY_Y_MIN = 42;
+const TOP_DEPLOY_Y_MAX = 282;
+const BOTTOM_DEPLOY_Y_MIN = 338;
+const BOTTOM_DEPLOY_Y_MAX = ARENA_H - 42;
 const BEST_FRIEND_PAIR = ['baduk', 'johyunwoo'];
 const BEST_FRIEND_COMBO_COST = 8;
 const THEME_STORAGE_KEY = 'dsm-game-theme';
@@ -15,6 +21,21 @@ function clampNumber(value, min, max) {
 }
 
 const PATCH_NOTICES = [
+  {
+    title: '타워 파괴 후 배치 구역 확장',
+    date: '2026.06.25',
+    items: [
+      '건물 카드는 이제 캐릭터처럼 기본적으로 내 전장에만 배치',
+      '상대 공주타워를 부순 라인은 상대 진영에도 배치 가능',
+      '배치 가능 영역 미리보기가 타워 파괴 상태에 따라 확장'
+    ],
+    details: [
+      '다과실과 진해 벚꽃나무는 더 이상 마법 카드처럼 전체 전장에 설치되지 않고, 캐릭터 카드와 같은 배치 규칙을 따른다.',
+      '아래 진영이 위쪽 왼쪽 공주타워를 부수면 위쪽 왼쪽 라인에, 위쪽 오른쪽 공주타워를 부수면 위쪽 오른쪽 라인에 캐릭터와 건물을 배치할 수 있다. 위 진영도 아래쪽 공주타워 파괴 상태에 따라 같은 방식으로 열린다.',
+      '바둑이 방구와 꽁 같은 마법 카드는 기존처럼 전장 위치를 자유롭게 지정할 수 있다.',
+      '전투 화면의 배치 미리보기와 서버의 실제 카드 사용 검증을 같은 규칙으로 맞춰, 클라이언트에서 보이는 영역과 실제 사용 가능 영역이 어긋나지 않게 했다.'
+    ]
+  },
   {
     title: '신규 건물 카드와 꽁 추가',
     date: '2026.06.25',
@@ -833,21 +854,23 @@ class BattleScene extends Phaser.Scene {
     if (this.slot === null || this.slot === undefined || this.selectedHandIndex === null || this.state.status !== 'playing') return;
     const player = this.state.players[this.slot];
     const team = player ? player.team : this.slot;
-    if (this.isSelectedFreeTargetCard()) {
-      const card = this.getSelectedCard();
-      const previewColor = card && card.building ? 0xffd7a8 : 0xb7d94b;
-      const strokeColor = card && card.building ? 0xffd7a8 : 0xf4ff91;
-      this.g.fillStyle(previewColor, 0.08);
+    const card = this.getSelectedCard();
+    if (card && card.spell) {
+      this.g.fillStyle(0xb7d94b, 0.08);
       this.g.fillRect(28, 28, ARENA_W - 56, ARENA_H - 56);
-      this.g.lineStyle(2, strokeColor, 0.55);
+      this.g.lineStyle(2, 0xf4ff91, 0.55);
       this.g.strokeRect(28, 28, ARENA_W - 56, ARENA_H - 56);
       return;
     }
-    const zone = team === 0 ? { y: 338, h: ARENA_H - 380 } : { y: 42, h: 240 };
-    this.g.fillStyle(team === 0 ? 0x4f8de8 : 0xe4536d, 0.13);
-    this.g.fillRect(48, zone.y, ARENA_W - 96, zone.h);
-    this.g.lineStyle(2, team === 0 ? 0xcbe1ff : 0xffd5d1, 0.7);
-    this.g.strokeRect(48, zone.y, ARENA_W - 96, zone.h);
+
+    const fillColor = card && card.building ? 0xffd7a8 : team === 0 ? 0x4f8de8 : 0xe4536d;
+    const strokeColor = card && card.building ? 0xffd7a8 : team === 0 ? 0xcbe1ff : 0xffd5d1;
+    for (const zone of this.getDeployZones(team)) {
+      this.g.fillStyle(fillColor, zone.expanded ? 0.1 : 0.13);
+      this.g.fillRect(zone.x, zone.y, zone.w, zone.h);
+      this.g.lineStyle(2, strokeColor, zone.expanded ? 0.6 : 0.7);
+      this.g.strokeRect(zone.x, zone.y, zone.w, zone.h);
+    }
   }
 
   drawTowers() {
@@ -1902,17 +1925,19 @@ class BattleScene extends Phaser.Scene {
     }
   }
 
-  isInOwnSpawnZone(x, y) {
-    if (x < 48 || x > ARENA_W - 48) return false;
+  isInDeployZone(x, y) {
+    if (x < DEPLOY_X_MIN || x > DEPLOY_X_MAX) return false;
     const player = this.state && this.slot !== null && this.slot !== undefined ? this.state.players[this.slot] : null;
     const team = player ? player.team : this.slot;
-    if (team === 0) return y >= 338 && y <= ARENA_H - 42;
-    return y >= 42 && y <= 282;
+    return this.getDeployZones(team).some((zone) => {
+      return x >= zone.x && x <= zone.x + zone.w && y >= zone.y && y <= zone.y + zone.h;
+    });
   }
 
   canPlaySelectedAt(x, y) {
-    if (this.isSelectedFreeTargetCard()) return x >= 28 && x <= ARENA_W - 28 && y >= 28 && y <= ARENA_H - 28;
-    return this.isInOwnSpawnZone(x, y);
+    const card = this.getSelectedCard();
+    if (card && card.spell) return x >= 28 && x <= ARENA_W - 28 && y >= 28 && y <= ARENA_H - 28;
+    return this.isInDeployZone(x, y);
   }
 
   getSelectedCard() {
@@ -1921,9 +1946,30 @@ class BattleScene extends Phaser.Scene {
     return this.cards[cardId];
   }
 
-  isSelectedFreeTargetCard() {
-    const card = this.getSelectedCard();
-    return Boolean(card && (card.spell || card.building));
+  getDeployZones(team) {
+    const base = team === 0
+      ? { x: DEPLOY_X_MIN, y: BOTTOM_DEPLOY_Y_MIN, w: DEPLOY_X_MAX - DEPLOY_X_MIN, h: BOTTOM_DEPLOY_Y_MAX - BOTTOM_DEPLOY_Y_MIN }
+      : { x: DEPLOY_X_MIN, y: TOP_DEPLOY_Y_MIN, w: DEPLOY_X_MAX - DEPLOY_X_MIN, h: TOP_DEPLOY_Y_MAX - TOP_DEPLOY_Y_MIN };
+    const zones = [base];
+    const enemyTeam = 1 - team;
+    const enemySide = team === 0
+      ? { y: TOP_DEPLOY_Y_MIN, h: TOP_DEPLOY_Y_MAX - TOP_DEPLOY_Y_MIN }
+      : { y: BOTTOM_DEPLOY_Y_MIN, h: BOTTOM_DEPLOY_Y_MAX - BOTTOM_DEPLOY_Y_MIN };
+
+    if (this.isPrincessTowerDestroyed(enemyTeam, 'princess-left')) {
+      zones.push({ x: DEPLOY_X_MIN, y: enemySide.y, w: FIELD_CENTER_X - DEPLOY_X_MIN, h: enemySide.h, expanded: true });
+    }
+    if (this.isPrincessTowerDestroyed(enemyTeam, 'princess-right')) {
+      zones.push({ x: FIELD_CENTER_X, y: enemySide.y, w: DEPLOY_X_MAX - FIELD_CENTER_X, h: enemySide.h, expanded: true });
+    }
+
+    return zones;
+  }
+
+  isPrincessTowerDestroyed(owner, type) {
+    return Boolean(this.state && Array.isArray(this.state.towers) && this.state.towers.some((tower) => {
+      return tower.owner === owner && tower.type === type && tower.hp <= 0;
+    }));
   }
 
   getVisualRadius(cardId) {

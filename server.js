@@ -27,6 +27,13 @@ const CHAT_MIN_INTERVAL_MS = 700;
 const CHAT_MAX_LENGTH = 120;
 const CHAT_HISTORY_LIMIT = 60;
 const ARENA = { width: 900, height: 620 };
+const FIELD_CENTER_X = ARENA.width / 2;
+const DEPLOY_X_MIN = 48;
+const DEPLOY_X_MAX = ARENA.width - 48;
+const TOP_DEPLOY_Y_MIN = 42;
+const TOP_DEPLOY_Y_MAX = 282;
+const BOTTOM_DEPLOY_Y_MIN = 338;
+const BOTTOM_DEPLOY_Y_MAX = ARENA.height - 42;
 const TICK_MS = 50;
 const BROADCAST_MS = 100;
 const GAME_DURATION_MS = Number(process.env.GAME_DURATION_MS || 180000);
@@ -1279,7 +1286,7 @@ function playCard(room, slot, payload = {}) {
 
   const x = Number(payload.x);
   const y = Number(payload.y);
-  if (!isValidPlayPoint(card, player.team, x, y)) return;
+  if (!isValidPlayPoint(game, card, player.team, x, y)) return;
 
   player.elixir = Math.max(0, player.elixir - elixirCost);
 
@@ -1316,16 +1323,39 @@ function playCard(room, slot, payload = {}) {
   broadcastState(room);
 }
 
-function isValidPlayPoint(card, team, x, y) {
-  if (card && (card.spell || card.building)) return isValidSpellTargetPoint(x, y);
-  return isValidSpawnPoint(team, x, y);
+function isValidPlayPoint(game, card, team, x, y) {
+  if (card && card.spell) return isValidSpellTargetPoint(x, y);
+  return isValidSpawnPoint(game, team, x, y);
 }
 
-function isValidSpawnPoint(team, x, y) {
+function isValidSpawnPoint(game, team, x, y) {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
-  if (x < 48 || x > ARENA.width - 48) return false;
-  if (team === 0) return y >= 338 && y <= ARENA.height - 42;
-  return y >= 42 && y <= 282;
+  if (x < DEPLOY_X_MIN || x > DEPLOY_X_MAX) return false;
+  if (isBaseDeployZone(team, y)) return true;
+  return isExpandedDeployZone(game, team, x, y);
+}
+
+function isBaseDeployZone(team, y) {
+  if (team === 0) return y >= BOTTOM_DEPLOY_Y_MIN && y <= BOTTOM_DEPLOY_Y_MAX;
+  return y >= TOP_DEPLOY_Y_MIN && y <= TOP_DEPLOY_Y_MAX;
+}
+
+function isExpandedDeployZone(game, team, x, y) {
+  if (!game || !Array.isArray(game.towers)) return false;
+
+  const enemyTeam = 1 - team;
+  const inEnemySide = team === 0
+    ? y >= TOP_DEPLOY_Y_MIN && y <= TOP_DEPLOY_Y_MAX
+    : y >= BOTTOM_DEPLOY_Y_MIN && y <= BOTTOM_DEPLOY_Y_MAX;
+  if (!inEnemySide) return false;
+
+  if (x <= FIELD_CENTER_X && isPrincessTowerDestroyed(game, enemyTeam, 'princess-left')) return true;
+  if (x >= FIELD_CENTER_X && isPrincessTowerDestroyed(game, enemyTeam, 'princess-right')) return true;
+  return false;
+}
+
+function isPrincessTowerDestroyed(game, owner, type) {
+  return game.towers.some((tower) => tower.owner === owner && tower.type === type && tower.hp <= 0);
 }
 
 function isValidSpellTargetPoint(x, y) {
