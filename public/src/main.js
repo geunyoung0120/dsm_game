@@ -16,6 +16,20 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: '바둑이 방구와 태건 범퍼카 조정',
+    date: '2026.06.25',
+    items: [
+      '바둑이 방구 장판이 점점 커지지 않고 고정 크기로 생성',
+      '바둑이 방구 피해량을 초당 100으로 증가',
+      '태건 범퍼카 HP 120, 폭발 피해 200으로 변경'
+    ],
+    details: [
+      '바둑이 방구는 사용한 위치 주변에 바로 정해진 크기의 가스 장판을 만들고, 전투 중 장판 반지름이 점점 커지지 않는다.',
+      '가스 장판 안에 있는 적 유닛과 적 타워는 4초 동안 초당 100 피해를 받아 총 400 피해를 받을 수 있다.',
+      '태건 범퍼카는 HP가 150에서 120으로 낮아졌고, 충돌하거나 사망할 때 발생하는 폭발 피해가 50에서 200으로 올랐다.'
+    ]
+  },
+  {
     title: '대폭 업데이트!! 관전 모드와 신규 카드',
     date: '2026.06.25',
     items: [
@@ -273,15 +287,15 @@ const CHARACTER_DETAILS = [
     cardType: 'spell',
     stats: [
       ['카드 종류', '마법 카드'],
-      ['피해량', '초당 20'],
-      ['총 피해', '80'],
+      ['피해량', '초당 100'],
+      ['총 피해', '400'],
       ['지속 시간', '4초'],
       ['범위 형태', '원형 가스 장판'],
       ['소환 유닛', '없음']
     ],
-    ability: '플레이어가 전장 위치 하나를 지정하면 그 지점에서 초록/노란 가스 구름이 원형으로 퍼진다. 4초 동안 장판 안에 있는 모든 적 유닛과 적 타워가 초당 20 피해를 받아 총 80 피해를 받을 수 있다. 유닛을 소환하지 않는 순수 마법 카드라 사용 즉시 효과가 발동한다.',
-    appearance: '캐릭터가 직접 나오지 않고, 지정한 위치에 초록색과 노란색이 섞인 방구 가스 구름이 둥글게 번진다.',
-    trait: '3 엘릭서로 낮은 비용의 지역 장악을 할 수 있다. 적 유닛뿐 아니라 적 타워도 피해를 받기 때문에 방어 병력과 타워를 동시에 압박하는 주문 카드다.'
+    ability: '플레이어가 전장 위치 하나를 지정하면 그 지점 주변에 고정 크기의 초록/노란 가스 장판이 바로 생긴다. 4초 동안 장판 안에 있는 모든 적 유닛과 적 타워가 초당 100 피해를 받아 총 400 피해를 받을 수 있다. 유닛을 소환하지 않는 순수 마법 카드라 사용 즉시 효과가 발동한다.',
+    appearance: '캐릭터가 직접 나오지 않고, 지정한 위치에 초록색과 노란색이 섞인 방구 가스 구름이 정해진 크기로 생긴다.',
+    trait: '3 엘릭서로 강한 지역 장악을 할 수 있다. 적 유닛뿐 아니라 적 타워도 피해를 받기 때문에 방어 병력과 타워를 동시에 크게 압박하는 주문 카드다.'
   },
   {
     id: 'kkongho',
@@ -463,16 +477,16 @@ const CHARACTER_DETAILS = [
     cost: '1',
     type: '자폭 돌진 / 초저비용 압박',
     stats: [
-      ['HP', '150'],
-      ['폭발 피해', '50'],
+      ['HP', '120'],
+      ['폭발 피해', '200'],
       ['피해 범위', '주변 광역'],
       ['이동속도', '95'],
       ['엘릭서 비용', '1'],
       ['사망 효과', '무조건 폭발']
     ],
-    ability: '소환되면 범퍼카를 타고 가장 가까운 적을 향해 매우 빠르게 돌진한다. 적에게 닿으면 즉시 폭발해 주변 모든 적에게 50 광역 피해를 준다. 돌진 중 적에게 먼저 죽어도 그 자리에서 반드시 폭발하므로 완전히 낭비되지 않는다.',
+    ability: '소환되면 범퍼카를 타고 가장 가까운 적을 향해 매우 빠르게 돌진한다. 적에게 닿으면 즉시 폭발해 주변 모든 적에게 200 광역 피해를 준다. 돌진 중 적에게 먼저 죽어도 그 자리에서 반드시 폭발하므로 완전히 낭비되지 않는다.',
     appearance: '자동차에 집착하는 광기 어린 표정의 남학생이 범퍼카를 타고 전장으로 튀어나온다. 충돌하거나 죽는 순간 주황색 폭발 이펙트가 터진다.',
-    trait: '게임에서 가장 낮은 1 엘릭서 카드다. HP가 150으로 매우 낮아 중간에 쉽게 잡히지만, 죽어도 폭발하기 때문에 수비 교란과 마무리 압박에 쓸 수 있다.'
+    trait: '게임에서 가장 낮은 1 엘릭서 카드다. HP가 120으로 매우 낮아 중간에 쉽게 잡히지만, 죽어도 200 피해로 폭발하기 때문에 수비 교란과 마무리 압박에 쓸 수 있다.'
   },
   {
     id: 'osj',
@@ -1175,14 +1189,13 @@ class BattleScene extends Phaser.Scene {
         this.drawCenteredText('폭주', effect.x, effect.y - 36, 15, '#ffccd0');
       } else if (effect.type === 'gas-zone') {
         const radius = effect.radius || 118;
-        const wave = radius * Phaser.Math.Clamp(t * 1.25, 0.15, 1);
         this.g.fillStyle(0xb7d94b, 0.18 + 0.05 * Math.sin(age / 120));
-        this.g.fillCircle(effect.x, effect.y, wave);
+        this.g.fillCircle(effect.x, effect.y, radius);
         this.g.fillStyle(0xf4ff91, 0.09);
-        this.g.fillCircle(effect.x - 18, effect.y + 9, wave * 0.72);
-        this.g.fillCircle(effect.x + 22, effect.y - 14, wave * 0.55);
+        this.g.fillCircle(effect.x - 18, effect.y + 9, radius * 0.72);
+        this.g.fillCircle(effect.x + 22, effect.y - 14, radius * 0.55);
         this.g.lineStyle(4, 0xf4ff91, alpha * 0.7 + 0.18);
-        this.g.strokeCircle(effect.x, effect.y, wave);
+        this.g.strokeCircle(effect.x, effect.y, radius);
         this.drawCenteredText('바둑이 방구', effect.x, Math.max(18, effect.y - radius - 26), 14, '#f4ff91');
       } else if (effect.type === 'bumper-explosion') {
         const radius = effect.radius || 76;

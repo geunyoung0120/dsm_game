@@ -447,10 +447,10 @@ function expectHeoseonNerf(cards) {
     }
   }
 
-  if (!cards.badukFart || !cards.badukFart.spell || cards.badukFart.damagePerSecond !== 20 || cards.badukFart.durationMs !== 4000) {
+  if (!cards.badukFart || !cards.badukFart.spell || cards.badukFart.damagePerSecond !== 100 || cards.badukFart.durationMs !== 4000) {
     throw new Error('Baduk fart spell card did not expose the expected spell fields.');
   }
-  if (!cards.taegeonBumperCar || cards.taegeonBumperCar.cost !== 1 || cards.taegeonBumperCar.speed !== 95 || !cards.taegeonBumperCar.suicideRusher) {
+  if (!cards.taegeonBumperCar || cards.taegeonBumperCar.cost !== 1 || cards.taegeonBumperCar.speed !== 95 || cards.taegeonBumperCar.maxHp !== 120 || cards.taegeonBumperCar.damage !== 200 || cards.taegeonBumperCar.explosionDamage !== 200 || !cards.taegeonBumperCar.suicideRusher) {
     throw new Error('Taegeon bumper car did not expose the expected suicide rusher fields.');
   }
   if (!cards.seongjoo || cards.seongjoo.attackMs !== 686) {

@@ -113,7 +113,7 @@ const CARDS = {
     spell: true,
     spellType: 'area-dot',
     durationMs: 4000,
-    damagePerSecond: 20,
+    damagePerSecond: 100,
     radius: 118
   },
   kkongho: {
@@ -261,14 +261,14 @@ const CARDS = {
     name: '태건 범퍼카',
     cost: 1,
     role: '자폭 돌진',
-    maxHp: 150,
-    damage: 50,
+    maxHp: 120,
+    damage: 200,
     range: 22,
     speed: 95,
     attackMs: 0,
     radius: 16,
     suicideRusher: true,
-    explosionDamage: 50,
+    explosionDamage: 200,
     explosionRadius: 76,
     detonationRange: 18
   },
