@@ -25,6 +25,21 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: '토너먼트 보상과 킹타워 각성',
+    date: '2026.06.25',
+    items: [
+      '토너먼트 상금 1등 70%, 2등 30% 분배',
+      '킹타워 피격 후 각성 공격 적용',
+      '짱가 4 엘릭서, 미토스건휘 피해량 10% 감소'
+    ],
+    details: [
+      '토너먼트 결승 종료 시 참가비 풀 전체를 1등이 독식하지 않고, 1등은 약 70%, 2등은 남은 약 30%를 받는다.',
+      '토너먼트 참가비가 부족하면 빚을 질지 확인하고, 확인 시 참가비만큼 트로피가 마이너스로 내려갈 수 있다. 일반 경기 패배 트로피는 기존처럼 0 아래로 내려가지 않는다.',
+      '킹타워는 처음에는 공격하지 않고, 피해를 받아 각성한 뒤부터 공격한다. 각성한 킹타워는 전장에서 다르게 보인다.',
+      '짱가는 5 엘릭서에서 4 엘릭서로 낮췄고, 미토스건휘 기본/각성 피해량은 10% 줄였다.'
+    ]
+  },
+  {
     title: '지민과 허선 밸런스 조정',
     date: '2026.06.25',
     items: [
@@ -82,7 +97,7 @@ const PATCH_NOTICES = [
       '방 만들기에서 토너먼트 모드를 선택하면 참가 인원, 비밀번호, 트로피 참가비를 설정할 수 있다.',
       '참가자는 방에 들어오는 즉시 참가비 트로피가 차감되고, 시작 전 취소되면 환불된다.',
       '모든 참가자가 모이면 무작위 대진표가 생성되며 홀수 인원은 1명이 부전승을 받는다.',
-      '토너먼트 경기에는 일반 승패 트로피 규칙을 적용하지 않고, 결승 종료 시 우승자가 참가비 풀 전체를 받는다.',
+      '토너먼트 경기에는 일반 승패 트로피 규칙을 적용하지 않고, 결승 종료 시 참가비 풀을 1등과 2등에게 나눠 지급한다.',
       '메인 화면에는 최근 토너먼트 우승자와 날짜가 표시되고, 내 프로필에는 토너먼트 우승 횟수가 표시된다.'
     ]
   },
@@ -518,7 +533,7 @@ const CHARACTER_DETAILS = [
   {
     id: 'zzangga',
     name: '짱가',
-    cost: '5',
+    cost: '4',
     type: '광역 딜러',
     stats: [
       ['HP', '760'],
@@ -719,15 +734,15 @@ const CHARACTER_DETAILS = [
     type: '변신형 딜러',
     stats: [
       ['HP', '850'],
-      ['공격력', '70'],
-      ['각성 공격력', '120'],
+      ['공격력', '63'],
+      ['각성 공격력', '108'],
       ['사거리', '36'],
       ['공격 주기', '1초 / 각성 0.65초'],
       ['이동속도', '44 / 각성 70']
     ],
     ability: '체력이 절반 이하가 되면 자동으로 초싸이언처럼 각성한다. 각성 중에는 잠시 무적이고, 이후 공격력, 공격속도, 이동속도가 크게 오른다.',
     appearance: '평소에는 살짝 네모난 얼굴과 안경, 내려앉은 머리의 평범한 남학생이다. 변신 후에는 머리가 솟고 안경이 날아간다.',
-    trait: '기본 공격력이 70으로 올랐고 각성 공격력은 120이다. 변신은 한 번 발동하면 유지된다.'
+    trait: '기본 공격력은 63, 각성 공격력은 108이다. 변신은 한 번 발동하면 유지된다.'
   },
   {
     id: 'peach',
@@ -1116,18 +1131,28 @@ class BattleScene extends Phaser.Scene {
       const theme = TOWER_THEME[tower.owner];
       const alive = tower.hp > 0;
       const radius = tower.type === 'king' ? 38 : 30;
+      const isDormantKing = tower.type === 'king' && !tower.awakened;
+      const isAwakenedKing = tower.type === 'king' && tower.awakened;
+      const fill = isDormantKing ? 0x4c5260 : isAwakenedKing ? 0xffc857 : theme.fill;
+      const stroke = isDormantKing ? 0x8b92a0 : isAwakenedKing ? 0xfff2a8 : theme.stroke;
 
-      this.g.fillStyle(alive ? theme.fill : 0x30343a, 1);
-      this.g.lineStyle(4, alive ? theme.stroke : 0x666666, 1);
+      this.g.fillStyle(alive ? fill : 0x30343a, 1);
+      this.g.lineStyle(isAwakenedKing ? 6 : 4, alive ? stroke : 0x666666, 1);
       this.g.fillRoundedRect(tower.x - radius, tower.y - radius, radius * 2, radius * 2, 8);
       this.g.strokeRoundedRect(tower.x - radius, tower.y - radius, radius * 2, radius * 2, 8);
+      if (alive && isAwakenedKing) {
+        this.g.lineStyle(3, 0xffffff, 0.72);
+        this.g.strokeCircle(tower.x, tower.y, radius + 9);
+        this.g.fillStyle(0x111318, 0.92);
+        this.g.fillTriangle(tower.x - 20, tower.y - radius + 5, tower.x, tower.y - radius - 18, tower.x + 20, tower.y - radius + 5);
+      }
 
       this.g.fillStyle(0x111318, 0.92);
       this.g.fillRect(tower.x - 42, tower.y - radius - 18, 84, 8);
       this.g.fillStyle(tower.owner === 0 ? 0x82b8ff : 0xff8f86, 1);
       this.g.fillRect(tower.x - 42, tower.y - radius - 18, 84 * hpRatio(tower), 8);
 
-      const label = tower.type === 'king' ? '왕' : '공주';
+      const label = tower.type === 'king' ? isDormantKing ? '잠' : '왕' : '공주';
       this.drawCenteredText(label, tower.x, tower.y - 6, 13, '#ffffff');
       this.drawCenteredText(String(Math.max(0, tower.hp)), tower.x, tower.y + 12, 11, '#f7f2e8');
     }
@@ -1659,6 +1684,12 @@ class BattleScene extends Phaser.Scene {
         this.drawAttackTrail(effect, 0xfff2a8, alpha, t, 4);
         this.g.fillStyle(0xffffff, alpha);
         this.g.fillCircle(effect.x, effect.y, 8 + t * 16);
+      } else if (effect.type === 'king-tower-awaken') {
+        this.g.fillStyle(0xffc857, alpha * 0.18);
+        this.g.fillCircle(effect.x, effect.y, 36 + t * 58);
+        this.g.lineStyle(7, 0xfff2a8, alpha);
+        this.g.strokeCircle(effect.x, effect.y, 42 + t * 42);
+        this.drawCenteredText('킹타워 각성!', effect.x, effect.y - 66 - t * 10, 20, '#fff2a8');
       } else if (effect.type === 'push') {
         const pushDir = effect.owner === 0 ? -1 : 1;
         const range = effect.range || 96;
@@ -2361,6 +2392,7 @@ class BattleScene extends Phaser.Scene {
     if (type === 'sonic') return 950;
     if (type === 'chaos') return 950;
     if (type === 'awaken') return 1200;
+    if (type === 'king-tower-awaken') return 1300;
     if (type === 'berserk') return 1200;
     if (type === 'johyunwoo-rage') return 1300;
     if (type === 'windup') return 820;
@@ -2699,6 +2731,8 @@ function setupShell() {
     const team = document.getElementById('room-team').value;
     const participantCount = document.getElementById('tournament-participants').value;
     const stake = document.getElementById('tournament-stake').value;
+    const allowDebt = mode === 'tournament' ? confirmTournamentDebt(stake) : false;
+    if (allowDebt === null) return;
     connectSocket();
     getSocket().emit('create-room', {
       name,
@@ -2706,7 +2740,8 @@ function setupShell() {
       mode,
       team: mode === '2v2' ? team : null,
       participantCount: mode === 'tournament' ? participantCount : null,
-      stake: mode === 'tournament' ? stake : null
+      stake: mode === 'tournament' ? stake : null,
+      allowDebt: Boolean(allowDebt)
     });
   });
 
@@ -3161,7 +3196,7 @@ function renderTournamentDetail(errorMessage = '') {
   const winnerName = document.createElement('strong');
   winnerName.textContent = tournament.winnerUsername || '알 수 없음';
   const winnerCaption = document.createElement('small');
-  winnerCaption.textContent = `${tournament.title || `제 ${tournament.number}회 토너먼트 대회`} 최종 우승`;
+  winnerCaption.textContent = `우승 상금 ${tournament.winnerPrize || 0}개 · ${tournament.title || `제 ${tournament.number}회 토너먼트 대회`} 최종 우승`;
   winnerHero.append(winnerLabel, winnerName, winnerCaption);
 
   const summary = document.createElement('section');
@@ -3169,7 +3204,10 @@ function renderTournamentDetail(errorMessage = '') {
   summary.replaceChildren(
     detailStat('대회 날짜', formatKoreanDate(tournament.date)),
     detailStat('트로피 참가비', `${tournament.stake || 0}개`),
-    detailStat('우승자 상금', `${tournament.pool || 0}개`),
+    detailStat('총 상금 풀', `${tournament.pool || 0}개`),
+    detailStat('우승자 상금', `${tournament.winnerPrize || 0}개`),
+    detailStat('준우승자', tournament.runnerUpUsername || '알 수 없음'),
+    detailStat('준우승자 상금', `${tournament.runnerUpPrize || 0}개`),
     detailStat('참가자 수', `${tournament.participantCount || 0}명`)
   );
 
@@ -3417,7 +3455,10 @@ function renderTournamentPanel() {
   if (title) title.textContent = tournament.name || '토너먼트 대진표';
   if (meta) {
     const count = `${tournament.participantCount || 0}/${tournament.participantTarget || 0} 명 참가중`;
-    const pool = `상금 풀 ${tournament.pool || 0} 트로피`;
+    const prizes = tournament.prizes || {};
+    const winnerPrize = prizes.winnerPrize || Math.round((tournament.pool || 0) * 0.7);
+    const runnerUpPrize = prizes.runnerUpPrize || Math.max(0, (tournament.pool || 0) - winnerPrize);
+    const pool = `상금 1등 ${winnerPrize} / 2등 ${runnerUpPrize} 트로피`;
     const stake = `참가비 ${tournament.stake || 0} 트로피`;
     const breakText = tournament.break && tournament.break.active
       ? `${tournament.break.nextRoundLabel || '다음 경기'}까지 ${formatClock(tournament.break.remainingMs || 0)}`
@@ -3863,7 +3904,10 @@ function profileTierStat() {
 }
 
 function tierProgressForUser(user) {
-  const trophies = Math.max(0, Number(user.trophies) || 0);
+  const trophies = Number(user.trophies) || 0;
+  if (trophies < 0) {
+    return { ratio: 0, label: `빚 상환까지 ${Math.abs(trophies)}개` };
+  }
   if (!user.nextTier) {
     return { ratio: 1, label: '최고 티어 달성' };
   }
@@ -3987,13 +4031,26 @@ function renderSpectatorRoomList(rooms) {
 }
 
 function joinRoom(room, password, team = null) {
+  const allowDebt = room.mode === 'tournament' ? confirmTournamentDebt(room.stake || 0) : false;
+  if (allowDebt === null) return;
   connectSocket();
   const payload = {
     roomId: room.id,
     password
   };
   if (team !== null && team !== undefined) payload.team = String(team);
+  if (allowDebt) payload.allowDebt = true;
   getSocket().emit('join-room', payload);
+}
+
+function confirmTournamentDebt(stakeValue) {
+  const stake = Math.max(0, Number(stakeValue) || 0);
+  const trophies = Number(currentUser && currentUser.trophies) || 0;
+  if (stake <= 0) return false;
+  if (stake <= trophies) return false;
+  const debt = stake - trophies;
+  const ok = window.confirm(`참가비 ${stake} 트로피가 부족합니다. ${debt} 트로피만큼 빚을 지고 토너먼트에 참가할까요?`);
+  return ok ? true : null;
 }
 
 function watchRoom(room) {

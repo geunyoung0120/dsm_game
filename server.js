@@ -82,7 +82,7 @@ const CARDS = {
   zzangga: {
     id: 'zzangga',
     name: '짱가',
-    cost: 5,
+    cost: 4,
     role: '광역 딜러',
     maxHp: 760,
     damage: 98,
@@ -232,8 +232,8 @@ const CARDS = {
     cost: 5,
     role: '변신 딜러',
     maxHp: 850,
-    damage: 70,
-    awakenedDamage: 120,
+    damage: 63,
+    awakenedDamage: 108,
     range: 36,
     speed: 44,
     awakenedSpeed: 70,
@@ -959,8 +959,8 @@ function createTournamentRoomForSocket(socket, payload, normalized) {
     socket.emit('room-error', '트로피 참가비는 0개 이상 정수로 입력하세요.');
     return;
   }
-  if (Math.max(0, Number(creator.trophies) || 0) < stake) {
-    socket.emit('room-error', '참가비로 걸 트로피가 부족합니다.');
+  if (stake > 0 && (Number(creator.trophies) || 0) < stake && !payload.allowDebt) {
+    socket.emit('room-error', '참가비가 부족합니다. 빚을 지고 참가하려면 다시 확인해주세요.');
     return;
   }
 
@@ -1009,7 +1009,7 @@ function createTournamentRoomForSocket(socket, payload, normalized) {
   }
 
   rooms.set(room.id, room);
-  const joinResult = assignSocketToTournamentRoom(socket, room);
+  const joinResult = assignSocketToTournamentRoom(socket, room, { allowDebt: Boolean(payload.allowDebt) });
   if (!joinResult.ok) {
     rooms.delete(room.id);
     tournament.status = 'cancelled';
@@ -1061,7 +1061,7 @@ function joinRoomForSocket(socket, payload) {
 
   if (room.mode === 'tournament') {
     leaveCurrentRoom(socket, { disconnecting: false, silent: true });
-    const joinResult = assignSocketToTournamentRoom(socket, room);
+    const joinResult = assignSocketToTournamentRoom(socket, room, { allowDebt: Boolean(payload.allowDebt) });
     if (!joinResult.ok) {
       socket.emit('room-error', joinResult.error || '토너먼트 방에 참가할 수 없습니다.');
       emitRooms();
@@ -1548,7 +1548,8 @@ function createTower(owner, type, x, y, hpMultiplier = 1) {
     range: isKing ? 210 : 190,
     damage: isKing ? 58 : 46,
     attackMs: isKing ? 950 : 900,
-    nextAttackAt: 0
+    nextAttackAt: 0,
+    awakened: !isKing
   };
 }
 
@@ -2597,6 +2598,7 @@ function updateTowers(room, now) {
   const game = room.game;
   for (const tower of game.towers) {
     if (tower.hp <= 0 || now < tower.nextAttackAt) continue;
+    if (tower.type === 'king' && !tower.awakened) continue;
 
     const enemies = game.units.filter((unit) => unit.owner !== tower.owner && unit.hp > 0 && distance(tower, unit) <= tower.range);
     const target = nearest(tower, enemies);
@@ -2669,8 +2671,21 @@ function applyDamage(room, target, amount, sourceOwner, now) {
   if (target.entity === 'unit') {
     applyDamageToUnit(room, target, amount, sourceOwner, now);
   } else if (target.entity === 'tower') {
+    if (target.type === 'king') awakenKingTower(room, target, now);
     target.hp = Math.max(0, target.hp - amount);
   }
+}
+
+function awakenKingTower(room, tower, now) {
+  if (!tower || tower.awakened || tower.hp <= 0) return;
+  tower.awakened = true;
+  tower.nextAttackAt = Math.max(tower.nextAttackAt || 0, now + 350);
+  broadcastEffect(room, {
+    type: 'king-tower-awaken',
+    owner: tower.owner,
+    x: tower.x,
+    y: tower.y
+  });
 }
 
 function applyDamageToUnit(room, unit, amount, sourceOwner, now, options = {}) {
@@ -3171,7 +3186,8 @@ function serializeState(room, viewerSlot = null, options = {}) {
       x: tower.x,
       y: tower.y,
       hp: Math.ceil(tower.hp),
-      maxHp: tower.maxHp
+      maxHp: tower.maxHp,
+      awakened: Boolean(tower.awakened)
     })),
     units: game.units.map((unit) => ({
       id: unit.id,
@@ -3199,9 +3215,11 @@ function getTierForTrophies(trophies) {
 }
 
 function publicUser(user) {
-  const trophies = Math.max(0, Number(user.trophies) || 0);
+  const trophies = Number(user.trophies) || 0;
   const tier = getTierForTrophies(trophies);
-  const nextTier = TIER_DEFINITIONS.find((candidate) => candidate.min > trophies);
+  const nextTier = trophies < tier.min
+    ? tier
+    : TIER_DEFINITIONS.find((candidate) => candidate.min > trophies);
   return {
     id: user.id,
     username: user.username,
@@ -3224,7 +3242,7 @@ function publicUser(user) {
 
 function publicRankings() {
   return statements.listRankings.all().map((user, index) => {
-    const trophies = Math.max(0, Number(user.trophies) || 0);
+    const trophies = Number(user.trophies) || 0;
     const tier = getTierForTrophies(trophies);
     return {
       rank: index + 1,
@@ -3252,6 +3270,13 @@ function publicTournamentHistory() {
 
 function publicTournamentSummary(row, number) {
   const title = `제 ${number}회 토너먼트 대회`;
+  const state = safeJsonParse(row.state_json, {});
+  const pool = Math.max(0, Number(row.pool) || 0);
+  const prizes = state.prizes || {
+    winnerPrize: pool,
+    runnerUpPrize: 0
+  };
+  const runnerUp = state.runnerUp || null;
   return {
     id: row.id,
     number,
@@ -3263,7 +3288,11 @@ function publicTournamentSummary(row, number) {
     wonAt: row.winner_won_at || row.ended_at,
     date: row.winner_won_at || row.ended_at,
     stake: Math.max(0, Number(row.stake) || 0),
-    pool: Math.max(0, Number(row.pool) || 0),
+    pool,
+    winnerPrize: Math.max(0, Number(prizes.winnerPrize) || 0),
+    runnerUpPrize: Math.max(0, Number(prizes.runnerUpPrize) || 0),
+    runnerUpUserId: runnerUp ? runnerUp.userId : null,
+    runnerUpUsername: runnerUp ? runnerUp.username : '',
     participantTarget: Math.max(0, Number(row.participant_target) || 0)
   };
 }
@@ -3684,7 +3713,7 @@ function createTournamentRecord(room, options) {
   };
 }
 
-function assignSocketToTournamentRoom(socket, room) {
+function assignSocketToTournamentRoom(socket, room, options = {}) {
   const tournament = tournaments.get(room.tournamentId);
   if (!tournament || tournament.status !== 'waiting') {
     return { ok: false, error: '참가할 수 없는 토너먼트입니다.' };
@@ -3699,9 +3728,9 @@ function assignSocketToTournamentRoom(socket, room) {
     return { ok: false, error: '이미 가득 찬 토너먼트입니다.' };
   }
 
-  const profile = deductTournamentStake(user.id, tournament.stake);
+  const profile = deductTournamentStake(user.id, tournament.stake, { allowDebt: Boolean(options.allowDebt) });
   if (!profile) {
-    return { ok: false, error: '참가비로 걸 트로피가 부족합니다.' };
+    return { ok: false, error: '참가비가 부족합니다. 빚을 지고 참가하려면 다시 확인해주세요.' };
   }
 
   let slot = room.game.players.findIndex((player) => !player.userId);
@@ -4063,9 +4092,42 @@ function tournamentMatchRules(phase) {
   return phase === 'final' ? publicGameRules(finalGameRules()) : null;
 }
 
+function tournamentPrizeSplit(pool) {
+  const total = Math.max(0, Number(pool) || 0);
+  const winnerPrize = Math.min(total, Math.max(0, Math.round(total * 0.7)));
+  return {
+    pool: total,
+    winnerPrize,
+    runnerUpPrize: Math.max(0, total - winnerPrize),
+    winnerPercent: 70,
+    runnerUpPercent: 30
+  };
+}
+
+function tournamentRunnerUp(tournament, winnerUserId) {
+  if (!tournament || !winnerUserId) return null;
+  const rounds = Array.isArray(tournament.rounds) ? tournament.rounds : [];
+  const finalRound = [...rounds].reverse().find((round) => {
+    return round && Array.isArray(round.matches) && round.matches.some((match) => {
+      return match && match.status === 'completed' && match.winnerUserId === winnerUserId && !match.bye;
+    });
+  });
+  const finalMatch = finalRound && finalRound.matches.find((match) => {
+    return match && match.status === 'completed' && match.winnerUserId === winnerUserId && !match.bye;
+  });
+  const runnerUpUserId = finalMatch
+    ? (finalMatch.loserUserIds && finalMatch.loserUserIds[0]) || (finalMatch.participantUserIds || []).find((userId) => userId && userId !== winnerUserId)
+    : null;
+  return runnerUpUserId
+    ? tournament.participants.find((participant) => participant.userId === runnerUpUserId) || null
+    : null;
+}
+
 function finishTournament(tournament, winnerUserId) {
   if (!tournament || tournament.status === 'completed') return;
   const winner = tournament.participants.find((participant) => participant.userId === winnerUserId);
+  const runnerUp = tournamentRunnerUp(tournament, winnerUserId);
+  const prizeSplit = tournamentPrizeSplit(tournament.pool);
   const now = new Date().toISOString();
   if (tournamentBreakTimers.has(tournament.id)) {
     clearTimeout(tournamentBreakTimers.get(tournament.id));
@@ -4078,15 +4140,22 @@ function finishTournament(tournament, winnerUserId) {
     userId: winner.userId,
     username: winner.username
   } : null;
+  tournament.runnerUp = runnerUp ? {
+    userId: runnerUp.userId,
+    username: runnerUp.username
+  } : null;
+  tournament.prizes = prizeSplit;
   tournament.winnerWonAt = now;
   tournament.endedAt = now;
   tournament.updatedAt = now;
 
   if (winner) {
-    awardTournamentWinner(winner.userId, tournament.pool);
-    emitProfileToUser(winner.userId);
+    awardTournamentPrize(winner.userId, prizeSplit.winnerPrize, { incrementWins: true });
+    if (runnerUp && prizeSplit.runnerUpPrize > 0) {
+      awardTournamentPrize(runnerUp.userId, prizeSplit.runnerUpPrize);
+    }
     for (const participant of tournament.participants) {
-      if (participant.userId !== winner.userId) emitProfileToUser(participant.userId);
+      emitProfileToUser(participant.userId);
     }
   }
 
@@ -4292,6 +4361,8 @@ function publicTournamentState(tournament, viewingMatchId = null) {
     viewingMatchId,
     break: publicTournamentBreak(tournament.break),
     winner: tournament.winner,
+    runnerUp: tournament.runnerUp || null,
+    prizes: tournament.prizes || tournamentPrizeSplit(tournament.pool),
     winnerWonAt: tournament.winnerWonAt,
     participants: tournament.participants.map((participant) => ({
       userId: participant.userId,
@@ -4387,6 +4458,8 @@ function persistableTournamentState(tournament) {
     activeMatchIds: tournament.activeMatchIds,
     break: tournament.break,
     winner: tournament.winner,
+    runnerUp: tournament.runnerUp || null,
+    prizes: tournament.prizes || null,
     winnerWonAt: tournament.winnerWonAt,
     createdAt: tournament.createdAt,
     updatedAt: tournament.updatedAt,
@@ -4427,21 +4500,25 @@ function isSocketPlayingActiveTournamentMatch(socket, tournament) {
   return Boolean(room && room.tournamentId === tournament.id && room.game.status === 'playing');
 }
 
-function deductTournamentStake(userId, stake) {
-  return adjustTournamentTrophies(userId, -stake, { requireBalance: true });
+function deductTournamentStake(userId, stake, options = {}) {
+  const amount = Math.max(0, Number(stake) || 0);
+  return adjustTournamentTrophies(userId, -amount, {
+    requireBalance: amount > 0 && !options.allowDebt,
+    allowNegative: true
+  });
 }
 
 function refundTournamentParticipant(tournament, participant) {
   if (!participant || !participant.stakePaid) return null;
-  const profile = adjustTournamentTrophies(participant.userId, tournament.stake);
+  const profile = adjustTournamentTrophies(participant.userId, tournament.stake, { allowNegative: true });
   participant.stakePaid = false;
   return profile;
 }
 
-function awardTournamentWinner(userId, amount) {
+function awardTournamentPrize(userId, amount, options = {}) {
   const transaction = db.transaction(() => {
-    const profile = adjustTournamentTrophies(userId, amount);
-    statements.incrementTournamentWins.run(new Date().toISOString(), userId);
+    const profile = adjustTournamentTrophies(userId, amount, { allowNegative: true });
+    if (options.incrementWins) statements.incrementTournamentWins.run(new Date().toISOString(), userId);
     return profile;
   });
   return transaction();
@@ -4450,9 +4527,10 @@ function awardTournamentWinner(userId, amount) {
 function adjustTournamentTrophies(userId, delta, options = {}) {
   const user = statements.getUserById.get(userId);
   if (!user) return null;
-  const currentTrophies = Math.max(0, Number(user.trophies) || 0);
+  const currentTrophies = Number(user.trophies) || 0;
   if (options.requireBalance && currentTrophies + delta < 0) return null;
-  const trophies = Math.max(0, currentTrophies + delta);
+  const nextTrophies = currentTrophies + delta;
+  const trophies = options.allowNegative ? nextTrophies : Math.max(0, nextTrophies);
   const lossCounter = Math.max(0, Number(user.loss_counter) || 0);
   const tier = getTierForTrophies(trophies);
   statements.updateUserStats.run(trophies, tier.name, lossCounter, new Date().toISOString(), userId);

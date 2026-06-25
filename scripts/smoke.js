@@ -709,8 +709,12 @@ async function expectTournamentMode(accounts) {
 
   await delay(200);
   const winnerProfile = await fetchSessionUser(accounts[winnerIndex]);
-  if (winnerProfile.trophies !== 20 || winnerProfile.tournamentWins !== 1) {
-    throw new Error(`Tournament winner profile expected 20 trophies and 1 win. Got ${winnerProfile.trophies}, ${winnerProfile.tournamentWins}.`);
+  const runnerUpProfile = await fetchSessionUser(accounts[loserIndex]);
+  if (winnerProfile.trophies !== 16 || winnerProfile.tournamentWins !== 1) {
+    throw new Error(`Tournament winner profile expected 16 trophies and 1 win. Got ${winnerProfile.trophies}, ${winnerProfile.tournamentWins}.`);
+  }
+  if (runnerUpProfile.trophies !== 9) {
+    throw new Error(`Tournament runner-up profile expected 9 trophies. Got ${runnerUpProfile.trophies}.`);
   }
   const latestWinner = await fetchTournamentWinner(accounts[winnerIndex]);
   if (!latestWinner || latestWinner.username !== accounts[winnerIndex].user.username || !latestWinner.wonAt) {
@@ -722,7 +726,7 @@ async function expectTournamentMode(accounts) {
     throw new Error('Tournament history API did not list the completed tournament.');
   }
   const detail = await fetchTournamentDetail(accounts[winnerIndex], completed.id);
-  if (!detail || detail.winnerUsername !== accounts[winnerIndex].user.username || detail.pool !== 15 || !Array.isArray(detail.rounds) || detail.rounds.length < 2) {
+  if (!detail || detail.winnerUsername !== accounts[winnerIndex].user.username || detail.runnerUpUsername !== accounts[loserIndex].user.username || detail.pool !== 15 || detail.winnerPrize !== 11 || detail.runnerUpPrize !== 4 || !Array.isArray(detail.rounds) || detail.rounds.length < 2) {
     throw new Error('Tournament detail API did not expose bracket results.');
   }
 
@@ -817,6 +821,12 @@ function expectHeoseonNerf(cards) {
 
   if (!cards.baduk || cards.baduk.damage !== 100 || cards.baduk.chaosEnemyDamage !== 100 || cards.baduk.chaosFriendlyDamage !== 29) {
     throw new Error('Baduk damage tuning was not present.');
+  }
+  if (!cards.zzangga || cards.zzangga.cost !== 4) {
+    throw new Error('Zzangga cost tuning was not present.');
+  }
+  if (!cards.mythos || cards.mythos.damage !== 63 || cards.mythos.awakenedDamage !== 108) {
+    throw new Error('Mythos damage tuning was not present.');
   }
 
   if (!cards.badukFart || !cards.badukFart.spell || cards.badukFart.damagePerSecond !== 60 || cards.badukFart.radius !== 59 || cards.badukFart.durationMs !== 4000) {
