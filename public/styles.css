@@ -548,6 +548,8 @@ input:disabled {
 
 .notice-panel {
   grid-row: span 2;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .notice-title {
@@ -556,7 +558,8 @@ input:disabled {
 
 .patch-notice-list {
   display: grid;
-  gap: 10px;
+  grid-template-rows: repeat(3, minmax(118px, 1fr));
+  gap: 12px;
 }
 
 .patch-notice {
@@ -571,7 +574,10 @@ input:disabled {
 }
 
 .patch-notice-compact {
-  padding: 12px 13px;
+  min-height: 118px;
+  padding: 16px;
+  display: grid;
+  align-content: start;
 }
 
 .patch-notice-header {
@@ -588,7 +594,7 @@ input:disabled {
 }
 
 .patch-notice-compact strong {
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .patch-notice time {
@@ -607,15 +613,11 @@ input:disabled {
 }
 
 .patch-notice-compact ul {
-  margin-top: 7px;
+  margin-top: 10px;
   display: grid;
-  gap: 2px;
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.patch-notice-compact li:nth-child(n + 3) {
-  display: none;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.42;
 }
 
 .patch-detail-toggle {
