@@ -31,7 +31,9 @@ const SUDDEN_DEATH_MAX_MS = Number(process.env.SUDDEN_DEATH_MAX_MS || 90000);
 const MAX_ELIXIR = 10;
 const ELIXIR_PER_SECOND = 1 / 2.8;
 const DOUBLE_ELIXIR_REMAINING_MS = 60000;
+const TRIPLE_ELIXIR_REMAINING_MS = 20000;
 const DOUBLE_ELIXIR_MULTIPLIER = 2;
+const TRIPLE_ELIXIR_MULTIPLIER = 3;
 const TOWER_HP = {
   king: 9200,
   princess: 5400
@@ -2000,9 +2002,12 @@ function randomChaosAction() {
 
 function getElixirMultiplier(game, now) {
   if (game.status !== 'playing') return 1;
-  if (game.suddenDeath) return DOUBLE_ELIXIR_MULTIPLIER;
-  if (!game.endsAt) return 1;
-  return game.endsAt - now <= DOUBLE_ELIXIR_REMAINING_MS ? DOUBLE_ELIXIR_MULTIPLIER : 1;
+  const endsAt = game.suddenDeath ? game.suddenDeathEndsAt : game.endsAt;
+  if (!endsAt) return 1;
+  const remainingMs = endsAt - now;
+  if (remainingMs <= TRIPLE_ELIXIR_REMAINING_MS) return TRIPLE_ELIXIR_MULTIPLIER;
+  if (game.suddenDeath || remainingMs <= DOUBLE_ELIXIR_REMAINING_MS) return DOUBLE_ELIXIR_MULTIPLIER;
+  return 1;
 }
 
 function broadcastEffect(room, effect) {

@@ -16,6 +16,21 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: '마지막 20초와 키보드 카드 선택',
+    date: '2026.06.25',
+    items: [
+      '경기 종료 20초 전부터 엘릭서 충전 속도 3배 적용',
+      '전장에서 1~4 키로 손패 카드 선택 가능',
+      '카드마다 숫자 배지를 표시해 키보드 선택 위치 확인'
+    ],
+    details: [
+      '정규 시간 기준 마지막 60초부터는 기존처럼 X2가 적용되고, 마지막 20초부터는 X3가 우선 적용된다.',
+      '서든 데스에서도 남은 시간이 20초 이하로 줄어들면 X3 충전으로 전환된다.',
+      '오른쪽 경기 시간 표시 옆 배지가 현재 엘릭서 배율을 그대로 보여준다.',
+      '전장 하단 손패는 왼쪽부터 1, 2, 3, 4 키로 선택할 수 있고, 클릭 선택과 동일하게 엘릭서 부족 및 1회용 사용 완료 상태를 막는다.'
+    ]
+  },
+  {
     title: '대.근.영 상향과 지민·성주 조정',
     date: '2026.06.25',
     items: [
@@ -472,6 +487,7 @@ class BattleScene extends Phaser.Scene {
     this.textPool = [];
     this.usedTextCount = 0;
     this.notice = '';
+    this.boundKeyDown = null;
   }
 
   create() {
@@ -484,9 +500,16 @@ class BattleScene extends Phaser.Scene {
       this.receiveState(latestState);
     }
     this.events.once('shutdown', () => {
+      if (this.input.keyboard && this.boundKeyDown) {
+        this.input.keyboard.off('keydown', this.boundKeyDown);
+      }
       if (activeScene === this) activeScene = null;
     });
     this.input.on('pointerdown', (pointer) => this.handlePointer(pointer));
+    if (this.input.keyboard) {
+      this.boundKeyDown = (event) => this.handleKeyDown(event);
+      this.input.keyboard.on('keydown', this.boundKeyDown);
+    }
   }
 
   receiveWelcome(payload) {
@@ -536,13 +559,7 @@ class BattleScene extends Phaser.Scene {
     });
 
     if (cardIndex >= 0) {
-      const player = this.state.players[this.slot];
-      const cardId = player && player.hand[cardIndex];
-      const card = this.cards[cardId];
-      if (!card || this.state.status !== 'playing') return;
-      if (player.elixir + 0.001 < getEffectiveCardCost(card, player)) return;
-      if (card.oneUse && (player.usedOneTimeCards || []).includes(card.id)) return;
-      this.selectedHandIndex = this.selectedHandIndex === cardIndex ? null : cardIndex;
+      this.selectHandIndex(cardIndex);
       return;
     }
 
@@ -555,6 +572,34 @@ class BattleScene extends Phaser.Scene {
       y: pointer.y
     });
     this.selectedHandIndex = null;
+  }
+
+  handleKeyDown(event) {
+    const target = event && event.target;
+    const tagName = target && target.tagName ? target.tagName.toLowerCase() : '';
+    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' || (target && target.isContentEditable)) return;
+
+    const keyNumber = Number(event && event.key);
+    if (!Number.isInteger(keyNumber) || keyNumber < 1 || keyNumber > 4) return;
+
+    if (this.selectHandIndex(keyNumber - 1) && event && typeof event.preventDefault === 'function') {
+      event.preventDefault();
+    }
+  }
+
+  selectHandIndex(cardIndex) {
+    if (!this.socket || !this.state || this.slot === null || this.slot === undefined) return false;
+    if (cardIndex < 0 || cardIndex >= 4 || this.state.status !== 'playing') return false;
+
+    const player = this.state.players[this.slot];
+    const cardId = player && player.hand && player.hand[cardIndex];
+    const card = this.cards[cardId];
+    if (!player || !card) return false;
+    if (player.elixir + 0.001 < getEffectiveCardCost(card, player)) return false;
+    if (card.oneUse && (player.usedOneTimeCards || []).includes(card.id)) return false;
+
+    this.selectedHandIndex = this.selectedHandIndex === cardIndex ? null : cardIndex;
+    return true;
   }
 
   drawBoard() {
@@ -1216,7 +1261,8 @@ class BattleScene extends Phaser.Scene {
   drawHud() {
     const me = this.slot === null || this.slot === undefined ? null : this.state.players[this.slot];
     const time = formatTime(this.state.remainingMs);
-    const doubleElixir = (this.state.elixirMultiplier || 1) > 1;
+    const elixirMultiplier = this.state.elixirMultiplier || 1;
+    const boostedElixir = elixirMultiplier > 1;
 
     const x = ARENA_W + 12;
     const w = SIDEBAR_W - 24;
@@ -1227,17 +1273,18 @@ class BattleScene extends Phaser.Scene {
 
     this.drawText('경기 시간', x + 14, 28, 11, '#8f98a6');
     this.drawText(this.state.suddenDeath ? '서든 데스' : time, x + 14, 44, 26, '#f7f2e8');
-    if (doubleElixir) {
+    if (boostedElixir) {
       this.g.fillStyle(0xb86dff, 1);
       this.g.fillRoundedRect(x + 122, 50, 42, 20, 6);
-      this.drawCenteredText('X2', x + 143, 50, 14, '#ffffff');
+      this.drawCenteredText(`X${elixirMultiplier}`, x + 143, 50, 14, '#ffffff');
     }
 
     this.drawHudTeam(1, '위 진영', x + 12, 88, w - 24, '#ffd5d1');
     this.drawHudTeam(0, '아래 진영', x + 12, 212, w - 24, '#cbe1ff');
 
     this.drawText('상태', x + 14, 350, 11, '#8f98a6');
-    this.drawText(truncateText(this.state.message || (doubleElixir ? '더블 엘릭서' : '전투 중'), 18), x + 14, 368, 13, '#d6d0c6');
+    const elixirStatus = elixirMultiplier >= 3 ? '트리플 엘릭서' : '더블 엘릭서';
+    this.drawText(truncateText(boostedElixir ? elixirStatus : this.state.message || '전투 중', 18), x + 14, 368, 13, '#d6d0c6');
 
     if (me) {
       this.drawElixir(me.elixir, me.maxElixir || 10);
@@ -1320,6 +1367,9 @@ class BattleScene extends Phaser.Scene {
       this.g.fillStyle(0x111318, 0.78);
       this.g.fillCircle(x + 23, y + 23, 17);
       this.drawCenteredText(String(effectiveCost), x + 23, y + 14, 17, '#ffffff');
+      this.g.fillStyle(0x111318, 0.58);
+      this.g.fillRoundedRect(x + w - 36, y + 8, 24, 24, 6);
+      this.drawCenteredText(String(i + 1), x + w - 24, y + 13, 12, disabled ? '#b9b9b9' : '#f7f2e8');
       this.drawCenteredText(theme.short, x + w / 2, y + 33, 30, disabled ? '#b9b9b9' : '#111318');
       this.drawCenteredText(card.name, x + w / 2, y + 69, 15, '#ffffff');
       this.drawCenteredText(bestFriendCombo ? '절친 출격' : card.role, x + w / 2, y + 91, 10, '#f5ead8');
