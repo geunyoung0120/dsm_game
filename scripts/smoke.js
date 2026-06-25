@@ -12,6 +12,9 @@ const smokePassword = 'test-password';
 const bestFriendPair = ['baduk', 'johyunwoo'];
 const bestFriendComboCost = 8;
 const smokeDeck = ['osj', 'heoseon', 'johyunwoo', 'seongjoo', 'peach', 'bbatman', 'jimin', 'yushin'];
+const cherryTreeDeck = ['cherryTree', 'seongjoo', 'peach', 'jimin', 'bbatman', 'yushin', 'mythos', 'johyunwoo'];
+const giantHyeonjikDeck = ['giantHyeonjik', 'seongjoo', 'peach', 'jimin', 'bbatman', 'yushin', 'mythos', 'johyunwoo'];
+const targetDummyDeck = ['peach', 'seongjoo', 'jimin', 'bbatman', 'yushin', 'mythos', 'johyunwoo', 'osj'];
 
 let serverProcess = null;
 let clients = [];
@@ -51,6 +54,8 @@ async function main() {
   await expectDeckSave(accounts[0], smokeDeck);
   await expectSessionUser(await login(accounts[0].user.username));
   const result = await runClientSmoke(accounts);
+  const cherryTree = await expectCherryTreeAttackFlow(accounts);
+  const giantHyeonjik = await expectGiantHyeonjikIgnoresUnits(accounts);
   const twoVersusTwoAccounts = await Promise.all([
     signup(`연습유저${Date.now()}C`),
     signup(`연습유저${Date.now()}D`),
@@ -66,7 +71,7 @@ async function main() {
   if (actualOpeningHand !== expectedOpeningHand) {
     throw new Error(`Saved deck was not used for player 1. Expected ${expectedOpeningHand}, got ${actualOpeningHand}.`);
   }
-  console.log(JSON.stringify({ ...result, twoVersusTwo }));
+  console.log(JSON.stringify({ ...result, cherryTree, giantHyeonjik, twoVersusTwo }));
   cleanup();
 }
 
@@ -304,6 +309,82 @@ function runPlayableSmoke(cardsByClient) {
   });
 }
 
+async function expectCherryTreeAttackFlow(accounts) {
+  await expectDeckSave(accounts[0], cherryTreeDeck);
+  await expectDeckSave(accounts[1], targetDummyDeck);
+
+  clients = accounts.map((account) => io(url, {
+    transports: ['websocket'],
+    extraHeaders: { Cookie: account.cookie }
+  }));
+
+  await Promise.all(clients.map((client) => once(client, 'welcome')));
+  clients[0].emit('create-room', { name: '벚꽃나무 스모크 테스트 방', password: '' });
+  const joined = await once(clients[0], 'room-joined', 'cherry host room-joined');
+  clients[1].emit('join-room', { roomId: joined.room.id, password: '' });
+  await once(clients[1], 'room-joined', 'cherry guest room-joined');
+  await Promise.all([
+    waitForState(clients[0], (payload) => {
+      return payload.status === 'playing' && payload.players[0] && Array.isArray(payload.players[0].hand) && payload.players[0].hand[0] === 'cherryTree';
+    }, 'cherry host playing state'),
+    waitForState(clients[1], (payload) => {
+      return payload.status === 'playing' && payload.players[1] && Array.isArray(payload.players[1].hand) && payload.players[1].hand[0] === 'peach';
+    }, 'cherry guest playing state')
+  ]);
+  await delay(150);
+
+  const deployedPromise = waitForState(clients[0], (payload) => {
+    return payload.units.some((unit) => unit.cardId === 'cherryTree') && payload.units.some((unit) => unit.cardId === 'peach');
+  }, 'deployed cherry tree and target');
+  const cherryShotPromise = onceEffect(clients[0], (effect) => effect.type === 'cherry-shot' && effect.cardId === 'cherryTree', 'cherry-shot effect', 7000);
+  clients[0].emit('play-card', { handIndex: 0, x: 450, y: 338 });
+  clients[1].emit('play-card', { handIndex: 0, x: 450, y: 282 });
+  await deployedPromise;
+  await cherryShotPromise;
+
+  for (const client of clients) client.disconnect();
+  return true;
+}
+
+async function expectGiantHyeonjikIgnoresUnits(accounts) {
+  await expectDeckSave(accounts[0], giantHyeonjikDeck);
+  await expectDeckSave(accounts[1], targetDummyDeck);
+
+  clients = accounts.map((account) => io(url, {
+    transports: ['websocket'],
+    extraHeaders: { Cookie: account.cookie }
+  }));
+
+  await Promise.all(clients.map((client) => once(client, 'welcome')));
+  clients[0].emit('create-room', { name: '자이언트 현직 스모크 테스트 방', password: '' });
+  const joined = await once(clients[0], 'room-joined', 'giant host room-joined');
+  clients[1].emit('join-room', { roomId: joined.room.id, password: '' });
+  await once(clients[1], 'room-joined', 'giant guest room-joined');
+  await Promise.all([
+    waitForState(clients[0], (payload) => {
+      return payload.status === 'playing' && payload.players[0] && Array.isArray(payload.players[0].hand) && payload.players[0].hand[0] === 'giantHyeonjik' && payload.players[0].elixir >= 6;
+    }, 'giant host playing state'),
+    waitForState(clients[1], (payload) => {
+      return payload.status === 'playing' && payload.players[1] && Array.isArray(payload.players[1].hand) && payload.players[1].hand[0] === 'peach';
+    }, 'giant guest playing state')
+  ]);
+  await delay(150);
+
+  const deployedPromise = waitForState(clients[0], (payload) => {
+    return payload.units.some((unit) => unit.cardId === 'giantHyeonjik') && payload.units.some((unit) => unit.cardId === 'peach');
+  }, 'deployed giant and target unit');
+  const noUnitHitPromise = expectNoEffect(clients[0], (effect) => {
+    return effect.type === 'hit' && effect.cardId === 'giantHyeonjik' && Math.abs(effect.x - 450) <= 45 && Math.abs(effect.y - 282) <= 45;
+  }, 'giant Hyeonjik unit hit', 1700);
+  clients[0].emit('play-card', { handIndex: 0, x: 450, y: 338 });
+  clients[1].emit('play-card', { handIndex: 0, x: 450, y: 282 });
+  await deployedPromise;
+  await noUnitHitPromise;
+
+  for (const client of clients) client.disconnect();
+  return true;
+}
+
 async function expectTwoVersusTwoRoom(accounts, spectatorAccounts) {
   clients = accounts.map((account) => io(url, {
     transports: ['websocket'],
@@ -390,8 +471,8 @@ async function expectSpectatorFlow(roomId, accounts) {
 
   const roomsPromise = once(spectatorClients[0], 'spectator-rooms', 'spectator room list');
   spectatorClients[0].emit('request-spectator-rooms');
-  const watchableRooms = await roomsPromise;
-  if (!Array.isArray(watchableRooms) || !watchableRooms.some((room) => room.id === roomId)) {
+  const rooms = await roomsPromise;
+  if (!Array.isArray(rooms) || !rooms.some((room) => room.id === roomId && room.spectatorCount === 0)) {
     throw new Error('Active battle was not listed for spectators.');
   }
 
@@ -474,8 +555,8 @@ function expectHeoseonNerf(cards) {
     throw new Error('Bbatman heal interval was not present.');
   }
   const playableCount = Object.values(cards).filter((card) => card && card.playable !== false).length;
-  if (playableCount !== 19) {
-    throw new Error(`Playable card count expected 19, got ${playableCount}.`);
+  if (playableCount !== 20) {
+    throw new Error(`Playable card count expected 20, got ${playableCount}.`);
   }
   if (!cards.dagwasil || !cards.dagwasil.building || cards.dagwasil.cost !== 5 || cards.dagwasil.maxHp !== 1500 || cards.dagwasil.radius !== 34 || cards.dagwasil.buildingDurationMs !== 24000 || cards.dagwasil.spawnMinionMs !== 4000) {
     throw new Error('Dagwasil building card did not expose the expected fields.');
@@ -491,6 +572,9 @@ function expectHeoseonNerf(cards) {
   }
   if (!cards.cherryTree || !cards.cherryTree.building || cards.cherryTree.cost !== 5 || cards.cherryTree.maxHp !== 2000 || cards.cherryTree.damage !== 100 || cards.cherryTree.attackMs !== 1000 || cards.cherryTree.buildingDurationMs !== 24000 || !cards.cherryTree.cherryAttack) {
     throw new Error('Cherry tree building card did not expose the expected fields.');
+  }
+  if (!cards.giantHyeonjik || cards.giantHyeonjik.cost !== 6 || cards.giantHyeonjik.maxHp !== 1800 || cards.giantHyeonjik.damage !== 120 || cards.giantHyeonjik.attackMs !== 1200 || cards.giantHyeonjik.radius !== 31 || !cards.giantHyeonjik.buildingDestroyer) {
+    throw new Error('Giant Hyeonjik card did not expose the expected building destroyer fields.');
   }
   if (!cards.taegeonBumperCar || cards.taegeonBumperCar.cost !== 1 || cards.taegeonBumperCar.speed !== 95 || cards.taegeonBumperCar.maxHp !== 120 || cards.taegeonBumperCar.damage !== 200 || cards.taegeonBumperCar.explosionDamage !== 200 || !cards.taegeonBumperCar.suicideRusher) {
     throw new Error('Taegeon bumper car did not expose the expected suicide rusher fields.');
@@ -520,33 +604,75 @@ function once(client, eventName, label = eventName) {
   });
 }
 
-function waitForState(client, predicate, label = 'matching state') {
+function onceEffect(client, predicate, label = 'matching effect', timeoutMs = 5000) {
   return new Promise((resolve, reject) => {
-    let lastSummary = 'no state received';
-    const timer = setTimeout(() => reject(new Error(`Timed out waiting for ${label}. Last: ${lastSummary}`)), 5000);
-    client.on('state', handleState);
-    client.once('connect_error', handleError);
-
-    function handleState(payload) {
-      lastSummary = JSON.stringify({
-        status: payload && payload.status,
-        spectator: payload && payload.spectator,
-        spectatorCount: payload && payload.spectatorCount,
-        hands: payload && payload.players && payload.players.map((player) => Array.isArray(player.hand) ? player.hand.length : null)
-      });
+    const timer = setTimeout(() => reject(new Error(`Timed out waiting for ${label}.`)), timeoutMs);
+    const handleEffect = (payload) => {
       if (!predicate(payload)) return;
       clearTimeout(timer);
-      client.off('state', handleState);
-      client.off('connect_error', handleError);
+      client.off('effect', handleEffect);
       resolve(payload);
-    }
-
-    function handleError(error) {
+    };
+    client.on('effect', handleEffect);
+    client.once('connect_error', (error) => {
       clearTimeout(timer);
-      client.off('state', handleState);
+      client.off('effect', handleEffect);
       reject(error);
+    });
+  });
+}
+
+function expectNoEffect(client, predicate, label = 'unexpected effect', timeoutMs = 700) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      client.off('effect', handleEffect);
+      resolve();
+    }, timeoutMs);
+    client.on('effect', handleEffect);
+
+    function handleEffect(effect) {
+      if (!predicate(effect)) return;
+      clearTimeout(timer);
+      client.off('effect', handleEffect);
+      reject(new Error(`Received ${label}.`));
     }
   });
+}
+
+function waitForState(client, predicate, label = 'matching state') {
+  return new Promise((resolve, reject) => {
+    let lastSummary = 'none';
+    const timer = setTimeout(() => {
+      reject(new Error(`Timed out waiting for ${label}. Last: ${lastSummary}`));
+    }, 12000);
+
+    client.on('state', function handleState(payload) {
+      try {
+        lastSummary = JSON.stringify({
+          status: payload && payload.status,
+          spectator: payload && payload.spectator,
+          spectatorCount: payload && payload.spectatorCount,
+          hands: payload && payload.players && payload.players.map((player) => Array.isArray(player.hand) ? player.hand.length : 0)
+        });
+        if (!predicate(payload)) return;
+        clearTimeout(timer);
+        client.off('state', handleState);
+        resolve(payload);
+      } catch (error) {
+        clearTimeout(timer);
+        client.off('state', handleState);
+        reject(error);
+      }
+    });
+  });
+}
+
+function accountsSummary() {
+  return clients.map((client) => Boolean(client.connected));
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function onceBattleChat(client, predicate, label = 'battle chat') {
@@ -586,14 +712,6 @@ function expectNoBattleChat(client, predicate, label = 'unexpected battle chat',
       reject(new Error(`Received ${label}.`));
     }
   });
-}
-
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function accountsSummary() {
-  return clients.map((client) => Boolean(client.connected));
 }
 
 function cleanup() {

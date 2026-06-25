@@ -169,6 +169,19 @@ const CARDS = {
     buildingDurationMs: 24000,
     cherryAttack: true
   },
+  giantHyeonjik: {
+    id: 'giantHyeonjik',
+    name: '자이언트 현직',
+    cost: 6,
+    role: '건물 파괴',
+    maxHp: 1800,
+    damage: 120,
+    range: 44,
+    speed: 36,
+    attackMs: 1200,
+    radius: 31,
+    buildingDestroyer: true
+  },
   kkongho: {
     id: 'kkongho',
     name: '꽁호',
@@ -1590,6 +1603,7 @@ function getDeployDelayMs(cardId) {
     baduk: 820,
     dagwasil: 760,
     cherryTree: 760,
+    giantHyeonjik: 900,
     taegeonBumperCar: 360,
     osj: 880,
     mythos: 900,
@@ -1606,6 +1620,7 @@ function deployLabel(cardId) {
     baduk: '혼돈 등장',
     dagwasil: '다과실 개장',
     cherryTree: '벚꽃 개화',
+    giantHyeonjik: '거인 출격',
     yushin: '군단 집결',
     jimin: '드립 장전',
     mythos: '기운 상승',
@@ -2244,6 +2259,10 @@ function findUnitTarget(game, unit, card) {
     unit.targetLockId = null;
   }
 
+  if (card.buildingDestroyer) {
+    return findBuildingDestroyerTarget(game, unit, card);
+  }
+
   const attackableUnits = game.units.filter((other) => {
     return other.owner !== unit.owner && other.hp > 0 && distance(unit, other) <= Math.max(card.range + getTargetRadius(other), 170);
   });
@@ -2252,6 +2271,15 @@ function findUnitTarget(game, unit, card) {
 
   const towers = getAttackableEnemyTowers(game, unit.owner);
   return nearest(unit, towers);
+}
+
+function findBuildingDestroyerTarget(game, unit, card) {
+  const enemyBuildings = game.units.filter((other) => {
+    if (other.owner === unit.owner || other.hp <= 0) return false;
+    const otherCard = CARDS[other.cardId];
+    return Boolean(otherCard && otherCard.building);
+  });
+  return nearest(unit, [...enemyBuildings, ...getAttackableEnemyTowers(game, unit.owner)]);
 }
 
 function isValidTowerLock(game, unit, target) {

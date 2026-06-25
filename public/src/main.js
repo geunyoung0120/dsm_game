@@ -22,6 +22,25 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: '진해 벚꽃나무 수정과 자이언트 현직 추가',
+    date: '2026.06.25',
+    items: [
+      '벚꽃나무 공격 이펙트가 화면을 멈추게 하던 그래픽 호출 수정',
+      '신규 건물 파괴자 카드 자이언트 현직 추가',
+      '자이언트 현직은 적 캐릭터를 절대 공격하지 않고 건물만 공격',
+      '카드 풀 20장 기준으로 랜덤 덱과 테스트 갱신',
+      '벚꽃나무가 실제로 적을 공격하는 스모크 테스트 추가',
+      '클라이언트 검사에 잘못된 타원 smoothness 인자 방지 추가'
+    ],
+    details: [
+      '진해 벚꽃나무의 벚꽃잎 투사체를 그릴 때 Phaser의 fillEllipse 5번째 인자를 회전값처럼 넘기던 문제가 있었다. 이 인자는 실제로 점 개수 smoothness라서 잘못된 값이 들어가면 그래픽 루프가 불안정해질 수 있다.',
+      '벚꽃잎 이펙트는 안전한 smoothness 값으로만 그리도록 바꿔 전투 화면이 멈추지 않게 했다.',
+      '자이언트 현직은 6 엘릭서 캐릭터 카드다. HP 1800, 공격력 120, 공격 주기 1.2초의 거대한 근접 딜러로, 다과실과 진해 벚꽃나무 같은 건물 카드와 적 타워만 부순다.',
+      '적 캐릭터가 바로 옆에 있어도 절대 공격하지 않고 지나가며, 공격 가능한 건물이나 타워가 없으면 유닛을 때리는 대신 새 건물 목표를 기다린다.',
+      '스모크 테스트에서 벚꽃나무를 직접 설치하고 적 유닛을 가까이 배치해 cherry-shot 이펙트가 정상 발생하는지 검증하도록 추가했다.'
+    ]
+  },
+  {
     title: '타워 파괴 후 배치 구역 확장',
     date: '2026.06.25',
     items: [
@@ -295,6 +314,7 @@ const CARD_THEME = {
   dagwasil: { fill: 0x9b6b47, stroke: 0xffd7a8, short: '과' },
   kkong: { fill: 0xd87a2c, stroke: 0xffd29a, short: '꽁' },
   cherryTree: { fill: 0xffb7d7, stroke: 0xffedf5, short: '벚' },
+  giantHyeonjik: { fill: 0x6f5f86, stroke: 0xe3d7ff, short: '현' },
   kkongho: { fill: 0xf4df70, stroke: 0xfff8c9, short: '승' },
   yushin: { fill: 0x7f7fd5, stroke: 0xdad8ff, short: '군' },
   jimin: { fill: 0x4f8de8, stroke: 0xd5e9ff, short: '딜' },
@@ -438,6 +458,24 @@ const CHARACTER_DETAILS = [
     ability: '플레이어가 전장 위치 하나를 지정하면 벚꽃나무 건물이 배치된다. 건물은 움직이지 않고, 배치 후 24초 동안 체력이 조금씩 줄어든다. 살아있는 동안 1초마다 가장 가까운 적 유닛에게 벚꽃잎을 날려 100 피해를 준다.',
     appearance: '분홍 벚꽃이 풍성한 나무가 전장에 서 있고, 공격할 때 아름다운 벚꽃잎이 적에게 날아간다.',
     trait: '24초 동안 유지되는 방어형 건물 카드다. HP가 높지만 시간이 지나면 스스로 무너지며, 적 유닛을 꾸준히 끊어내지만 직접 움직이지 않고 적에게 파괴될 수 있다.'
+  },
+  {
+    id: 'giantHyeonjik',
+    name: '자이언트 현직',
+    cost: '6',
+    type: '건물 특화 근접 딜러',
+    stats: [
+      ['HP', '1800'],
+      ['공격력', '120'],
+      ['공격 주기', '1.2초'],
+      ['공격 타입', '단일 근접'],
+      ['사거리', '근접'],
+      ['이동속도', '36'],
+      ['우선 대상', '건물 카드와 적 타워']
+    ],
+    ability: '소환되면 다과실, 진해 벚꽃나무 같은 적 건물 카드와 적 타워만 타겟팅한다. 적 캐릭터가 바로 옆에 있어도 절대 공격하지 않고 지나가며, 공격 가능한 건물이나 타워가 없으면 유닛을 때리는 대신 새 건물 목표를 기다린다.',
+    appearance: '안경을 쓴 너드 느낌의 남학생이지만, 모든 캐릭터보다 훨씬 크다. 지금까지 가장 큰 대.근.영보다도 더 큰 덩치로 전장을 압박한다.',
+    trait: '건물 카드의 하드 카운터다. HP가 매우 높아 건물에 도착하기 전 막기 어렵고, 적 유닛을 먼저 때리지 않기 때문에 상대 병력은 뒤쫓아가며 직접 잡아야 한다.'
   },
   {
     id: 'kkongho',
@@ -1182,6 +1220,25 @@ class BattleScene extends Phaser.Scene {
       this.g.fillEllipse(x, y - 29, 25, 14);
       this.g.lineStyle(3, 0xe4d6ff, unit.attached ? 1 : 0.45);
       this.g.strokeCircle(x, y - 2, 18);
+    } else if (unit.cardId === 'giantHyeonjik') {
+      this.g.fillStyle(theme.fill, 1);
+      this.g.fillRoundedRect(x - 17, y - 25, 34, 59, 8);
+      this.g.strokeRoundedRect(x - 17, y - 25, 34, 59, 8);
+      this.g.fillStyle(0xd7ad8e, 1);
+      this.g.fillEllipse(x, y - 43, 34, 28);
+      this.g.strokeEllipse(x, y - 43, 34, 28);
+      this.g.fillStyle(0x2b2420, 1);
+      this.g.fillEllipse(x, y - 53, 36, 12);
+      this.g.lineStyle(2, dark, 1);
+      this.g.strokeCircle(x - 8, y - 43, 5);
+      this.g.strokeCircle(x + 8, y - 43, 5);
+      this.g.lineBetween(x - 3, y - 43, x + 3, y - 43);
+      this.g.lineStyle(5, 0xe3d7ff, unit.action ? 1 : 0.85);
+      this.g.lineBetween(x + dir * 15, y - 8, x + dir * 37, y - 17);
+      this.g.lineBetween(x - dir * 14, y - 4, x - dir * 31, y + 9);
+      this.g.lineStyle(3, 0x31263f, 0.7);
+      this.g.lineBetween(x - 10, y + 32, x - 22, y + 47);
+      this.g.lineBetween(x + 10, y + 32, x + 22, y + 47);
     } else if (unit.cardId === 'heoseon') {
       const enraged = Boolean(unit.berserked);
       const coat = enraged ? 0x4c151c : theme.fill;
@@ -1487,8 +1544,8 @@ class BattleScene extends Phaser.Scene {
         const px = Number.isFinite(effect.fromX) ? Phaser.Math.Linear(effect.fromX, effect.x, t) : effect.x;
         const py = Number.isFinite(effect.fromY) ? Phaser.Math.Linear(effect.fromY, effect.y, t) : effect.y;
         this.g.fillStyle(0xffedf5, alpha);
-        this.g.fillEllipse(px - 8, py - 3, 10, 5, Math.PI / 5);
-        this.g.fillEllipse(px + 6, py + 4, 10, 5, -Math.PI / 4);
+        this.g.fillEllipse(px - 8, py - 3, 10, 5, 12);
+        this.g.fillEllipse(px + 6, py + 4, 10, 5, 12);
         this.g.lineStyle(3, 0xffb7d7, alpha);
         this.g.strokeCircle(effect.x, effect.y, 10 + t * 20);
       } else if (effect.type === 'king-return') {
@@ -1665,6 +1722,12 @@ class BattleScene extends Phaser.Scene {
         const angle = (Math.PI * 2 * i) / 6;
         this.g.lineBetween(x, y, x + Math.cos(angle) * (20 + t * 16), y + Math.sin(angle) * (20 + t * 16));
       }
+    } else if (effect.cardId === 'giantHyeonjik') {
+      this.g.fillRoundedRect(x - 18, y - 25, 36, 50, 8);
+      this.g.strokeCircle(x - 8, y - 31, 5);
+      this.g.strokeCircle(x + 8, y - 31, 5);
+      this.g.lineBetween(x - 35, y + 2, x - 16, y + 2);
+      this.g.lineBetween(x + 16, y + 2, x + 35, y + 2);
     } else if (effect.cardId === 'taegeonBumperCar') {
       this.g.fillRoundedRect(x - 24, y - 9, 48, 18, 7);
       this.g.fillCircle(x - 15, y + 11, 5 + t * 3);
@@ -1976,6 +2039,7 @@ class BattleScene extends Phaser.Scene {
     if (cardId === 'dagwasil' || cardId === 'cherryTree') return 34;
     if (cardId === 'yushin') return 10;
     if (cardId === 'kimgeunyoung') return 24;
+    if (cardId === 'giantHyeonjik') return 31;
     if (cardId === 'baduk') return 23;
     if (cardId === 'bbatman') return 15;
     if (cardId === 'seongjoo') return 15;
