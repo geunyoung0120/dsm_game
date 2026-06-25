@@ -3069,14 +3069,11 @@ function renderTournamentHistory(errorMessage = '') {
     button.type = 'button';
     button.className = 'tournament-history-card';
 
-    const title = document.createElement('strong');
-    title.textContent = tournament.title || `제 ${tournament.number}회 토너먼트 대회`;
     const winner = document.createElement('span');
-    winner.textContent = `${title.textContent} 우승자 "${tournament.winnerUsername || '알 수 없음'}"`;
-    const meta = document.createElement('small');
-    meta.textContent = `${formatKoreanDate(tournament.date)} · 참가비 ${tournament.stake || 0} 트로피 · 상금 ${tournament.pool || 0} 트로피`;
+    const tournamentTitle = tournament.title || `제 ${tournament.number}회 토너먼트 대회`;
+    winner.textContent = `${tournamentTitle} 우승자 "${tournament.winnerUsername || '알 수 없음'}"`;
 
-    button.append(title, winner, meta);
+    button.append(winner);
     button.addEventListener('click', () => loadTournamentDetail(tournament.id));
     list.appendChild(button);
   }
@@ -3116,14 +3113,23 @@ function renderTournamentDetail(errorMessage = '') {
   const tournament = currentTournamentDetail;
   if (title) title.textContent = tournament.title || `제 ${tournament.number}회 토너먼트 대회`;
 
+  const winnerHero = document.createElement('section');
+  winnerHero.className = 'tournament-detail-winner';
+  const winnerLabel = document.createElement('span');
+  winnerLabel.textContent = '대회 우승자';
+  const winnerName = document.createElement('strong');
+  winnerName.textContent = tournament.winnerUsername || '알 수 없음';
+  const winnerCaption = document.createElement('small');
+  winnerCaption.textContent = `${tournament.title || `제 ${tournament.number}회 토너먼트 대회`} 최종 우승`;
+  winnerHero.append(winnerLabel, winnerName, winnerCaption);
+
   const summary = document.createElement('section');
   summary.className = 'tournament-detail-summary';
   summary.replaceChildren(
     detailStat('대회 날짜', formatKoreanDate(tournament.date)),
     detailStat('트로피 참가비', `${tournament.stake || 0}개`),
     detailStat('우승자 상금', `${tournament.pool || 0}개`),
-    detailStat('참가자 수', `${tournament.participantCount || 0}명`),
-    detailStat('우승자', tournament.winnerUsername || '알 수 없음')
+    detailStat('참가자 수', `${tournament.participantCount || 0}명`)
   );
 
   const participants = document.createElement('section');
@@ -3148,7 +3154,7 @@ function renderTournamentDetail(errorMessage = '') {
   renderTournamentBracket(bracket, { rounds: tournament.rounds || [], viewingMatchId: null });
   bracketSection.append(bracketTitle, bracket);
 
-  content.append(summary, participants, bracketSection);
+  content.append(winnerHero, summary, participants, bracketSection);
 }
 
 function detailStat(label, value) {
@@ -3337,14 +3343,17 @@ function renderProfile() {
 
 function renderTournamentWinnerBanner() {
   const banner = document.getElementById('tournament-winner-banner');
+  const text = document.getElementById('tournament-winner-banner-text');
   if (!banner) return;
   if (!latestTournamentWinner || !latestTournamentWinner.username) {
     banner.classList.add('hidden');
-    banner.textContent = '';
+    if (text) text.textContent = '';
     return;
   }
   const dateText = formatKoreanDate(latestTournamentWinner.wonAt);
-  banner.textContent = `토너먼트 대회 우승자 '${latestTournamentWinner.username}'${dateText ? ` (${dateText})` : ''}`;
+  if (text) {
+    text.textContent = `토너먼트 대회 우승자 '${latestTournamentWinner.username}'${dateText ? ` (${dateText})` : ''}`;
+  }
   banner.classList.remove('hidden');
 }
 

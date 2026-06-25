@@ -965,6 +965,10 @@ html[data-theme="light"] .lobby-hero {
 
 .tournament-winner-banner {
   padding: 14px 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
   color: #132018;
   background: linear-gradient(90deg, #b7f0a2, #e8c15c);
   border: 1px solid rgba(255, 255, 255, 0.34);
@@ -972,6 +976,23 @@ html[data-theme="light"] .lobby-hero {
   box-shadow: var(--shadow);
   font-size: 17px;
   font-weight: 900;
+}
+
+.tournament-winner-banner span {
+  min-width: 0;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.tournament-banner-button {
+  width: auto;
+  min-height: 36px;
+  padding: 0 13px;
+  color: #132018;
+  background: rgba(255, 255, 255, 0.32);
+  border: 1px solid rgba(19, 32, 24, 0.2);
+  box-shadow: none;
+  font-size: 14px;
 }
 
 html[data-theme="light"] .tournament-winner-banner {
@@ -1238,10 +1259,10 @@ html[data-theme="light"] .tournament-winner-banner {
 
 .tournament-history-card {
   width: 100%;
-  min-height: 90px;
+  min-height: 64px;
   padding: 16px;
-  display: grid;
-  gap: 6px;
+  display: flex;
+  align-items: center;
   text-align: left;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -1257,6 +1278,7 @@ html[data-theme="light"] .tournament-winner-banner {
 .tournament-history-card span {
   color: var(--ink);
   font-weight: 900;
+  white-space: normal;
 }
 
 .tournament-history-card small {
@@ -1267,6 +1289,38 @@ html[data-theme="light"] .tournament-winner-banner {
 .tournament-detail-content {
   display: grid;
   gap: 16px;
+}
+
+.tournament-detail-winner {
+  padding: 24px;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  color: #132018;
+  text-align: center;
+  background:
+    radial-gradient(circle at 22% 20%, rgba(255, 255, 255, 0.58), transparent 28%),
+    linear-gradient(120deg, #b7f0a2 0%, #e8c15c 52%, #ff7a7a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.tournament-detail-winner span {
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.tournament-detail-winner strong {
+  font-size: clamp(34px, 6vw, 64px);
+  line-height: 1;
+  font-weight: 1000;
+}
+
+.tournament-detail-winner small {
+  font-size: 14px;
+  font-weight: 900;
 }
 
 .tournament-detail-summary {
@@ -2359,6 +2413,14 @@ canvas {
   }
 
   button {
+    width: 100%;
+  }
+
+  .tournament-winner-banner {
+    grid-template-columns: 1fr;
+  }
+
+  .tournament-banner-button {
     width: 100%;
   }
 
