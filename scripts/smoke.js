@@ -796,6 +796,7 @@ function expectHeoseonNerf(cards) {
   }
 
   const expected = {
+    cost: 8,
     maxHp: 450,
     range: 16,
     speed: 37,

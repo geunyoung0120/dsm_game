@@ -118,6 +118,7 @@ body {
 .home-screen,
 .room-screen,
 .encyclopedia-screen,
+.mypage-screen,
 .update-history-screen,
 .tournament-history-screen,
 .tournament-detail-screen,
@@ -538,6 +539,15 @@ input:disabled {
   gap: 18px;
 }
 
+.home-corner-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.home-corner-actions button {
+  width: auto;
+}
+
 .lobby-content-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
@@ -926,17 +936,6 @@ html[data-theme="light"] .lobby-hero {
   transform: rotate(-45deg);
 }
 
-.profile-strip {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 18px;
-  align-items: center;
-}
-
-.profile-strip .section-title {
-  margin-bottom: 0;
-}
-
 .lobby-dashboard {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
@@ -1127,90 +1126,9 @@ html[data-theme="light"] .tournament-winner-banner {
   line-height: 1.45;
 }
 
-.featured-cards {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.featured-card {
-  min-height: 138px;
-  padding: 16px;
-  display: grid;
-  align-content: space-between;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.05), transparent 50%),
-    var(--panel);
-  border: 1px solid var(--line);
-  border-top: 5px solid var(--gold);
-  border-radius: 8px;
-  box-shadow: var(--card-shadow);
-}
-
-.featured-card span {
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  color: var(--badge-ink);
-  background: var(--gold);
-  border-radius: 50%;
-  font-size: 18px;
-  font-weight: 900;
-}
-
-.featured-card strong {
-  margin-top: 18px;
-  display: block;
-  font-size: 20px;
-}
-
-.featured-card small {
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.featured-card.zzangga {
-  border-top-color: var(--red);
-}
-
-.featured-card.zzangga span {
-  background: var(--red);
-  color: #ffffff;
-}
-
-.featured-card.bbatman {
-  border-top-color: var(--teal);
-}
-
-.featured-card.bbatman span {
-  background: var(--teal);
-}
-
-.featured-card.baduk {
-  border-top-color: #b7855f;
-}
-
-.featured-card.baduk span {
-  background: #b7855f;
-}
-
-.featured-card.kimgeunyoung {
-  border-top-color: var(--gold);
-}
-
-.featured-card.johyunwoo {
-  border-top-color: var(--blue);
-}
-
-.featured-card.johyunwoo span {
-  color: #ffffff;
-  background: var(--blue);
-}
-
 .room-screen,
 .encyclopedia-screen,
+.mypage-screen,
 .ranking-screen,
 .update-history-screen,
 .tournament-history-screen,
@@ -1221,6 +1139,7 @@ html[data-theme="light"] .tournament-winner-banner {
 }
 
 .encyclopedia-header,
+.mypage-header,
 .ranking-header,
 .update-history-header,
 .tournament-history-header,
@@ -1236,6 +1155,7 @@ html[data-theme="light"] .tournament-winner-banner {
 }
 
 .encyclopedia-header h1,
+.mypage-header h1,
 .ranking-header h1,
 .update-history-header h1,
 .tournament-history-header h1,
@@ -2272,7 +2192,6 @@ canvas {
   .lobby-hero,
   .lobby-content-grid,
   .lobby-dashboard,
-  .profile-strip,
   .top-ranking-list,
   .deck-builder-layout,
   .room-layout {
@@ -2317,10 +2236,6 @@ canvas {
 
   .hero-arena {
     min-height: 280px;
-  }
-
-  .featured-cards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .selected-deck-list {
@@ -2373,7 +2288,6 @@ canvas {
   }
 
   .profile-summary,
-  .featured-cards,
   .selected-deck-list {
     grid-template-columns: 1fr;
   }
@@ -2394,6 +2308,7 @@ canvas {
 
   .home-actions,
   .encyclopedia-header,
+  .mypage-header,
   .update-history-header,
   .tournament-history-header,
   .tournament-detail-header,
@@ -2413,6 +2328,10 @@ canvas {
   }
 
   button {
+    width: 100%;
+  }
+
+  .home-corner-actions button {
     width: 100%;
   }
 

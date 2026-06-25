@@ -317,7 +317,7 @@ const CARDS = {
   heoseon: {
     id: 'heoseon',
     name: '허선',
-    cost: 9,
+    cost: 8,
     role: '폭발형 딜러',
     maxHp: 450,
     damage: 0,
@@ -2439,9 +2439,12 @@ function resolveWindup(room, unit, card, now) {
   }
 
   if (unit.cardId === 'jimin' && target.entity === 'unit' && target.cardId === 'yushin') {
-    const yushinTargets = game.units.filter((other) => {
+    const allYushinTargets = game.units.filter((other) => {
       return other.owner === target.owner && other.cardId === 'yushin' && other.hp > 0;
     });
+    const targetLimit = Math.min(allYushinTargets.length, 2 + Math.floor(Math.random() * 2));
+    const extraTargets = shuffle(allYushinTargets.filter((other) => other.id !== target.id));
+    const yushinTargets = [target, ...extraTargets.slice(0, Math.max(0, targetLimit - 1))];
     broadcastEffect(room, { type: 'jimin-yushin-counter', owner: unit.owner, x: unit.x, y: unit.y });
     for (const yushin of yushinTargets) {
       applyDamageToUnit(room, yushin, card.damage, unit.owner, now);

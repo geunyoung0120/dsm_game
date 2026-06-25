@@ -86,6 +86,9 @@
 
       <section id="home-screen" class="home-screen hidden">
         <div class="lobby-layout">
+          <div class="home-corner-actions">
+            <button id="open-mypage" type="button" class="secondary">마이페이지</button>
+          </div>
           <div id="tournament-winner-banner" class="tournament-winner-banner hidden" aria-live="polite">
             <span id="tournament-winner-banner-text"></span>
             <button id="open-tournament-history" type="button" class="tournament-banner-button">토너먼트 대회 우승자</button>
@@ -119,16 +122,6 @@
               <span class="hero-card hero-card-blue">현</span>
               <span class="hero-burst"></span>
             </div>
-          </section>
-
-          <section class="profile-panel profile-strip" aria-label="플레이어 정보">
-            <div class="section-title">
-              <div>
-                <p class="eyebrow">내 프로필</p>
-                <h2>전투 준비</h2>
-              </div>
-            </div>
-            <div id="profile-summary" class="profile-summary"></div>
           </section>
 
           <div class="lobby-content-grid">
@@ -170,35 +163,26 @@
               </div>
             </section>
           </div>
-
-          <section class="featured-cards" aria-label="대표 캐릭터">
-            <div class="featured-card zzangga">
-              <span>짱</span>
-              <strong>짱가</strong>
-              <small>광역 딜러</small>
-            </div>
-            <div class="featured-card bbatman">
-              <span>힐</span>
-              <strong>빼트맨</strong>
-              <small>힐러 지원</small>
-            </div>
-            <div class="featured-card baduk">
-              <span>박</span>
-              <strong>박바둑</strong>
-              <small>카오스 딜러</small>
-            </div>
-            <div class="featured-card kimgeunyoung">
-              <span>대</span>
-              <strong>대.근.영</strong>
-              <small>탱커 소환</small>
-            </div>
-            <div class="featured-card johyunwoo">
-              <span>현</span>
-              <strong>조현우</strong>
-              <small>분노 딜러</small>
-            </div>
-          </section>
         </div>
+      </section>
+
+      <section id="mypage-screen" class="mypage-screen hidden">
+        <header class="mypage-header">
+          <div>
+            <p class="eyebrow">내 정보</p>
+            <h1>마이페이지</h1>
+          </div>
+          <button id="back-mypage" type="button" class="secondary">뒤로가기</button>
+        </header>
+        <section class="profile-panel mypage-panel" aria-label="플레이어 정보">
+          <div class="section-title">
+            <div>
+              <p class="eyebrow">내 프로필</p>
+              <h2>전투 기록</h2>
+            </div>
+          </div>
+          <div id="profile-summary" class="profile-summary"></div>
+        </section>
       </section>
 
       <section id="update-history-screen" class="update-history-screen hidden">

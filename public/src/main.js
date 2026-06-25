@@ -25,6 +25,21 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: '지민과 허선 밸런스 조정',
+    date: '2026.06.25',
+    items: [
+      '지민 인포 가위질 유신 타격 수 2~3명으로 제한',
+      '허선 코스트 8 엘릭서로 감소',
+      '메인 화면 마이페이지 버튼 정리'
+    ],
+    details: [
+      '지민이 유신을 공격할 때 더 이상 상대 유신 전체를 한 번에 공격하지 않고, 현재 공격 대상 유신을 포함해 2~3명만 공격한다.',
+      '인포 가위질 문구와 특성은 유지하되, 살아있는 상대 유신이 1명 또는 2명뿐이면 가능한 인원만 공격한다.',
+      '허선은 9 엘릭서에서 8 엘릭서로 낮춰 더 빠르게 꺼낼 수 있게 했다.',
+      '메인 화면의 내 프로필 정보는 오른쪽 위 마이페이지 버튼으로 분리하고, 하단 대표 캐릭터 설명 영역은 제거했다.'
+    ]
+  },
+  {
     title: '꽁과 건물 지속시간 조정',
     date: '2026.06.25',
     items: [
@@ -693,7 +708,7 @@ const CHARACTER_DETAILS = [
       ['준비 시간', '0.18초'],
       ['이동속도', '44']
     ],
-    ability: '공격 전 손가락으로 가리키며 드립을 치는 동작을 한다. 그 후 한 대상에게 단일 피해를 준다. 유신을 공격할 때는 머리 위에 인포 가위질! 문구가 뜨고 상대 유신 유닛 모두에게 피해를 준다.',
+    ability: '공격 전 손가락으로 가리키며 드립을 치는 동작을 한다. 그 후 한 대상에게 단일 피해를 준다. 유신을 공격할 때는 머리 위에 인포 가위질! 문구가 뜨고 상대 유신 유닛 2~3명에게 피해를 준다.',
     appearance: '키가 크고 비율이 좋은 남학생. 교복을 입고 있다.',
     trait: '3 엘릭서 카드로 내려가 더 가볍게 쓸 수 있지만, HP와 공격력이 함께 낮아져 한 방 위력과 생존력은 줄었다.'
   },
@@ -804,7 +819,7 @@ const CHARACTER_DETAILS = [
   {
     id: 'heoseon',
     name: '허선',
-    cost: '9',
+    cost: '8',
     type: '버서커 / 폭발형 딜러',
     stats: [
       ['기본 HP', '450'],
@@ -2486,6 +2501,7 @@ function setupShell() {
   const themeButton = document.getElementById('theme-toggle');
   const authScreen = document.getElementById('auth-screen');
   const homeScreen = document.getElementById('home-screen');
+  const mypageScreen = document.getElementById('mypage-screen');
   const brandHomeButton = document.getElementById('brand-home');
   const updateHistoryScreen = document.getElementById('update-history-screen');
   const tournamentHistoryScreen = document.getElementById('tournament-history-screen');
@@ -2500,10 +2516,12 @@ function setupShell() {
   const deckButton = document.getElementById('open-deck-builder');
   const encyclopediaButton = document.getElementById('open-encyclopedia');
   const rankingButton = document.getElementById('open-ranking');
+  const mypageButton = document.getElementById('open-mypage');
   const updateHistoryButton = document.getElementById('open-update-history');
   const tournamentHistoryButton = document.getElementById('open-tournament-history');
   const tierButton = document.getElementById('open-tier-chart');
   const backUpdateHistoryButton = document.getElementById('back-update-history');
+  const backMypageButton = document.getElementById('back-mypage');
   const backTournamentHistoryButton = document.getElementById('back-tournament-history');
   const backTournamentDetailButton = document.getElementById('back-tournament-detail');
   const backRankingButton = document.getElementById('back-ranking');
@@ -2586,6 +2604,11 @@ function setupShell() {
     await loadRankings();
   });
 
+  mypageButton.addEventListener('click', () => {
+    renderProfile();
+    showScreen(mypageScreen);
+  });
+
   updateHistoryButton.addEventListener('click', () => {
     renderUpdateHistory();
     showScreen(updateHistoryScreen);
@@ -2604,6 +2627,10 @@ function setupShell() {
   });
 
   backUpdateHistoryButton.addEventListener('click', () => {
+    showScreen(homeScreen);
+  });
+
+  backMypageButton.addEventListener('click', () => {
     showScreen(homeScreen);
   });
 
@@ -2733,7 +2760,7 @@ function setupShell() {
   saveDeckButton.addEventListener('click', saveDeck);
 
   function showScreen(target) {
-    for (const screen of [authScreen, homeScreen, updateHistoryScreen, tournamentHistoryScreen, tournamentDetailScreen, roomScreen, encyclopediaScreen, rankingScreen, tierScreen, deckScreen, gameScreen]) {
+    for (const screen of [authScreen, homeScreen, mypageScreen, updateHistoryScreen, tournamentHistoryScreen, tournamentDetailScreen, roomScreen, encyclopediaScreen, rankingScreen, tierScreen, deckScreen, gameScreen]) {
       screen.classList.toggle('hidden', screen !== target);
     }
   }
