@@ -215,7 +215,7 @@ const CARDS = {
     name: '대.근.영',
     cost: 10,
     role: '탱커 소환',
-    maxHp: 2376,
+    maxHp: 2500,
     damage: 89,
     range: 43,
     speed: 41,
@@ -257,7 +257,7 @@ const CARDS = {
     berserker: true,
     berserkerThreshold: 0.243,
     berserkerMaxHp: 810,
-    berserkerDamage: 81,
+    berserkerDamage: 70,
     berserkerSpeed: 95,
     berserkerAttackMs: 303,
     berserkerSplashRadius: 47

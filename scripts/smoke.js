@@ -455,7 +455,7 @@ function expectHeoseonNerf(cards) {
     radius: 14,
     berserkerThreshold: 0.243,
     berserkerMaxHp: 810,
-    berserkerDamage: 81,
+    berserkerDamage: 70,
     berserkerSpeed: 95,
     berserkerAttackMs: 303,
     berserkerSplashRadius: 47
@@ -479,7 +479,7 @@ function expectHeoseonNerf(cards) {
   if (!cards.seongjoo || cards.seongjoo.attackMs !== 686) {
     throw new Error('Seongjoo attack speed nerf was not present.');
   }
-  if (!cards.kimgeunyoung || cards.kimgeunyoung.damage !== 89 || cards.kimgeunyoung.timeExtensionMs !== 30000) {
+  if (!cards.kimgeunyoung || cards.kimgeunyoung.maxHp !== 2500 || cards.kimgeunyoung.damage !== 89 || cards.kimgeunyoung.timeExtensionMs !== 30000) {
     throw new Error('Kim Geunyoung return tuning was not present.');
   }
   if (!cards.geunyoungTank || cards.geunyoungTank.damage !== 19) {
