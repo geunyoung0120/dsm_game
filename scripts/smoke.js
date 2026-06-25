@@ -631,7 +631,7 @@ function expectHeoseonNerf(cards) {
     }
   }
 
-  if (!cards.badukFart || !cards.badukFart.spell || cards.badukFart.damagePerSecond !== 80 || cards.badukFart.radius !== 59 || cards.badukFart.durationMs !== 4000) {
+  if (!cards.badukFart || !cards.badukFart.spell || cards.badukFart.damagePerSecond !== 60 || cards.badukFart.radius !== 59 || cards.badukFart.durationMs !== 4000) {
     throw new Error('Baduk fart spell card did not expose the expected spell fields.');
   }
   if (!cards.bbatman || cards.bbatman.healIntervalMs !== 600) {
@@ -641,7 +641,7 @@ function expectHeoseonNerf(cards) {
   if (playableCount !== 20) {
     throw new Error(`Playable card count expected 20, got ${playableCount}.`);
   }
-  if (!cards.dagwasil || !cards.dagwasil.building || cards.dagwasil.cost !== 5 || cards.dagwasil.maxHp !== 1500 || cards.dagwasil.radius !== 34 || cards.dagwasil.buildingDurationMs !== 24000 || cards.dagwasil.spawnMinionMs !== 4000 || !cards.dagwasil.spawnImmediately) {
+  if (!cards.dagwasil || !cards.dagwasil.building || cards.dagwasil.cost !== 5 || cards.dagwasil.maxHp !== 1500 || cards.dagwasil.radius !== 34 || cards.dagwasil.buildingDurationMs !== 24000 || cards.dagwasil.spawnMinionMs !== 3000 || !cards.dagwasil.spawnImmediately) {
     throw new Error('Dagwasil building card did not expose the expected fields.');
   }
   if (!cards.nerdMale || cards.nerdMale.playable !== false || cards.nerdMale.maxHp !== 180 || cards.nerdMale.damage !== 32 || cards.nerdMale.attackMs !== 717) {

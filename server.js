@@ -125,7 +125,7 @@ const CARDS = {
     spell: true,
     spellType: 'area-dot',
     durationMs: 4000,
-    damagePerSecond: 80,
+    damagePerSecond: 60,
     radius: 59
   },
   dagwasil: {
@@ -141,7 +141,7 @@ const CARDS = {
     attackMs: 0,
     radius: 34,
     buildingDurationMs: 24000,
-    spawnMinionMs: 4000,
+    spawnMinionMs: 3000,
     spawnImmediately: true,
     spawnPair: ['nerdMale', 'nerdFemale']
   },
