@@ -51,12 +51,16 @@ async function main() {
   await expectDeckSave(accounts[0], smokeDeck);
   await expectSessionUser(await login(accounts[0].user.username));
   const result = await runClientSmoke(accounts);
-  const twoVersusTwo = await expectTwoVersusTwoRoom(await Promise.all([
+  const twoVersusTwoAccounts = await Promise.all([
     signup(`연습유저${Date.now()}C`),
     signup(`연습유저${Date.now()}D`),
     signup(`연습유저${Date.now()}E`),
-    signup(`연습유저${Date.now()}F`)
-  ]));
+    signup(`연습유저${Date.now()}F`),
+    signup(`연습유저${Date.now()}G`),
+    signup(`연습유저${Date.now()}H`),
+    signup(`연습유저${Date.now()}I`)
+  ]);
+  const twoVersusTwo = await expectTwoVersusTwoRoom(twoVersusTwoAccounts.slice(0, 4), twoVersusTwoAccounts.slice(4));
   const expectedOpeningHand = smokeDeck.slice(0, 4).join('|');
   const actualOpeningHand = (result.initialHands[0] || []).join('|');
   if (actualOpeningHand !== expectedOpeningHand) {
@@ -300,7 +304,7 @@ function runPlayableSmoke(cardsByClient) {
   });
 }
 
-async function expectTwoVersusTwoRoom(accounts) {
+async function expectTwoVersusTwoRoom(accounts, spectatorAccounts) {
   clients = accounts.map((account) => io(url, {
     transports: ['websocket'],
     extraHeaders: { Cookie: account.cookie }
@@ -328,7 +332,7 @@ async function expectTwoVersusTwoRoom(accounts) {
     await once(clients[i], 'room-joined', `2v2 bottom team player ${i} room-joined`);
   }
 
-  const state = await waitForState(clients[3], (payload) => payload.status === 'playing');
+  const state = await waitForState(clients[3], (payload) => payload.status === 'playing', '2v2 playing state');
   const teams = state.players.map((player) => player.team).join('|');
   if (state.players.length !== 4 || teams !== '0|1|0|1') {
     throw new Error(`2v2 room did not assign balanced teams. Got ${teams}.`);
@@ -342,13 +346,71 @@ async function expectTwoVersusTwoRoom(accounts) {
     throw new Error('2v2 tower HP did not use the expected 1.5x values.');
   }
 
+  const spectatorResult = await expectSpectatorFlow(hostJoin.room.id, spectatorAccounts);
+
   for (const client of clients) client.disconnect();
   return {
     status: state.status,
     players: state.players.length,
     teams: state.players.map((player) => player.team),
     rejectedFullTeam: true,
-    kingTowerHp: kingTower.maxHp
+    kingTowerHp: kingTower.maxHp,
+    spectator: spectatorResult
+  };
+}
+
+async function expectSpectatorFlow(roomId, accounts) {
+  const spectatorClients = accounts.map((account) => io(url, {
+    transports: ['websocket'],
+    extraHeaders: { Cookie: account.cookie }
+  }));
+  clients.push(...spectatorClients);
+
+  await Promise.all(spectatorClients.map((client) => once(client, 'welcome')));
+
+  const roomsPromise = once(spectatorClients[0], 'spectator-rooms', 'spectator room list');
+  spectatorClients[0].emit('request-spectator-rooms');
+  const watchableRooms = await roomsPromise;
+  if (!Array.isArray(watchableRooms) || !watchableRooms.some((room) => room.id === roomId)) {
+    throw new Error('Active battle was not listed for spectators.');
+  }
+
+  await delay(100);
+  const firstStatePromise = waitForState(spectatorClients[0], (payload) => {
+    return payload.spectator && payload.spectatorCount === 1 && payload.players.every((player) => Array.isArray(player.hand) && player.hand.length > 0);
+  }, 'first spectator state with all hands');
+  const firstJoinPromise = once(spectatorClients[0], 'spectator-joined', 'first spectator joined');
+  spectatorClients[0].emit('watch-room', { roomId });
+  const [, spectatorState] = await Promise.all([firstJoinPromise, firstStatePromise]);
+  if (spectatorState.players.some((player) => !Number.isFinite(player.elixir))) {
+    throw new Error('Spectator state did not expose player elixir values.');
+  }
+
+  await delay(100);
+  const secondStatePromise = waitForState(spectatorClients[0], (payload) => payload.spectator && payload.spectatorCount === 2, 'spectator count 2');
+  const secondJoinPromise = once(spectatorClients[1], 'spectator-joined', 'second spectator joined');
+  spectatorClients[1].emit('watch-room', { roomId });
+  await Promise.all([secondJoinPromise, secondStatePromise]);
+
+  const fullRoomsPromise = once(spectatorClients[2], 'spectator-rooms', 'full spectator room list');
+  spectatorClients[2].emit('request-spectator-rooms');
+  const fullRooms = await fullRoomsPromise;
+  if (Array.isArray(fullRooms) && fullRooms.some((room) => room.id === roomId)) {
+    throw new Error('Full spectator room was still listed.');
+  }
+
+  await delay(100);
+  const fullErrorPromise = once(spectatorClients[2], 'room-error', 'full spectator room-error');
+  spectatorClients[2].emit('watch-room', { roomId });
+  const fullError = await fullErrorPromise;
+  if (!String(fullError).includes('관전자 자리가 가득 찼습니다')) {
+    throw new Error(`Full spectator room did not reject a third watcher. Got: ${fullError}`);
+  }
+
+  return {
+    listed: true,
+    count: 2,
+    fullRejected: true
   };
 }
 
@@ -367,22 +429,32 @@ function expectHeoseonNerf(cards) {
   }
 
   const expected = {
-    maxHp: 450,
-    range: 18,
-    speed: 41,
-    radius: 16,
-    berserkerThreshold: 0.27,
-    berserkerMaxHp: 900,
-    berserkerDamage: 90,
-    berserkerSpeed: 106,
-    berserkerAttackMs: 275,
-    berserkerSplashRadius: 52
+    maxHp: 405,
+    range: 16,
+    speed: 37,
+    radius: 14,
+    berserkerThreshold: 0.243,
+    berserkerMaxHp: 810,
+    berserkerDamage: 81,
+    berserkerSpeed: 95,
+    berserkerAttackMs: 303,
+    berserkerSplashRadius: 47
   };
 
   for (const [key, value] of Object.entries(expected)) {
     if (heoseon[key] !== value) {
       throw new Error(`Heoseon ${key} expected ${value}, got ${heoseon[key]}.`);
     }
+  }
+
+  if (!cards.badukFart || !cards.badukFart.spell || cards.badukFart.damagePerSecond !== 20 || cards.badukFart.durationMs !== 4000) {
+    throw new Error('Baduk fart spell card did not expose the expected spell fields.');
+  }
+  if (!cards.taegeonBumperCar || cards.taegeonBumperCar.cost !== 1 || cards.taegeonBumperCar.speed !== 95 || !cards.taegeonBumperCar.suicideRusher) {
+    throw new Error('Taegeon bumper car did not expose the expected suicide rusher fields.');
+  }
+  if (!cards.seongjoo || cards.seongjoo.attackMs !== 686) {
+    throw new Error('Seongjoo attack speed nerf was not present.');
   }
 }
 
@@ -400,13 +472,20 @@ function once(client, eventName, label = eventName) {
   });
 }
 
-function waitForState(client, predicate) {
+function waitForState(client, predicate, label = 'matching state') {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Timed out waiting for matching state.')), 5000);
+    let lastSummary = 'no state received';
+    const timer = setTimeout(() => reject(new Error(`Timed out waiting for ${label}. Last: ${lastSummary}`)), 5000);
     client.on('state', handleState);
     client.once('connect_error', handleError);
 
     function handleState(payload) {
+      lastSummary = JSON.stringify({
+        status: payload && payload.status,
+        spectator: payload && payload.spectator,
+        spectatorCount: payload && payload.spectatorCount,
+        hands: payload && payload.players && payload.players.map((player) => Array.isArray(player.hand) ? player.hand.length : null)
+      });
       if (!predicate(payload)) return;
       clearTimeout(timer);
       client.off('state', handleState);

@@ -34,6 +34,7 @@ const DOUBLE_ELIXIR_REMAINING_MS = 60000;
 const TRIPLE_ELIXIR_REMAINING_MS = 20000;
 const DOUBLE_ELIXIR_MULTIPLIER = 2;
 const TRIPLE_ELIXIR_MULTIPLIER = 3;
+const MAX_SPECTATORS_PER_ROOM = 2;
 const TOWER_HP = {
   king: 9200,
   princess: 5400
@@ -85,7 +86,7 @@ const CARDS = {
     radius: 15,
     healer: true,
     healPerSecond: 47.25,
-    healRange: 90,
+    healRange: 81,
     followDistance: 72,
     decayPerSecond: 8
   },
@@ -103,6 +104,17 @@ const CARDS = {
     chaosRadius: 105,
     chaosEnemyDamage: 140,
     chaosFriendlyDamage: 29
+  },
+  badukFart: {
+    id: 'badukFart',
+    name: '바둑이 방구',
+    cost: 3,
+    role: '마법 장판',
+    spell: true,
+    spellType: 'area-dot',
+    durationMs: 4000,
+    damagePerSecond: 20,
+    radius: 118
   },
   kkongho: {
     id: 'kkongho',
@@ -175,7 +187,7 @@ const CARDS = {
     damage: 59,
     range: 185,
     speed: 42,
-    attackMs: 572,
+    attackMs: 686,
     radius: 15,
     female: true
   },
@@ -229,20 +241,36 @@ const CARDS = {
     name: '허선',
     cost: 9,
     role: '폭발형 딜러',
-    maxHp: 450,
+    maxHp: 405,
     damage: 0,
-    range: 18,
-    speed: 41,
-    attackMs: 250,
-    radius: 16,
+    range: 16,
+    speed: 37,
+    attackMs: 275,
+    radius: 14,
     female: true,
     berserker: true,
-    berserkerThreshold: 0.27,
-    berserkerMaxHp: 900,
-    berserkerDamage: 90,
-    berserkerSpeed: 106,
-    berserkerAttackMs: 275,
-    berserkerSplashRadius: 52
+    berserkerThreshold: 0.243,
+    berserkerMaxHp: 810,
+    berserkerDamage: 81,
+    berserkerSpeed: 95,
+    berserkerAttackMs: 303,
+    berserkerSplashRadius: 47
+  },
+  taegeonBumperCar: {
+    id: 'taegeonBumperCar',
+    name: '태건 범퍼카',
+    cost: 1,
+    role: '자폭 돌진',
+    maxHp: 150,
+    damage: 50,
+    range: 22,
+    speed: 95,
+    attackMs: 0,
+    radius: 16,
+    suicideRusher: true,
+    explosionDamage: 50,
+    explosionRadius: 76,
+    detonationRange: 18
   },
   osj: {
     id: 'osj',
@@ -569,6 +597,7 @@ io.use((socket, next) => {
   socket.data.user = publicUser(user);
   socket.data.slot = null;
   socket.data.roomId = null;
+  socket.data.spectatingRoomId = null;
   socket.data.lastPlayCardAt = 0;
   socket.data.badEventCount = 0;
   next();
@@ -583,6 +612,7 @@ io.on('connection', (socket) => {
   });
   socket.emit('profile', socket.data.user);
   socket.emit('rooms', publicRooms());
+  socket.emit('spectator-rooms', publicSpectatorRooms());
 
   socket.on('create-room', (payload = {}) => {
     if (!canUseSocketAction(socket)) return;
@@ -592,6 +622,16 @@ io.on('connection', (socket) => {
   socket.on('join-room', (payload = {}) => {
     if (!canUseSocketAction(socket)) return;
     joinRoomForSocket(socket, payload);
+  });
+
+  socket.on('request-spectator-rooms', () => {
+    if (!canUseSocketAction(socket)) return;
+    socket.emit('spectator-rooms', publicSpectatorRooms());
+  });
+
+  socket.on('watch-room', (payload = {}) => {
+    if (!canUseSocketAction(socket)) return;
+    joinSpectatorRoom(socket, payload);
   });
 
   socket.on('leave-room', () => {
@@ -659,6 +699,7 @@ function createRoomForSocket(socket, payload) {
     maxPlayers: modeDefinition.maxPlayers,
     passwordHash: password ? bcrypt.hashSync(password, 8) : '',
     createdAt: Date.now(),
+    spectators: new Map(),
     game: createGameState(mode)
   };
   room.game.message = waitingRoomMessage(room);
@@ -725,6 +766,43 @@ function joinRoomForSocket(socket, payload) {
   emitRooms();
 }
 
+function joinSpectatorRoom(socket, payload) {
+  if (isInPlayingRoom(socket)) {
+    socket.emit('room-error', '진행 중인 경기 중에는 관전할 수 없습니다.');
+    return;
+  }
+
+  const roomId = String((payload && payload.roomId) || '');
+  const room = rooms.get(roomId);
+  if (!room || room.game.status !== 'playing') {
+    socket.emit('room-error', '관전할 수 없는 방입니다.');
+    emitRooms();
+    return;
+  }
+  if (getSpectatorCount(room) >= MAX_SPECTATORS_PER_ROOM && !(room.spectators && room.spectators.has(socket.id))) {
+    socket.emit('room-error', '관전자 자리가 가득 찼습니다.');
+    emitRooms();
+    return;
+  }
+
+  leaveCurrentRoom(socket, { disconnecting: false, silent: true });
+  if (!room.spectators) room.spectators = new Map();
+  room.spectators.set(socket.id, {
+    userId: socket.data.user.id,
+    username: socket.data.user.username
+  });
+  socket.data.spectatingRoomId = room.id;
+  socket.data.roomId = null;
+  socket.data.slot = null;
+  socket.join(roomChannel(room.id));
+
+  socket.emit('spectator-joined', { room: publicRoomDetail(room), spectator: true });
+  socket.emit('state', serializeState(room, null, { spectator: true }));
+  broadcastSpectatorCount(room);
+  broadcastState(room);
+  emitRooms();
+}
+
 function assignSocketToRoom(socket, room, requestedTeam = null) {
   const user = statements.getUserById.get(socket.data.user.id);
   if (!user) {
@@ -759,6 +837,11 @@ function findAvailableRoomSlot(room, requestedTeam = null) {
 }
 
 function leaveCurrentRoom(socket, options = {}) {
+  if (socket.data.spectatingRoomId) {
+    leaveSpectatorRoom(socket, options);
+    if (!socket.data.roomId) return;
+  }
+
   const roomId = socket.data.roomId;
   const slot = socket.data.slot;
   if (!roomId) return;
@@ -796,6 +879,26 @@ function leaveCurrentRoom(socket, options = {}) {
   emitRooms();
 }
 
+function leaveSpectatorRoom(socket, options = {}) {
+  const roomId = socket.data.spectatingRoomId;
+  if (!roomId) return;
+
+  const room = rooms.get(roomId);
+  if (room && room.spectators) {
+    room.spectators.delete(socket.id);
+    broadcastSpectatorCount(room);
+    broadcastState(room);
+  }
+
+  socket.leave(roomChannel(roomId));
+  socket.data.spectatingRoomId = null;
+  socket.data.slot = null;
+  if (!options.disconnecting && !options.silent) {
+    socket.emit('room-left');
+  }
+  emitRooms();
+}
+
 function isInPlayingRoom(socket) {
   const room = socket.data.roomId ? rooms.get(socket.data.roomId) : null;
   return Boolean(room && room.game.status === 'playing');
@@ -826,8 +929,10 @@ function createGameState(mode = '1v1') {
     players: Array.from({ length: definition.maxPlayers }, (_, slot) => createPlayer(slot)),
     towers: [],
     units: [],
+    spellZones: [],
     pendingSpawns: [],
     nextUnitId: 1,
+    nextSpellId: 1,
     startedAt: 0,
     endsAt: 0,
     suddenDeath: false,
@@ -953,8 +1058,10 @@ function startMatch(room) {
   game.message = '전투 중';
   game.towers = createTowers(room.mode);
   game.units = [];
+  game.spellZones = [];
   game.pendingSpawns = [];
   game.nextUnitId = 1;
+  game.nextSpellId = 1;
   game.startedAt = now;
   game.endsAt = now + GAME_DURATION_MS;
   game.suddenDeath = false;
@@ -991,7 +1098,7 @@ function playCard(room, slot, payload = {}) {
 
   const x = Number(payload.x);
   const y = Number(payload.y);
-  if (!isValidSpawnPoint(player.team, x, y)) return;
+  if (!isValidPlayPoint(card, player.team, x, y)) return;
 
   player.elixir = Math.max(0, player.elixir - elixirCost);
 
@@ -1018,8 +1125,19 @@ function playCard(room, slot, payload = {}) {
     return;
   }
 
+  if (card.spell) {
+    castSpellCard(room, player.team, card, x, y);
+    broadcastState(room);
+    return;
+  }
+
   queueSpawnCard(room, player.team, card.id, x, y);
   broadcastState(room);
+}
+
+function isValidPlayPoint(card, team, x, y) {
+  if (card && card.spell) return isValidSpellTargetPoint(x, y);
+  return isValidSpawnPoint(team, x, y);
 }
 
 function isValidSpawnPoint(team, x, y) {
@@ -1027,6 +1145,11 @@ function isValidSpawnPoint(team, x, y) {
   if (x < 48 || x > ARENA.width - 48) return false;
   if (team === 0) return y >= 338 && y <= ARENA.height - 42;
   return y >= 42 && y <= 282;
+}
+
+function isValidSpellTargetPoint(x, y) {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  return x >= 28 && x <= ARENA.width - 28 && y >= 28 && y <= ARENA.height - 28;
 }
 
 function advanceHand(player, handIndex, requeuePlayedCard) {
@@ -1115,6 +1238,7 @@ function spawnUnit(room, owner, cardId, x, y, extras = {}) {
     nextSkillAt: now + 700,
     nextChaosAt: now + randomBetween(2500, 5600),
     nextSummonAt: now + (card.spawnMinionMs || 1000),
+    targetLockId: null,
     windupUntil: 0,
     windupTargetId: null,
     attachedToId: null,
@@ -1122,6 +1246,7 @@ function spawnUnit(room, owner, cardId, x, y, extras = {}) {
     awakened: false,
     berserked: false,
     furious: false,
+    bumperExploded: false,
     invincibleUntil: 0,
     action: '',
     actionUntil: 0,
@@ -1156,6 +1281,32 @@ function triggerAscension(room, owner, x, y) {
   broadcastEffect(room, { type: 'ascension-start', owner, x, y });
 }
 
+function castSpellCard(room, owner, card, x, y) {
+  const game = room.game;
+  const now = Date.now();
+  const zone = {
+    id: `s${game.nextSpellId++}`,
+    owner,
+    cardId: card.id,
+    x: clamp(x, 28, ARENA.width - 28),
+    y: clamp(y, 28, ARENA.height - 28),
+    radius: card.radius,
+    damagePerSecond: card.damagePerSecond,
+    startedAt: now,
+    expiresAt: now + card.durationMs
+  };
+  game.spellZones.push(zone);
+  broadcastEffect(room, {
+    type: 'gas-zone',
+    owner,
+    cardId: card.id,
+    x: zone.x,
+    y: zone.y,
+    radius: zone.radius,
+    durationMs: card.durationMs
+  });
+}
+
 function processPendingSpawns(room, now) {
   const game = room.game;
   if (!Array.isArray(game.pendingSpawns) || game.pendingSpawns.length === 0) return;
@@ -1182,6 +1333,7 @@ function getDeployDelayMs(cardId) {
     zzangga: 760,
     kimrui: 780,
     baduk: 820,
+    taegeonBumperCar: 360,
     osj: 880,
     mythos: 900,
     heoseon: 920,
@@ -1204,6 +1356,7 @@ function deployLabel(cardId) {
     kimgeunyoung: '탱크 호출',
     kimrui: '흡혈 접근',
     heoseon: '폭발 예고',
+    taegeonBumperCar: '범퍼 시동',
     osj: '퇴장 준비'
   };
   return labels[cardId] || '소환 준비';
@@ -1249,10 +1402,39 @@ function tickGame(room, now, deltaSeconds) {
     player.elixir = Math.min(player.maxElixir || MAX_ELIXIR, player.elixir + ELIXIR_PER_SECOND * elixirMultiplier * deltaSeconds);
   }
 
+  updateSpellZones(room, now, deltaSeconds);
   updateUnits(room, now, deltaSeconds);
   updateTowers(room, now);
   removeDeadUnits(room);
   checkWinConditions(room, now);
+}
+
+function updateSpellZones(room, now, deltaSeconds) {
+  const game = room.game;
+  if (!Array.isArray(game.spellZones) || game.spellZones.length === 0) return;
+
+  const activeZones = [];
+  for (const zone of game.spellZones) {
+    if (now >= zone.expiresAt) continue;
+
+    const damage = zone.damagePerSecond * deltaSeconds;
+    for (const unit of game.units) {
+      if (unit.owner === zone.owner || unit.hp <= 0) continue;
+      if (distance(zone, unit) <= zone.radius + getTargetRadius(unit)) {
+        applyDamageToUnit(room, unit, damage, zone.owner, now);
+      }
+    }
+
+    for (const tower of game.towers) {
+      if (tower.owner === zone.owner || tower.hp <= 0) continue;
+      if (distance(zone, tower) <= zone.radius + getTargetRadius(tower)) {
+        applyDamage(room, tower, damage, zone.owner, now);
+      }
+    }
+
+    activeZones.push(zone);
+  }
+  game.spellZones = activeZones;
 }
 
 function updateUnits(room, now, deltaSeconds) {
@@ -1274,6 +1456,11 @@ function updateUnits(room, now, deltaSeconds) {
 
     if (unit.attachedById && !findEntityById(game, unit.attachedById)) {
       unit.attachedById = null;
+    }
+
+    if (card.suicideRusher) {
+      updateSuicideRusher(room, unit, card, deltaSeconds, now);
+      continue;
     }
 
     if (card.healer) {
@@ -1339,6 +1526,33 @@ function updateDormantBerserker(room, unit, card, deltaSeconds, now) {
   }
   unit.action = '평소';
   unit.actionUntil = now + 200;
+}
+
+function updateSuicideRusher(room, unit, card, deltaSeconds, now) {
+  const target = findSuicideTarget(room.game, unit);
+  if (!target) {
+    unit.action = '대상 탐색';
+    unit.actionUntil = now + 200;
+    return;
+  }
+
+  const triggerDistance = (card.detonationRange || card.range || 18) + getTargetRadius(target);
+  if (distance(unit, target) > triggerDistance) {
+    moveToward(unit, target, card.speed * deltaSeconds);
+  }
+
+  unit.action = '범퍼 돌진';
+  unit.actionUntil = now + 200;
+
+  if (distance(unit, target) <= triggerDistance) {
+    detonateBumper(room, unit, now);
+  }
+}
+
+function findSuicideTarget(game, unit) {
+  const enemyUnits = game.units.filter((other) => other.owner !== unit.owner && other.hp > 0);
+  const enemyTowers = getAttackableEnemyTowers(game, unit.owner);
+  return nearest(unit, [...enemyUnits, ...enemyTowers]);
 }
 
 function updateHealer(room, unit, card, deltaSeconds, now) {
@@ -1538,6 +1752,7 @@ function performPushAttack(room, unit, card, target, damage, now) {
     const pushDir = unit.owner === 0 ? -1 : 1;
     for (const enemy of targets) {
       applyDamageToUnit(room, enemy, damage, unit.owner, now);
+      enemy.targetLockId = null;
       const sideStep = Math.sign(enemy.x - unit.x) * Math.min(18, card.pushDistance * 0.18);
       enemy.x = clamp(enemy.x + sideStep, 16, ARENA.width - 16);
       enemy.y = clamp(enemy.y + pushDir * card.pushDistance, 16, ARENA.height - 16);
@@ -1637,6 +1852,14 @@ function updateTowers(room, now) {
 }
 
 function findUnitTarget(game, unit, card) {
+  if (unit.targetLockId) {
+    const lockedTarget = findEntityById(game, unit.targetLockId);
+    if (lockedTarget && isValidTowerLock(game, unit, lockedTarget)) {
+      return lockedTarget;
+    }
+    unit.targetLockId = null;
+  }
+
   const attackableUnits = game.units.filter((other) => {
     return other.owner !== unit.owner && other.hp > 0 && distance(unit, other) <= Math.max(card.range + getTargetRadius(other), 170);
   });
@@ -1644,7 +1867,16 @@ function findUnitTarget(game, unit, card) {
   if (nearUnit) return nearUnit;
 
   const towers = getAttackableEnemyTowers(game, unit.owner);
-  return nearest(unit, towers);
+  const towerTarget = nearest(unit, towers);
+  if (towerTarget) {
+    unit.targetLockId = towerTarget.id;
+  }
+  return towerTarget;
+}
+
+function isValidTowerLock(game, unit, target) {
+  if (!target || target.entity !== 'tower' || target.owner === unit.owner || target.hp <= 0) return false;
+  return getAttackableEnemyTowers(game, unit.owner).some((tower) => tower.id === target.id);
 }
 
 function getAttackableEnemyTowers(game, owner) {
@@ -1685,6 +1917,11 @@ function applyDamageToUnit(room, unit, amount, sourceOwner, now, options = {}) {
 
   if (unit.cardId === 'heoseon' && shouldTriggerBerserker(unit)) {
     triggerBerserker(room, unit, now);
+    return;
+  }
+
+  if (unit.hp <= 0) {
+    detonateBumper(room, unit, now);
     return;
   }
 
@@ -1740,16 +1977,53 @@ function detachRui(room, unit, now = Date.now(), emitEffect = true) {
   }
 }
 
+function detonateBumper(room, unit, now) {
+  const card = CARDS[unit.cardId];
+  if (!card || !card.suicideRusher || unit.bumperExploded) return;
+
+  unit.bumperExploded = true;
+  unit.hp = 0;
+  const radius = card.explosionRadius || 72;
+  const damage = card.explosionDamage || card.damage || 0;
+
+  for (const enemy of room.game.units) {
+    if (enemy.id === unit.id || enemy.owner === unit.owner || enemy.hp <= 0) continue;
+    if (distance(unit, enemy) <= radius + getTargetRadius(enemy)) {
+      applyDamageToUnit(room, enemy, damage, unit.owner, now);
+    }
+  }
+
+  for (const tower of room.game.towers) {
+    if (tower.owner === unit.owner || tower.hp <= 0) continue;
+    if (distance(unit, tower) <= radius + getTargetRadius(tower)) {
+      applyDamage(room, tower, damage, unit.owner, now);
+    }
+  }
+
+  broadcastEffect(room, {
+    type: 'bumper-explosion',
+    owner: unit.owner,
+    cardId: unit.cardId,
+    x: unit.x,
+    y: unit.y,
+    radius
+  });
+}
+
 function removeDeadUnits(room) {
   const game = room.game;
+  const now = Date.now();
   for (const unit of game.units) {
     if (unit.hp > 0) continue;
+    if (unit.cardId === 'taegeonBumperCar') {
+      detonateBumper(room, unit, now);
+    }
     if (unit.cardId === 'kimrui') {
-      detachRui(room, unit, Date.now(), false);
+      detachRui(room, unit, now, false);
     }
     if (unit.attachedById) {
       const rui = findEntityById(game, unit.attachedById);
-      if (rui) detachRui(room, rui, Date.now(), false);
+      if (rui) detachRui(room, rui, now, false);
     }
   }
   game.units = game.units.filter((unit) => unit.hp > 0);
@@ -2014,6 +2288,14 @@ function broadcastEffect(room, effect) {
   io.to(roomChannel(room.id)).emit('effect', { ...effect, at: Date.now() });
 }
 
+function broadcastSpectatorCount(room) {
+  io.to(roomChannel(room.id)).emit('spectator-count', {
+    roomId: room.id,
+    count: getSpectatorCount(room),
+    max: MAX_SPECTATORS_PER_ROOM
+  });
+}
+
 function broadcastState(room) {
   const game = room.game;
   game.lastBroadcastAt = Date.now();
@@ -2022,19 +2304,23 @@ function broadcastState(room) {
   for (const socketId of socketIds) {
     const socket = io.of('/').sockets.get(socketId);
     if (socket) {
-      socket.emit('state', serializeState(room, socket.data.slot));
+      socket.emit('state', serializeState(room, socket.data.slot, { spectator: socket.data.spectatingRoomId === room.id }));
     }
   }
 }
 
-function serializeState(room, viewerSlot = null) {
+function serializeState(room, viewerSlot = null, options = {}) {
   const game = room.game;
   const now = Date.now();
+  const spectator = Boolean(options.spectator);
   return {
     room: publicRoomDetail(room),
     arena: ARENA,
     mode: room.mode,
     maxPlayers: room.maxPlayers,
+    spectator,
+    spectatorCount: getSpectatorCount(room),
+    maxSpectators: MAX_SPECTATORS_PER_ROOM,
     status: game.status,
     message: game.message,
     winner: game.winner,
@@ -2043,7 +2329,7 @@ function serializeState(room, viewerSlot = null) {
     suddenDeath: game.suddenDeath,
     elixirMultiplier: getElixirMultiplier(game, now),
     freezeMs: Math.max(0, game.freezeUntil - now),
-    trophyChange: viewerSlot === null || viewerSlot === undefined ? null : game.trophyChanges && game.trophyChanges[viewerSlot],
+    trophyChange: spectator || viewerSlot === null || viewerSlot === undefined ? null : game.trophyChanges && game.trophyChanges[viewerSlot],
     players: game.players.map((player) => ({
       slot: player.slot,
       team: player.team,
@@ -2054,7 +2340,7 @@ function serializeState(room, viewerSlot = null) {
       connected: player.connected,
       elixir: Number(player.elixir.toFixed(2)),
       maxElixir: player.maxElixir || MAX_ELIXIR,
-      hand: player.slot === viewerSlot ? player.hand : [],
+      hand: spectator || player.slot === viewerSlot ? player.hand : [],
       handSize: player.hand.filter(Boolean).length,
       usedOneTimeCards: Object.keys(player.usedOneTimeCards || {}),
       rematchAccepted: Boolean(player.rematchAccepted),
@@ -2149,7 +2435,8 @@ function publicPlayableCards() {
       id: card.id,
       name: card.name,
       cost: card.cost,
-      role: card.role
+      role: card.role,
+      spell: Boolean(card.spell)
     };
   }
   return cards;
@@ -2299,6 +2586,34 @@ function publicRooms() {
     .map(publicRoomDetail);
 }
 
+function publicSpectatorRooms() {
+  return [...rooms.values()]
+    .filter((room) => room.game.status === 'playing' && getSpectatorCount(room) < MAX_SPECTATORS_PER_ROOM)
+    .sort((a, b) => b.game.startedAt - a.game.startedAt)
+    .map(publicSpectatorRoomDetail);
+}
+
+function publicSpectatorRoomDetail(room) {
+  const players = room.game.players
+    .filter((player) => player.userId)
+    .map((player) => ({
+      username: player.username,
+      team: player.team,
+      connected: player.connected
+    }));
+  return {
+    id: room.id,
+    name: room.name,
+    mode: room.mode,
+    modeLabel: room.modeLabel,
+    battleLabel: spectatorBattleLabel(room),
+    players,
+    spectatorCount: getSpectatorCount(room),
+    maxSpectators: MAX_SPECTATORS_PER_ROOM,
+    full: getSpectatorCount(room) >= MAX_SPECTATORS_PER_ROOM
+  };
+}
+
 function publicRoomDetail(room) {
   return {
     id: room.id,
@@ -2319,16 +2634,35 @@ function publicRoomDetail(room) {
       })),
     teams: room.mode === '2v2' ? publicRoomTeams(room) : [],
     playerCount: getConnectedPlayerCount(room),
-    maxPlayers: room.maxPlayers
+    maxPlayers: room.maxPlayers,
+    spectatorCount: getSpectatorCount(room),
+    maxSpectators: MAX_SPECTATORS_PER_ROOM
   };
 }
 
 function emitRooms() {
   io.emit('rooms', publicRooms());
+  io.emit('spectator-rooms', publicSpectatorRooms());
 }
 
 function getConnectedPlayerCount(room) {
   return room.game.players.filter((player) => player.connected).length;
+}
+
+function getSpectatorCount(room) {
+  return room && room.spectators ? room.spectators.size : 0;
+}
+
+function spectatorBattleLabel(room) {
+  const players = room.game.players.filter((player) => player.userId);
+  if (room.mode === '2v2') {
+    const bottom = players.filter((player) => player.team === 0).map((player) => player.username).join(', ') || '아래 진영';
+    const top = players.filter((player) => player.team === 1).map((player) => player.username).join(', ') || '위 진영';
+    return `${bottom} vs ${top}`;
+  }
+  const first = players[0] ? players[0].username : 'Player 1';
+  const second = players[1] ? players[1].username : 'Player 2';
+  return `${first} vs ${second}`;
 }
 
 function getTeamCapacity(room) {

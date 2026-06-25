@@ -160,7 +160,8 @@
               <div class="mode-grid">
                 <div><strong>1대1</strong><span>정면 승부</span></div>
                 <div><strong>2대2</strong><span>팀 선택</span></div>
-                <div><strong>X2</strong><span>마지막 60초</span></div>
+                <div><strong>X3</strong><span>마지막 20초</span></div>
+                <div><strong>관전</strong><span>최대 2명</span></div>
                 <div><strong>+2</strong><span>킹타워 파괴</span></div>
               </div>
             </section>
@@ -302,10 +303,14 @@
           </section>
           <section class="room-list-panel">
             <div class="room-list-title">
-              <h2>대기 중인 방</h2>
-              <button id="refresh-rooms" type="button" class="secondary">새로고침</button>
+              <h2 id="room-list-heading">대기 중인 방</h2>
+              <div class="room-list-actions">
+                <button id="watch-rooms" type="button" class="secondary">관전하기</button>
+                <button id="refresh-rooms" type="button" class="secondary">새로고침</button>
+              </div>
             </div>
             <div id="room-list" class="room-list"></div>
+            <div id="spectator-room-list" class="room-list hidden"></div>
           </section>
         </div>
       </section>

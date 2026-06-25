@@ -1342,6 +1342,12 @@ html[data-theme="light"] .lobby-hero {
   box-shadow: 0 0 0 2px rgba(232, 193, 92, 0.28);
 }
 
+.deck-pool-card-spell {
+  background:
+    linear-gradient(135deg, rgba(183, 217, 75, 0.18), transparent 56%),
+    var(--panel-2);
+}
+
 .deck-pool-card:disabled {
   opacity: 0.52;
   cursor: not-allowed;
@@ -1517,6 +1523,12 @@ html[data-theme="light"] .lobby-hero {
   margin-bottom: 14px;
 }
 
+.room-list-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .room-list {
   display: grid;
   gap: 10px;
@@ -1540,6 +1552,10 @@ html[data-theme="light"] .lobby-hero {
   background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: 8px;
+}
+
+.spectator-room-card {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .room-card h3 {
@@ -1604,6 +1620,7 @@ html[data-theme="light"] .lobby-hero {
 .character-card-zzangga { border-top-color: #e4536d; }
 .character-card-bbatman { border-top-color: #46b9a5; }
 .character-card-baduk { border-top-color: #b7855f; }
+.character-card-badukFart { border-top-color: #b7d94b; }
 .character-card-kkongho { border-top-color: #f4df70; }
 .character-card-yushin { border-top-color: #7f7fd5; }
 .character-card-jimin { border-top-color: #4f8de8; }
@@ -1614,7 +1631,27 @@ html[data-theme="light"] .lobby-hero {
 .character-card-kimgeunyoung { border-top-color: #e8c547; }
 .character-card-kimrui { border-top-color: #8f5fbf; }
 .character-card-heoseon { border-top-color: #ff5b66; }
+.character-card-taegeonBumperCar { border-top-color: #ff9b45; }
 .character-card-osj { border-top-color: #4a6f88; }
+
+.character-card-spell {
+  background:
+    linear-gradient(135deg, rgba(183, 217, 75, 0.2), transparent 45%),
+    var(--surface);
+}
+
+.card-type-badge {
+  position: absolute;
+  top: 24px;
+  right: 18px;
+  margin: 0;
+  padding: 6px 9px;
+  color: var(--badge-ink);
+  background: #b7d94b;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+}
 
 .character-card h2 {
   margin: 0 0 10px;

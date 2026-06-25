@@ -8,13 +8,31 @@ const DECK_SIZE = 8;
 const BEST_FRIEND_PAIR = ['baduk', 'johyunwoo'];
 const BEST_FRIEND_COMBO_COST = 8;
 const THEME_STORAGE_KEY = 'dsm-game-theme';
-const BBATMAN_HEAL_RANGE = 90;
+const BBATMAN_HEAL_RANGE = 81;
 
 function clampNumber(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
 const PATCH_NOTICES = [
+  {
+    title: '대폭 업데이트!! 관전 모드와 신규 카드',
+    date: '2026.06.25',
+    items: [
+      '진행 중인 경기를 최대 2명까지 관전 가능',
+      '타워를 때리기 시작한 유닛은 타워 파괴 또는 OSJ 밀치기 전까지 타워 집중',
+      '신규 마법 카드 바둑이 방구와 1코 자폭 돌진 태건 범퍼카 추가'
+    ],
+    details: [
+      '방 선택 화면에서 관전하기를 누르면 현재 전투 중인 방 목록을 볼 수 있고, 관전자 수가 2명 미만인 경기만 입장할 수 있다.',
+      '관전자 화면에서는 양쪽 손패, 엘릭서, 타워 HP, 관전자 수를 실시간으로 볼 수 있지만 카드는 낼 수 없다.',
+      '유닛이 타워를 타겟팅하면 targetLock이 걸려 주변에 적 유닛이 와도 같은 타워를 계속 공격한다. 타워가 부서지거나 OSJ 밀치기에 맞아 위치가 밀리면 타겟을 다시 찾는다.',
+      '빼트맨 힐 범위는 90에서 81로 10% 줄였다.',
+      '바둑이 방구는 3 엘릭서 마법 카드로, 선택한 위치에 4초 동안 초당 20 피해를 주는 초록/노란 가스 장판을 만든다. 적 유닛과 적 타워 모두 피해를 받는다.',
+      '태건 범퍼카는 1 엘릭서 자폭 돌진 유닛으로, HP 150과 폭발 피해 50을 가진다. 적에게 닿거나 사망하면 주변 적에게 폭발 피해를 준다.',
+      '허선은 현재 수치에서 전체적으로 10% 추가 하향했고, 성주는 공격 주기를 572ms에서 686ms로 늘려 공속을 20% 늦췄다.'
+    ]
+  },
   {
     title: '마지막 20초와 키보드 카드 선택',
     date: '2026.06.25',
@@ -177,6 +195,7 @@ const CARD_THEME = {
   zzangga: { fill: 0xe4536d, stroke: 0xffd6df, short: '짱' },
   bbatman: { fill: 0x46b9a5, stroke: 0xc7fff4, short: '힐' },
   baduk: { fill: 0x8c6a54, stroke: 0xffd2a8, short: '박' },
+  badukFart: { fill: 0xb7d94b, stroke: 0xf4ff91, short: '마법' },
   kkongho: { fill: 0xf4df70, stroke: 0xfff8c9, short: '승' },
   yushin: { fill: 0x7f7fd5, stroke: 0xdad8ff, short: '군' },
   jimin: { fill: 0x4f8de8, stroke: 0xd5e9ff, short: '딜' },
@@ -187,6 +206,7 @@ const CARD_THEME = {
   kimgeunyoung: { fill: 0xe8c547, stroke: 0xfff2ad, short: '대' },
   kimrui: { fill: 0x8f5fbf, stroke: 0xe4d6ff, short: '루' },
   heoseon: { fill: 0x323039, stroke: 0xff5b66, short: '허' },
+  taegeonBumperCar: { fill: 0xff9b45, stroke: 0xffdf9f, short: '붕' },
   osj: { fill: 0x4a6f88, stroke: 0xd9eef8, short: 'OSJ' },
   geunyoungTank: { fill: 0x5d6b73, stroke: 0xcbd3d8, short: '탱' }
 };
@@ -218,12 +238,12 @@ const CHARACTER_DETAILS = [
       ['HP', '410'],
       ['공격력', '없음'],
       ['힐량', '초당 47.25'],
-      ['힐 범위', '90'],
+      ['힐 범위', '81'],
       ['자가 피해', '초당 8'],
       ['이동속도', '76'],
       ['공격 주기', '없음']
     ],
-    ability: '주변에 회복 원을 만들고, 원 안에 있는 모든 여학생 또는 여학생으로 인식되는 아군을 계속 회복시킨다. 회복 대상이 원 밖에 있으면 가까운 대상 쪽으로 이동한다. 전장에 있는 동안에는 시간이 지날수록 체력이 조금씩 줄어든다.',
+    ability: '주변에 더 좁아진 회복 원을 만들고, 원 안에 있는 모든 여학생 또는 여학생으로 인식되는 아군을 계속 회복시킨다. 회복 대상이 원 밖에 있으면 가까운 대상 쪽으로 이동한다. 전장에 있는 동안에는 시간이 지날수록 체력이 조금씩 줄어든다.',
     appearance: '키가 작고 마른 남학생. 삭발 머리, 매우 탄 피부, 운동을 잘할 것 같은 체형이다.',
     trait: '공격하지 못하는 순수 힐러다. 힐량은 낮아졌지만 여러 아군을 동시에 회복할 수 있다.'
   },
@@ -244,6 +264,24 @@ const CHARACTER_DETAILS = [
     ability: '갑자기 예측하기 어려운 행동을 하며 범위 안 적들에게 매우 큰 피해를 준다. 같은 범위의 아군도 약한 피해를 받는다. 스킬 발동 시점은 무작위다. 조현우와 손패에 함께 있으면 8 엘릭서로 둘이 동시에 기본 스탯 그대로 출격하며 전장에 절친 특성 문구가 뜬다.',
     appearance: '삭발에 안경을 쓴 통통한 남학생. 교복을 입고 있다.',
     trait: 'HP가 1300으로 낮아졌지만 여전히 위험 부담이 큰 카오스 딜러다. 조현우와 절친 특성으로 나올 때도 스탯은 낮아지지 않는다.'
+  },
+  {
+    id: 'badukFart',
+    name: '바둑이 방구',
+    cost: '3',
+    type: '마법 / 범위 지속 피해',
+    cardType: 'spell',
+    stats: [
+      ['카드 종류', '마법 카드'],
+      ['피해량', '초당 20'],
+      ['총 피해', '80'],
+      ['지속 시간', '4초'],
+      ['범위 형태', '원형 가스 장판'],
+      ['소환 유닛', '없음']
+    ],
+    ability: '플레이어가 전장 위치 하나를 지정하면 그 지점에서 초록/노란 가스 구름이 원형으로 퍼진다. 4초 동안 장판 안에 있는 모든 적 유닛과 적 타워가 초당 20 피해를 받아 총 80 피해를 받을 수 있다. 유닛을 소환하지 않는 순수 마법 카드라 사용 즉시 효과가 발동한다.',
+    appearance: '캐릭터가 직접 나오지 않고, 지정한 위치에 초록색과 노란색이 섞인 방구 가스 구름이 둥글게 번진다.',
+    trait: '3 엘릭서로 낮은 비용의 지역 장악을 할 수 있다. 적 유닛뿐 아니라 적 타워도 피해를 받기 때문에 방어 병력과 타워를 동시에 압박하는 주문 카드다.'
   },
   {
     id: 'kkongho',
@@ -339,11 +377,11 @@ const CHARACTER_DETAILS = [
       ['HP', '224'],
       ['공격력', '59'],
       ['사거리', '185'],
-      ['공격 주기', '0.572초'],
+      ['공격 주기', '0.686초'],
       ['이동속도', '42'],
       ['회복 대상', '가능']
     ],
-    ability: '뒤쪽에서 키보드를 두드리며 원거리 공격을 한다. 공격 주기가 10% 느려졌고 이번 패치로 공격력도 10% 낮아졌다.',
+    ability: '뒤쪽에서 키보드를 두드리며 원거리 공격을 한다. 이번 패치로 공격 주기가 0.572초에서 0.686초로 20% 느려졌다.',
     appearance: '마른 남학생. 헝클어진 머리가 얼굴 전체를 가리고, 머리카락 아래 안경과 마스크를 쓰고 있다.',
     trait: '남자 캐릭터지만 모두가 여학생이라고 생각해서 빼트맨의 회복 대상이 된다. 체력이 낮고 공격력도 낮아졌지만, 방치하면 뒤에서 꾸준히 피해를 준다.'
   },
@@ -405,19 +443,36 @@ const CHARACTER_DETAILS = [
     cost: '9',
     type: '버서커 / 폭발형 딜러',
     stats: [
-      ['기본 HP', '450'],
-      ['폭발 HP', '900'],
-      ['공격력', '평소 0 / 폭발 90'],
-      ['사거리', '18'],
-      ['공격 주기', '0.275초'],
-      ['이동속도', '41 / 폭발 106'],
-      ['변신 조건', 'HP 27% 이하'],
-      ['폭발 범위', '52'],
+      ['기본 HP', '405'],
+      ['폭발 HP', '810'],
+      ['공격력', '평소 0 / 폭발 81'],
+      ['사거리', '16'],
+      ['공격 주기', '0.303초'],
+      ['이동속도', '37 / 폭발 95'],
+      ['변신 조건', 'HP 24.3% 이하'],
+      ['폭발 범위', '47'],
       ['변신 회복', '즉시 최대 HP 100%']
     ],
-    ability: '평소에는 공격력이 0이고 어떤 공격도 하지 않은 채 조용히 적 쪽으로 걸어간다. HP가 27% 이하로 떨어지는 순간 자동으로 폭발 상태가 되며 최대 HP가 450에서 900으로 바뀌고, 체력이 새 최대 HP의 100%로 완전히 회복된다. 폭발 상태에서는 공격력 90, 공격 주기 0.275초, 이동속도 106으로 근접 범위의 여러 대상을 동시에 공격한다.',
+    ability: '평소에는 공격력이 0이고 어떤 공격도 하지 않은 채 조용히 적 쪽으로 걸어간다. HP가 24.3% 이하로 떨어지는 순간 자동으로 폭발 상태가 되며 최대 HP가 405에서 810으로 바뀌고, 체력이 새 최대 HP의 100%로 완전히 회복된다. 폭발 상태에서는 공격력 81, 공격 주기 0.303초, 이동속도 95로 근접 범위의 여러 대상을 동시에 공격한다.',
     appearance: '키가 크고 마른 40대 중년 여성이다. 평소에는 침착하고 음산한 표정으로 천천히 움직이며, 폭발 상태가 되면 분노가 터진 얼굴과 어지러운 움직임으로 어두운 분위기를 몰고 다닌다.',
     trait: '1단계에서는 완전히 무해해서 상대가 방심하기 쉽다. 한 번 폭발 상태가 되면 되돌아가지 않지만, 이번 패치로 내구도, 발동 조건, 이동속도, 피해량, 공격 속도, 범위가 모두 낮아졌다.'
+  },
+  {
+    id: 'taegeonBumperCar',
+    name: '태건 범퍼카',
+    cost: '1',
+    type: '자폭 돌진 / 초저비용 압박',
+    stats: [
+      ['HP', '150'],
+      ['폭발 피해', '50'],
+      ['피해 범위', '주변 광역'],
+      ['이동속도', '95'],
+      ['엘릭서 비용', '1'],
+      ['사망 효과', '무조건 폭발']
+    ],
+    ability: '소환되면 범퍼카를 타고 가장 가까운 적을 향해 매우 빠르게 돌진한다. 적에게 닿으면 즉시 폭발해 주변 모든 적에게 50 광역 피해를 준다. 돌진 중 적에게 먼저 죽어도 그 자리에서 반드시 폭발하므로 완전히 낭비되지 않는다.',
+    appearance: '자동차에 집착하는 광기 어린 표정의 남학생이 범퍼카를 타고 전장으로 튀어나온다. 충돌하거나 죽는 순간 주황색 폭발 이펙트가 터진다.',
+    trait: '게임에서 가장 낮은 1 엘릭서 카드다. HP가 150으로 매우 낮아 중간에 쉽게 잡히지만, 죽어도 폭발하기 때문에 수비 교란과 마무리 압박에 쓸 수 있다.'
   },
   {
     id: 'osj',
@@ -457,6 +512,7 @@ const ASCENSION_REACTIONS = {
   kimgeunyoung: '침착',
   kimrui: '불안',
   heoseon: '폭발 직전',
+  taegeonBumperCar: '부릉',
   osj: '퇴장 지시'
 };
 
@@ -468,11 +524,14 @@ let latestState = null;
 let currentUser = null;
 let currentRoom = null;
 let currentSlot = null;
+let isSpectating = false;
 let ascensionAudioUntil = 0;
 let latestRankings = [];
 let latestTiers = [];
+let latestSpectatorRooms = [];
 let deckCards = {};
 let selectedDeck = [];
+let showingSpectatorRooms = false;
 
 class BattleScene extends Phaser.Scene {
   constructor() {
@@ -564,7 +623,7 @@ class BattleScene extends Phaser.Scene {
     }
 
     if (pointer.y > ARENA_H || this.selectedHandIndex === null || this.state.status !== 'playing') return;
-    if (!this.isInOwnSpawnZone(pointer.x, pointer.y)) return;
+    if (!this.canPlaySelectedAt(pointer.x, pointer.y)) return;
 
     this.socket.emit('play-card', {
       handIndex: this.selectedHandIndex,
@@ -637,6 +696,13 @@ class BattleScene extends Phaser.Scene {
     if (this.slot === null || this.slot === undefined || this.selectedHandIndex === null || this.state.status !== 'playing') return;
     const player = this.state.players[this.slot];
     const team = player ? player.team : this.slot;
+    if (this.isSelectedSpellCard()) {
+      this.g.fillStyle(0xb7d94b, 0.08);
+      this.g.fillRect(28, 28, ARENA_W - 56, ARENA_H - 56);
+      this.g.lineStyle(2, 0xf4ff91, 0.55);
+      this.g.strokeRect(28, 28, ARENA_W - 56, ARENA_H - 56);
+      return;
+    }
     const zone = team === 0 ? { y: 338, h: ARENA_H - 380 } : { y: 42, h: 240 };
     this.g.fillStyle(team === 0 ? 0x4f8de8 : 0xe4536d, 0.13);
     this.g.fillRect(48, zone.y, ARENA_W - 96, zone.h);
@@ -925,6 +991,26 @@ class BattleScene extends Phaser.Scene {
         this.g.lineBetween(x + 20, y - 21, x + 8, y - 4);
         this.g.lineBetween(x - 18, y + 4, x - 6, y + 23);
       }
+    } else if (unit.cardId === 'taegeonBumperCar') {
+      this.g.fillStyle(0xff9b45, 1);
+      this.g.fillRoundedRect(x - 19, y - 8, 38, 22, 8);
+      this.g.strokeRoundedRect(x - 19, y - 8, 38, 22, 8);
+      this.g.fillStyle(0x2b3038, 1);
+      this.g.fillRoundedRect(x - 10, y - 18, 20, 13, 5);
+      this.g.strokeRoundedRect(x - 10, y - 18, 20, 13, 5);
+      this.g.fillStyle(skin, 1);
+      this.g.fillCircle(x, y - 27, 8);
+      this.g.strokeCircle(x, y - 27, 8);
+      this.g.lineStyle(2, 0x17191d, 1);
+      this.g.lineBetween(x - 4, y - 29, x - 1, y - 27);
+      this.g.lineBetween(x + 1, y - 27, x + 4, y - 29);
+      this.g.lineStyle(3, 0xffdf9f, 0.95);
+      this.g.lineBetween(x + dir * 4, y - 3, x + dir * 20, y - 7);
+      this.g.fillStyle(0x17191d, 1);
+      this.g.fillCircle(x - 13, y + 14, 5);
+      this.g.fillCircle(x + 13, y + 14, 5);
+      this.g.lineStyle(2, 0xffdf9f, 0.85);
+      this.g.lineBetween(x - dir * 22, y - 2, x - dir * 34, y - 2);
     } else if (unit.cardId === 'geunyoungTank') {
       const barrelEnd = x + dir * 25;
       this.g.fillStyle(0x303a3f, 1);
@@ -1087,6 +1173,27 @@ class BattleScene extends Phaser.Scene {
         this.g.lineBetween(effect.x - 30, effect.y + 20, effect.x + 32, effect.y - 18);
         this.g.lineBetween(effect.x - 24, effect.y - 22, effect.x + 28, effect.y + 18);
         this.drawCenteredText('폭주', effect.x, effect.y - 36, 15, '#ffccd0');
+      } else if (effect.type === 'gas-zone') {
+        const radius = effect.radius || 118;
+        const wave = radius * Phaser.Math.Clamp(t * 1.25, 0.15, 1);
+        this.g.fillStyle(0xb7d94b, 0.18 + 0.05 * Math.sin(age / 120));
+        this.g.fillCircle(effect.x, effect.y, wave);
+        this.g.fillStyle(0xf4ff91, 0.09);
+        this.g.fillCircle(effect.x - 18, effect.y + 9, wave * 0.72);
+        this.g.fillCircle(effect.x + 22, effect.y - 14, wave * 0.55);
+        this.g.lineStyle(4, 0xf4ff91, alpha * 0.7 + 0.18);
+        this.g.strokeCircle(effect.x, effect.y, wave);
+        this.drawCenteredText('바둑이 방구', effect.x, Math.max(18, effect.y - radius - 26), 14, '#f4ff91');
+      } else if (effect.type === 'bumper-explosion') {
+        const radius = effect.radius || 76;
+        this.g.fillStyle(0xff9b45, alpha * 0.26);
+        this.g.fillCircle(effect.x, effect.y, 18 + t * radius);
+        this.g.lineStyle(6, 0xffdf9f, alpha);
+        this.g.strokeCircle(effect.x, effect.y, 12 + t * radius);
+        this.g.lineStyle(3, 0xffffff, alpha * 0.85);
+        this.g.lineBetween(effect.x - 34, effect.y, effect.x + 34, effect.y);
+        this.g.lineBetween(effect.x, effect.y - 34, effect.x, effect.y + 34);
+        this.drawCenteredText('펑!', effect.x, effect.y - 45, 18, '#ffdf9f');
       } else if (effect.type === 'hit') {
         this.drawCardHitEffect(effect, t, alpha);
       } else if (effect.type === 'deploy') {
@@ -1220,6 +1327,11 @@ class BattleScene extends Phaser.Scene {
         const angle = (Math.PI * 2 * i) / 6;
         this.g.lineBetween(x, y, x + Math.cos(angle) * (20 + t * 16), y + Math.sin(angle) * (20 + t * 16));
       }
+    } else if (effect.cardId === 'taegeonBumperCar') {
+      this.g.fillRoundedRect(x - 24, y - 9, 48, 18, 7);
+      this.g.fillCircle(x - 15, y + 11, 5 + t * 3);
+      this.g.fillCircle(x + 15, y + 11, 5 + t * 3);
+      this.g.lineBetween(x - 30 - t * 18, y, x - 12, y);
     } else if (effect.cardId === 'peach') {
       this.g.strokeCircle(x - 8, y - 6, 13 + t * 4);
       this.g.lineBetween(x + 3, y + 4, x + 22, y + 23);
@@ -1282,16 +1394,17 @@ class BattleScene extends Phaser.Scene {
     this.drawHudTeam(1, '위 진영', x + 12, 88, w - 24, '#ffd5d1');
     this.drawHudTeam(0, '아래 진영', x + 12, 212, w - 24, '#cbe1ff');
 
-    this.drawText('상태', x + 14, 350, 11, '#8f98a6');
+    this.drawText(`관전자 수: ${this.state.spectatorCount || 0}`, x + 14, 328, 13, '#f4ff91');
+    this.drawText('상태', x + 14, 354, 11, '#8f98a6');
     const elixirStatus = elixirMultiplier >= 3 ? '트리플 엘릭서' : '더블 엘릭서';
-    this.drawText(truncateText(boostedElixir ? elixirStatus : this.state.message || '전투 중', 18), x + 14, 368, 13, '#d6d0c6');
+    this.drawText(truncateText(boostedElixir ? elixirStatus : this.state.message || '전투 중', 18), x + 14, 372, 13, '#d6d0c6');
 
     if (me) {
       this.drawElixir(me.elixir, me.maxElixir || 10);
       this.drawText('내 진영', x + 14, 416, 11, '#8f98a6');
       this.drawText(teamName(me.team), x + 14, 434, 16, '#f7f2e8');
     } else {
-      this.drawText(truncateText(this.notice || '방 대기 중', 18), x + 14, 500, 14, '#f7f2e8');
+      this.drawText(this.state.spectator ? '관전 모드' : truncateText(this.notice || '방 대기 중', 18), x + 14, 500, 14, '#f7f2e8');
     }
   }
 
@@ -1335,6 +1448,10 @@ class BattleScene extends Phaser.Scene {
 
   drawCards() {
     this.cardBounds = [];
+    if (this.state.spectator) {
+      this.drawSpectatorHands();
+      return;
+    }
     const player = this.slot === null || this.slot === undefined ? null : this.state.players[this.slot];
     const startX = 28;
     const gap = 14;
@@ -1376,6 +1493,47 @@ class BattleScene extends Phaser.Scene {
     }
   }
 
+  drawSpectatorHands() {
+    const players = (this.state.players || []).filter((player) => player.username || player.connected);
+    const panelY = ARENA_H + 12;
+    this.g.fillStyle(0x141820, 1);
+    this.g.fillRoundedRect(20, panelY, ARENA_W - 40, 116, 8);
+    this.g.lineStyle(2, 0xffffff, 0.12);
+    this.g.strokeRoundedRect(20, panelY, ARENA_W - 40, 116, 8);
+
+    const columnW = Math.floor((ARENA_W - 64) / Math.max(1, Math.min(players.length, 4)));
+    players.slice(0, 4).forEach((player, index) => {
+      const x = 32 + index * columnW;
+      const y = panelY + 10;
+      const accent = player.team === 0 ? '#cbe1ff' : '#ffd5d1';
+      this.drawText(truncateText(player.username || `플레이어 ${player.slot + 1}`, 14), x, y, 13, accent);
+      this.drawMiniElixir(player.elixir || 0, player.maxElixir || 10, x, y + 20, Math.min(168, columnW - 12));
+      for (let i = 0; i < 4; i += 1) {
+        this.drawMiniCard(player.hand && player.hand[i], x + i * 42, y + 48, 36, 46);
+      }
+    });
+  }
+
+  drawMiniElixir(elixir, maxElixir, x, y, w) {
+    const h = 8;
+    this.g.fillStyle(0x262b33, 1);
+    this.g.fillRoundedRect(x, y, w, h, 4);
+    this.g.fillStyle(0xb86dff, 1);
+    this.g.fillRoundedRect(x, y, w * Phaser.Math.Clamp(elixir / maxElixir, 0, 1), h, 4);
+    this.drawText(`${elixir.toFixed(1)}/${maxElixir}`, x, y + 10, 10, '#d6d0c6');
+  }
+
+  drawMiniCard(cardId, x, y, w, h) {
+    const card = this.cards[cardId];
+    const theme = CARD_THEME[cardId] || { fill: 0x3a3d45, stroke: 0x6f7480, short: '?' };
+    this.g.fillStyle(card ? theme.fill : 0x282b31, card ? 1 : 0.68);
+    this.g.lineStyle(2, card ? theme.stroke : 0x6f7480, 0.75);
+    this.g.fillRoundedRect(x, y, w, h, 6);
+    this.g.strokeRoundedRect(x, y, w, h, 6);
+    this.drawCenteredText(card ? theme.short : '-', x + w / 2, y + 8, 11, card ? '#111318' : '#d6d0c6');
+    if (card) this.drawCenteredText(String(card.cost), x + w / 2, y + 27, 10, '#ffffff');
+  }
+
   drawOverlay() {
     if (this.state.freezeMs > 0) {
       this.g.fillStyle(0xfff3b5, 0.11);
@@ -1415,6 +1573,18 @@ class BattleScene extends Phaser.Scene {
     return y >= 42 && y <= 282;
   }
 
+  canPlaySelectedAt(x, y) {
+    if (this.isSelectedSpellCard()) return x >= 28 && x <= ARENA_W - 28 && y >= 28 && y <= ARENA_H - 28;
+    return this.isInOwnSpawnZone(x, y);
+  }
+
+  isSelectedSpellCard() {
+    const player = this.state && this.slot !== null && this.slot !== undefined ? this.state.players[this.slot] : null;
+    const cardId = player && player.hand && player.hand[this.selectedHandIndex];
+    const card = this.cards[cardId];
+    return Boolean(card && card.spell);
+  }
+
   getVisualRadius(cardId) {
     if (cardId === 'yushin') return 10;
     if (cardId === 'kimgeunyoung') return 24;
@@ -1422,7 +1592,8 @@ class BattleScene extends Phaser.Scene {
     if (cardId === 'bbatman') return 15;
     if (cardId === 'seongjoo') return 15;
     if (cardId === 'kimrui') return 16;
-    if (cardId === 'heoseon') return 18;
+    if (cardId === 'heoseon') return 14;
+    if (cardId === 'taegeonBumperCar') return 16;
     if (cardId === 'osj') return 22;
     if (cardId === 'geunyoungTank') return 16;
     return 18;
@@ -1448,6 +1619,8 @@ class BattleScene extends Phaser.Scene {
     if (type === 'tower-shot') return 450;
     if (type === 'push') return 760;
     if (type === 'berserk-hit') return 520;
+    if (type === 'gas-zone') return 4000;
+    if (type === 'bumper-explosion') return 850;
     if (type === 'hit') return 520;
     return 700;
   }
@@ -1569,6 +1742,7 @@ function setupShell() {
   const authPanels = [...document.querySelectorAll('[data-auth-panel]')];
   const createRoomForm = document.getElementById('create-room-form');
   const refreshRoomsButton = document.getElementById('refresh-rooms');
+  const watchRoomsButton = document.getElementById('watch-rooms');
   const roomModeSelect = document.getElementById('room-mode');
   const createTeamField = document.getElementById('create-team-field');
 
@@ -1602,6 +1776,8 @@ function setupShell() {
   startButton.addEventListener('click', () => {
     showScreen(roomScreen);
     connectSocket();
+    showingSpectatorRooms = false;
+    updateRoomListMode();
     requestRooms();
   });
 
@@ -1682,14 +1858,27 @@ function setupShell() {
     roomModeSelect.addEventListener('change', updateCreateTeamField);
   }
 
-  refreshRoomsButton.addEventListener('click', requestRooms);
+  refreshRoomsButton.addEventListener('click', () => {
+    if (showingSpectatorRooms) requestSpectatorRooms();
+    else requestRooms();
+  });
+
+  watchRoomsButton.addEventListener('click', () => {
+    showingSpectatorRooms = !showingSpectatorRooms;
+    updateRoomListMode();
+    if (showingSpectatorRooms) requestSpectatorRooms();
+    else requestRooms();
+  });
 
   leaveRoomButton.addEventListener('click', () => {
     if (socket) socket.emit('leave-room');
     currentRoom = null;
     currentSlot = null;
+    isSpectating = false;
     latestState = null;
     updateRematchControls();
+    showingSpectatorRooms = false;
+    updateRoomListMode();
     showScreen(roomScreen);
     requestRooms();
   });
@@ -1719,6 +1908,16 @@ function setupShell() {
   function updateCreateTeamField() {
     if (!roomModeSelect || !createTeamField) return;
     createTeamField.classList.toggle('hidden', roomModeSelect.value !== '2v2');
+  }
+
+  function updateRoomListMode() {
+    const heading = document.getElementById('room-list-heading');
+    const roomList = document.getElementById('room-list');
+    const spectatorList = document.getElementById('spectator-room-list');
+    if (heading) heading.textContent = showingSpectatorRooms ? '관전 가능한 경기' : '대기 중인 방';
+    if (watchRoomsButton) watchRoomsButton.textContent = showingSpectatorRooms ? '대기방 보기' : '관전하기';
+    if (roomList) roomList.classList.toggle('hidden', showingSpectatorRooms);
+    if (spectatorList) spectatorList.classList.toggle('hidden', !showingSpectatorRooms);
   }
 
   window.showGameScreen = () => {
@@ -1860,9 +2059,22 @@ function connectSocket() {
     loadRankings();
   });
   socket.on('rooms', renderRoomList);
+  socket.on('spectator-rooms', (rooms) => {
+    latestSpectatorRooms = rooms || [];
+    renderSpectatorRoomList(latestSpectatorRooms);
+  });
   socket.on('room-joined', (payload) => {
     currentRoom = payload.room;
     currentSlot = payload.slot;
+    isSpectating = false;
+    setMessage('room-message', '');
+    updateGameRoomTitle();
+    window.showGameScreen();
+  });
+  socket.on('spectator-joined', (payload) => {
+    currentRoom = payload.room;
+    currentSlot = null;
+    isSpectating = true;
     setMessage('room-message', '');
     updateGameRoomTitle();
     window.showGameScreen();
@@ -1870,6 +2082,7 @@ function connectSocket() {
   socket.on('room-left', () => {
     currentRoom = null;
     currentSlot = null;
+    isSpectating = false;
     latestState = null;
     updateRematchControls();
     window.showRoomScreen();
@@ -1880,12 +2093,21 @@ function connectSocket() {
   socket.on('state', (state) => {
     latestState = state;
     if (state.room) currentRoom = state.room;
+    isSpectating = Boolean(state.spectator);
     updateGameRoomTitle();
     updateRematchControls();
     if (activeScene) activeScene.receiveState(state);
   });
   socket.on('effect', (effect) => {
     if (activeScene) activeScene.receiveEffect(effect);
+  });
+  socket.on('spectator-count', (payload) => {
+    if (latestState && currentRoom && payload && payload.roomId === currentRoom.id) {
+      latestState.spectatorCount = payload.count;
+      latestState.maxSpectators = payload.max;
+      if (activeScene) activeScene.receiveState(latestState);
+      updateGameRoomTitle();
+    }
   });
   socket.on('connect_error', (error) => {
     setMessage('room-message', error.message || '서버에 연결하지 못했습니다.');
@@ -1904,6 +2126,11 @@ async function requestRooms() {
   } catch (error) {
     setMessage('room-message', error.message || '방 목록을 가져오지 못했습니다.');
   }
+}
+
+function requestSpectatorRooms() {
+  connectSocket();
+  getSocket().emit('request-spectator-rooms');
 }
 
 async function loadRankings() {
@@ -2049,6 +2276,7 @@ function deckPoolCard(card) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'deck-pool-card';
+  if (card.spell) button.classList.add('deck-pool-card-spell');
   if (selected) button.classList.add('deck-pool-card-selected');
   button.disabled = full && !selected;
   button.style.setProperty('--card-accent', `#${theme.fill.toString(16).padStart(6, '0')}`);
@@ -2058,7 +2286,7 @@ function deckPoolCard(card) {
   const name = document.createElement('span');
   name.textContent = card.name;
   const meta = document.createElement('small');
-  meta.textContent = `${card.cost} 엘릭서 · ${card.role}`;
+  meta.textContent = `${card.cost} 엘릭서 · ${card.spell ? '마법' : card.role}`;
   const type = document.createElement('em');
   type.textContent = detail ? detail.type : card.role;
 
@@ -2438,6 +2666,42 @@ function renderRoomList(rooms) {
   }
 }
 
+function renderSpectatorRoomList(rooms) {
+  const list = document.getElementById('spectator-room-list');
+  if (!list) return;
+  list.replaceChildren();
+
+  if (!rooms || rooms.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = '관전 가능한 진행 중 경기가 없습니다.';
+    list.appendChild(empty);
+    return;
+  }
+
+  for (const room of rooms) {
+    const card = document.createElement('article');
+    card.className = 'room-card spectator-room-card';
+
+    const info = document.createElement('div');
+    const title = document.createElement('h3');
+    title.textContent = room.battleLabel || room.name || '진행 중인 경기';
+    const meta = document.createElement('p');
+    meta.className = 'room-meta';
+    meta.textContent = `${room.modeLabel || '1대1'} · 관전자 수: ${room.spectatorCount || 0}/${room.maxSpectators || 2}`;
+    info.append(title, meta);
+
+    const watchButton = document.createElement('button');
+    watchButton.type = 'button';
+    watchButton.textContent = room.full ? '가득 참' : '관전';
+    watchButton.disabled = Boolean(room.full);
+    watchButton.addEventListener('click', () => watchRoom(room));
+
+    card.append(info, watchButton);
+    list.appendChild(card);
+  }
+}
+
 function joinRoom(room, password, team = null) {
   connectSocket();
   const payload = {
@@ -2446,6 +2710,11 @@ function joinRoom(room, password, team = null) {
   };
   if (team !== null && team !== undefined) payload.team = String(team);
   getSocket().emit('join-room', payload);
+}
+
+function watchRoom(room) {
+  connectSocket();
+  getSocket().emit('watch-room', { roomId: room.id });
 }
 
 function roomTeamEntries(room) {
@@ -2474,7 +2743,7 @@ function updateGameRoomTitle() {
   if (!title) return;
   const roomName = currentRoom ? currentRoom.name : '전투 대기';
   const statePlayer = latestState && currentSlot !== null && currentSlot !== undefined ? latestState.players[currentSlot] : null;
-  const side = statePlayer ? teamName(statePlayer.team) : '대기';
+  const side = isSpectating ? `관전 · 관전자 수: ${latestState ? latestState.spectatorCount || 0 : currentRoom && currentRoom.spectatorCount || 0}` : statePlayer ? teamName(statePlayer.team) : '대기';
   const mode = currentRoom && currentRoom.modeLabel ? currentRoom.modeLabel : '';
   title.textContent = `${roomName}${mode ? ` · ${mode}` : ''} · ${side}`;
 }
@@ -2549,11 +2818,19 @@ function renderCharacterGrid() {
     const theme = CARD_THEME[character.id] || { fill: 0xcaa862 };
     const article = document.createElement('article');
     article.className = `character-card character-card-${character.id}`;
+    if (character.cardType === 'spell') article.classList.add('character-card-spell');
     article.dataset.theme = theme.short;
 
     const heading = document.createElement('h2');
     heading.textContent = character.name;
     article.appendChild(heading);
+
+    if (character.cardType === 'spell') {
+      const badge = document.createElement('p');
+      badge.className = 'card-type-badge';
+      badge.textContent = '마법 카드';
+      article.appendChild(badge);
+    }
 
     const details = document.createElement('dl');
     addDetail(details, '엘릭서 비용', character.cost);
