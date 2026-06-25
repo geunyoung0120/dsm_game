@@ -12,6 +12,7 @@ const smokePassword = 'test-password';
 const bestFriendPair = ['baduk', 'johyunwoo'];
 const bestFriendComboCost = 8;
 const smokeDeck = ['osj', 'heoseon', 'johyunwoo', 'seongjoo', 'peach', 'bbatman', 'jimin', 'yushin'];
+const dagwasilDeck = ['dagwasil', 'seongjoo', 'peach', 'jimin', 'bbatman', 'yushin', 'mythos', 'johyunwoo'];
 const cherryTreeDeck = ['cherryTree', 'seongjoo', 'peach', 'jimin', 'bbatman', 'yushin', 'mythos', 'johyunwoo'];
 const giantHyeonjikDeck = ['giantHyeonjik', 'seongjoo', 'peach', 'jimin', 'bbatman', 'yushin', 'mythos', 'johyunwoo'];
 const kkongMeteorDeck = ['kkong', 'seongjoo', 'peach', 'jimin', 'bbatman', 'yushin', 'mythos', 'johyunwoo'];
@@ -55,6 +56,7 @@ async function main() {
   await expectDeckSave(accounts[0], smokeDeck);
   await expectSessionUser(await login(accounts[0].user.username));
   const result = await runClientSmoke(accounts);
+  const dagwasil = await expectDagwasilImmediateSpawn(accounts);
   const cherryTree = await expectCherryTreeAttackFlow(accounts);
   const giantHyeonjik = await expectGiantHyeonjikIgnoresUnits(accounts);
   const kkongMeteor = await expectKkongMeteorDamageDelayed(accounts);
@@ -73,7 +75,7 @@ async function main() {
   if (actualOpeningHand !== expectedOpeningHand) {
     throw new Error(`Saved deck was not used for player 1. Expected ${expectedOpeningHand}, got ${actualOpeningHand}.`);
   }
-  console.log(JSON.stringify({ ...result, cherryTree, giantHyeonjik, kkongMeteor, twoVersusTwo }));
+  console.log(JSON.stringify({ ...result, dagwasil, cherryTree, giantHyeonjik, kkongMeteor, twoVersusTwo }));
   cleanup();
 }
 
@@ -348,6 +350,41 @@ async function expectCherryTreeAttackFlow(accounts) {
   return true;
 }
 
+async function expectDagwasilImmediateSpawn(accounts) {
+  await expectDeckSave(accounts[0], dagwasilDeck);
+  await expectDeckSave(accounts[1], targetDummyDeck);
+
+  clients = accounts.map((account) => io(url, {
+    transports: ['websocket'],
+    extraHeaders: { Cookie: account.cookie }
+  }));
+
+  await Promise.all(clients.map((client) => once(client, 'welcome')));
+  clients[0].emit('create-room', { name: '다과실 즉시 소환 스모크 테스트 방', password: '' });
+  const joined = await once(clients[0], 'room-joined', 'dagwasil host room-joined');
+  clients[1].emit('join-room', { roomId: joined.room.id, password: '' });
+  await once(clients[1], 'room-joined', 'dagwasil guest room-joined');
+  await waitForState(clients[0], (payload) => {
+    return payload.status === 'playing' && payload.players[0] && Array.isArray(payload.players[0].hand) && payload.players[0].hand[0] === 'dagwasil' && payload.players[0].elixir >= 5;
+  }, 'dagwasil host playing state');
+  await delay(150);
+
+  const startedAt = Date.now();
+  const deployedStatePromise = waitForState(clients[0], (payload) => {
+    const ids = payload.units.map((unit) => unit.cardId);
+    return ids.includes('dagwasil') && ids.includes('nerdMale') && ids.includes('nerdFemale');
+  }, 'dagwasil immediate minions');
+  clients[0].emit('play-card', { handIndex: 0, x: 450, y: 338 });
+  await deployedStatePromise;
+  const elapsedMs = Date.now() - startedAt;
+  if (elapsedMs > 3000) {
+    throw new Error(`Dagwasil minions did not spawn immediately enough. Took ${elapsedMs}ms.`);
+  }
+
+  for (const client of clients) client.disconnect();
+  return true;
+}
+
 async function expectGiantHyeonjikIgnoresUnits(accounts) {
   await expectDeckSave(accounts[0], giantHyeonjikDeck);
   await expectDeckSave(accounts[1], targetDummyDeck);
@@ -604,19 +641,19 @@ function expectHeoseonNerf(cards) {
   if (playableCount !== 20) {
     throw new Error(`Playable card count expected 20, got ${playableCount}.`);
   }
-  if (!cards.dagwasil || !cards.dagwasil.building || cards.dagwasil.cost !== 5 || cards.dagwasil.maxHp !== 1500 || cards.dagwasil.radius !== 34 || cards.dagwasil.buildingDurationMs !== 24000 || cards.dagwasil.spawnMinionMs !== 4000) {
+  if (!cards.dagwasil || !cards.dagwasil.building || cards.dagwasil.cost !== 5 || cards.dagwasil.maxHp !== 1500 || cards.dagwasil.radius !== 34 || cards.dagwasil.buildingDurationMs !== 24000 || cards.dagwasil.spawnMinionMs !== 4000 || !cards.dagwasil.spawnImmediately) {
     throw new Error('Dagwasil building card did not expose the expected fields.');
   }
-  if (!cards.nerdMale || cards.nerdMale.playable !== false || cards.nerdMale.maxHp !== 200 || cards.nerdMale.damage !== 40 || cards.nerdMale.attackMs !== 717) {
+  if (!cards.nerdMale || cards.nerdMale.playable !== false || cards.nerdMale.maxHp !== 180 || cards.nerdMale.damage !== 32 || cards.nerdMale.attackMs !== 717) {
     throw new Error('Nerd male minion did not expose the expected fields.');
   }
-  if (!cards.nerdFemale || cards.nerdFemale.playable !== false || cards.nerdFemale.maxHp !== 160 || cards.nerdFemale.damage !== 40 || cards.nerdFemale.range !== 142 || cards.nerdFemale.attackMs !== 717) {
+  if (!cards.nerdFemale || cards.nerdFemale.playable !== false || cards.nerdFemale.maxHp !== 140 || cards.nerdFemale.damage !== 32 || cards.nerdFemale.range !== 142 || cards.nerdFemale.attackMs !== 717) {
     throw new Error('Nerd female minion did not expose the expected fields.');
   }
   if (!cards.kkong || !cards.kkong.spell || cards.kkong.spellType !== 'meteor' || cards.kkong.cost !== 5 || cards.kkong.damage !== 500 || cards.kkong.radius !== 40 || cards.kkong.impactDelayMs !== 620) {
     throw new Error('Kkong meteor spell card did not expose the expected fields.');
   }
-  if (!cards.cherryTree || !cards.cherryTree.building || cards.cherryTree.cost !== 5 || cards.cherryTree.maxHp !== 2000 || cards.cherryTree.damage !== 100 || cards.cherryTree.attackMs !== 1000 || cards.cherryTree.buildingDurationMs !== 24000 || !cards.cherryTree.cherryAttack) {
+  if (!cards.cherryTree || !cards.cherryTree.building || cards.cherryTree.cost !== 5 || cards.cherryTree.maxHp !== 2000 || cards.cherryTree.damage !== 100 || cards.cherryTree.range !== 175 || cards.cherryTree.attackMs !== 1000 || cards.cherryTree.buildingDurationMs !== 24000 || !cards.cherryTree.cherryAttack) {
     throw new Error('Cherry tree building card did not expose the expected fields.');
   }
   if (!cards.giantHyeonjik || cards.giantHyeonjik.cost !== 6 || cards.giantHyeonjik.maxHp !== 1800 || cards.giantHyeonjik.damage !== 120 || cards.giantHyeonjik.attackMs !== 1200 || cards.giantHyeonjik.radius !== 31 || !cards.giantHyeonjik.buildingDestroyer) {
