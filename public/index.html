@@ -98,6 +98,7 @@
                 <button id="open-encyclopedia" type="button" class="secondary"><span class="button-icon" aria-hidden="true">▦</span>캐릭터 확인</button>
               </div>
               <div class="lobby-secondary-actions">
+                <button id="open-tournament-history" type="button" class="ghost-button">토너먼트 대회 우승자</button>
                 <button id="open-tier-chart" type="button" class="ghost-button">티어표 보기</button>
                 <button id="logout" type="button" class="ghost-button">로그아웃</button>
               </div>
@@ -207,6 +208,28 @@
           <button id="back-update-history" type="button" class="secondary">뒤로가기</button>
         </header>
         <div id="update-history-list" class="update-history-list"></div>
+      </section>
+
+      <section id="tournament-history-screen" class="tournament-history-screen hidden">
+        <header class="tournament-history-header">
+          <div>
+            <p class="eyebrow">토너먼트 대회 우승자</p>
+            <h1>역대 우승 기록</h1>
+          </div>
+          <button id="back-tournament-history" type="button" class="secondary">뒤로가기</button>
+        </header>
+        <div id="tournament-history-list" class="tournament-history-list"></div>
+      </section>
+
+      <section id="tournament-detail-screen" class="tournament-detail-screen hidden">
+        <header class="tournament-detail-header">
+          <div>
+            <p class="eyebrow">토너먼트 상세</p>
+            <h1 id="tournament-detail-title">토너먼트 대회</h1>
+          </div>
+          <button id="back-tournament-detail" type="button" class="secondary">뒤로가기</button>
+        </header>
+        <div id="tournament-detail-content" class="tournament-detail-content"></div>
       </section>
 
       <section id="ranking-screen" class="ranking-screen hidden">

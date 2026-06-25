@@ -37,11 +37,16 @@ const BOTTOM_DEPLOY_Y_MAX = ARENA.height - 42;
 const TICK_MS = 50;
 const BROADCAST_MS = 100;
 const GAME_DURATION_MS = Number(process.env.GAME_DURATION_MS || 180000);
+const TOURNAMENT_FINAL_DURATION_MS = Number(process.env.TOURNAMENT_FINAL_DURATION_MS || 300000);
 const SUDDEN_DEATH_MAX_MS = Number(process.env.SUDDEN_DEATH_MAX_MS || 90000);
+const START_COUNTDOWN_MS = Number(process.env.START_COUNTDOWN_MS || 3000);
+const START_SIGNAL_MS = 700;
 const MAX_ELIXIR = 10;
 const ELIXIR_PER_SECOND = 1 / 2.8;
 const DOUBLE_ELIXIR_REMAINING_MS = 60000;
 const TRIPLE_ELIXIR_REMAINING_MS = 20000;
+const TOURNAMENT_FINAL_DOUBLE_ELIXIR_REMAINING_MS = 100000;
+const TOURNAMENT_FINAL_TRIPLE_ELIXIR_REMAINING_MS = 40000;
 const DOUBLE_ELIXIR_MULTIPLIER = 2;
 const TRIPLE_ELIXIR_MULTIPLIER = 3;
 const MAX_SPECTATORS_PER_ROOM = 2;
@@ -60,6 +65,8 @@ const ROOM_MODES = {
   tournament: { key: 'tournament', label: '토너먼트 모드', maxPlayers: 0 }
 };
 const TOURNAMENT_MIN_PARTICIPANTS = 3;
+const TOURNAMENT_BREAK_MS = Number(process.env.TOURNAMENT_BREAK_MS || 60000);
+const TOURNAMENT_FINAL_BREAK_MS = Number(process.env.TOURNAMENT_FINAL_BREAK_MS || 120000);
 
 const TIER_DEFINITIONS = [
   { key: 'mayers', name: '마이어스', icon: '🪨', min: 0, max: 9 },
@@ -402,6 +409,9 @@ const CARDS = {
 
 const CARD_IDS = Object.keys(CARDS).filter((id) => CARDS[id].playable !== false);
 const DECK_SIZE = 8;
+const FINAL_DECK_SIZE = 10;
+const HAND_SIZE = 4;
+const FINAL_HAND_SIZE = 5;
 const DECK_COST_MIN = 40;
 const DECK_COST_MAX = 55;
 
@@ -430,6 +440,13 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS user_decks (
+    user_id INTEGER PRIMARY KEY,
+    cards TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS user_final_decks (
     user_id INTEGER PRIMARY KEY,
     cards TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -492,9 +509,28 @@ const statements = {
     ORDER BY winner_won_at DESC, ended_at DESC
     LIMIT 1
   `),
+  listCompletedTournaments: db.prepare(`
+    SELECT id, name, status, participant_target, stake, pool, state_json, bracket_json,
+      winner_user_id, winner_username, winner_won_at, created_at, started_at, ended_at
+    FROM tournaments
+    WHERE status = 'completed'
+    ORDER BY COALESCE(winner_won_at, ended_at, created_at) ASC, created_at ASC
+  `),
+  getCompletedTournamentById: db.prepare(`
+    SELECT id, name, status, participant_target, stake, pool, state_json, bracket_json,
+      winner_user_id, winner_username, winner_won_at, created_at, started_at, ended_at
+    FROM tournaments
+    WHERE status = 'completed' AND id = ?
+  `),
   getDeck: db.prepare('SELECT cards FROM user_decks WHERE user_id = ?'),
   upsertDeck: db.prepare(`
     INSERT INTO user_decks (user_id, cards, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET cards = excluded.cards, updated_at = excluded.updated_at
+  `),
+  getFinalDeck: db.prepare('SELECT cards FROM user_final_decks WHERE user_id = ?'),
+  upsertFinalDeck: db.prepare(`
+    INSERT INTO user_final_decks (user_id, cards, updated_at)
     VALUES (?, ?, ?)
     ON CONFLICT(user_id) DO UPDATE SET cards = excluded.cards, updated_at = excluded.updated_at
   `),
@@ -677,28 +713,46 @@ app.get('/api/tournament-winner', requireAuthApi, (req, res) => {
   res.json({ winner: publicLatestTournamentWinner() });
 });
 
+app.get('/api/tournaments', requireAuthApi, (req, res) => {
+  res.json({ tournaments: publicTournamentHistory() });
+});
+
+app.get('/api/tournaments/:id', requireAuthApi, (req, res) => {
+  const detail = publicTournamentDetail(req.params.id);
+  if (!detail) {
+    res.status(404).json({ error: '토너먼트 기록을 찾을 수 없습니다.' });
+    return;
+  }
+  res.json({ tournament: detail });
+});
+
 app.get('/api/tiers', requireAuthApi, (req, res) => {
   res.json({ tiers: publicTiers(), user: publicUser(req.user) });
 });
 
 app.get('/api/deck', requireAuthApi, (req, res) => {
+  const deckSize = normalizeDeckSize(req.query && req.query.deckSize);
   res.json({
-    deck: getSavedDeck(req.user.id) || [],
+    deck: getSavedDeck(req.user.id, deckSize) || [],
+    deckSize,
     cards: publicPlayableCards()
   });
 });
 
 app.put('/api/deck', requireAuthApi, (req, res) => {
+  const deckSize = normalizeDeckSize(req.body && req.body.deckSize);
   const deck = req.body && req.body.deck;
-  const validation = validateDeck(deck);
+  const validation = validateDeck(deck, deckSize);
   if (validation.error) {
     res.status(400).json({ error: validation.error });
     return;
   }
 
-  statements.upsertDeck.run(req.user.id, JSON.stringify(validation.deck), new Date().toISOString());
+  const statement = deckSize === FINAL_DECK_SIZE ? statements.upsertFinalDeck : statements.upsertDeck;
+  statement.run(req.user.id, JSON.stringify(validation.deck), new Date().toISOString());
   res.json({
     deck: validation.deck,
+    deckSize,
     cards: publicPlayableCards()
   });
 });
@@ -731,6 +785,7 @@ const httpRateBuckets = new Map();
 const socketRateBuckets = new Map();
 const rooms = new Map();
 const tournaments = new Map();
+const tournamentBreakTimers = new Map();
 
 io.use((socket, next) => {
   const sessionData = socket.request.session;
@@ -1078,9 +1133,10 @@ function joinSpectatorRoom(socket, payload) {
 }
 
 function sendBattleChat(socket, payload = {}) {
-  const room = socket.data.roomId ? rooms.get(socket.data.roomId) : null;
+  const spectator = Boolean(socket.data.spectatingRoomId);
+  const room = socket.data.roomId ? rooms.get(socket.data.roomId) : socket.data.spectatingRoomId ? rooms.get(socket.data.spectatingRoomId) : null;
   const slot = socket.data.slot;
-  if (!room || slot === null || slot === undefined || room.game.status !== 'playing') {
+  if (!room || room.game.status !== 'playing') {
     registerBadSocketEvent(socket);
     return;
   }
@@ -1091,25 +1147,26 @@ function sendBattleChat(socket, payload = {}) {
     return;
   }
 
-  const player = room.game.players[slot];
-  if (!player || !player.connected || player.socketId !== socket.id) {
+  const text = normalizeChatText(payload.text);
+  if (!text) return;
+
+  const player = !spectator && slot !== null && slot !== undefined ? room.game.players[slot] : null;
+  if (!spectator && (!player || !player.connected || player.socketId !== socket.id)) {
     registerBadSocketEvent(socket);
     return;
   }
 
-  const text = normalizeChatText(payload.text);
-  if (!text) return;
-
-  const requestedChannel = payload.channel === 'team' ? 'team' : 'all';
-  const channel = room.mode === '2v2' ? requestedChannel : 'all';
+  const requestedChannel = payload.channel === 'team' && !spectator ? 'team' : 'all';
+  const channel = room.mode === '2v2' && !spectator ? requestedChannel : 'all';
   const message = {
     id: `m${room.game.nextChatId++}`,
     at: now,
     channel,
     targetTeam: channel === 'team' ? player.team : null,
-    senderSlot: player.slot,
-    senderTeam: player.team,
-    username: player.username || '플레이어',
+    senderSlot: player ? player.slot : null,
+    senderTeam: player ? player.team : null,
+    spectator,
+    username: spectator ? socket.data.user.username : player.username || '플레이어',
     text
   };
 
@@ -1165,6 +1222,7 @@ function publicChatMessage(message) {
     team: message.targetTeam,
     senderSlot: message.senderSlot,
     senderTeam: message.senderTeam,
+    spectator: Boolean(message.spectator),
     username: message.username,
     text: message.text
   };
@@ -1303,6 +1361,60 @@ function clearOtherWaitingSocketForUser(socket) {
   return true;
 }
 
+function defaultGameRules() {
+  return {
+    final: false,
+    durationMs: GAME_DURATION_MS,
+    deckSize: DECK_SIZE,
+    handSize: HAND_SIZE,
+    towerHpMultiplier: 1,
+    doubleElixirRemainingMs: DOUBLE_ELIXIR_REMAINING_MS,
+    tripleElixirRemainingMs: TRIPLE_ELIXIR_REMAINING_MS,
+    startCountdownMs: START_COUNTDOWN_MS
+  };
+}
+
+function finalGameRules() {
+  return {
+    final: true,
+    durationMs: TOURNAMENT_FINAL_DURATION_MS,
+    deckSize: FINAL_DECK_SIZE,
+    handSize: FINAL_HAND_SIZE,
+    towerHpMultiplier: 1.5,
+    doubleElixirRemainingMs: TOURNAMENT_FINAL_DOUBLE_ELIXIR_REMAINING_MS,
+    tripleElixirRemainingMs: TOURNAMENT_FINAL_TRIPLE_ELIXIR_REMAINING_MS,
+    startCountdownMs: START_COUNTDOWN_MS
+  };
+}
+
+function gameRulesForRoom(room) {
+  const rules = room && room.tournament && room.tournament.phase === 'final'
+    ? finalGameRules()
+    : defaultGameRules();
+  if (room && room.mode === '2v2') {
+    rules.startCountdownMs = 0;
+    rules.towerHpMultiplier = 1.5;
+  }
+  return rules;
+}
+
+function publicGameRules(rules = defaultGameRules()) {
+  return {
+    final: Boolean(rules.final),
+    durationMs: rules.durationMs || GAME_DURATION_MS,
+    deckSize: rules.deckSize || DECK_SIZE,
+    handSize: rules.handSize || HAND_SIZE,
+    towerHpMultiplier: rules.towerHpMultiplier || 1,
+    doubleElixirRemainingMs: rules.doubleElixirRemainingMs || DOUBLE_ELIXIR_REMAINING_MS,
+    tripleElixirRemainingMs: rules.tripleElixirRemainingMs || TRIPLE_ELIXIR_REMAINING_MS,
+    startCountdownMs: rules.startCountdownMs || 0
+  };
+}
+
+function isInStartCountdown(game, now = Date.now()) {
+  return Boolean(game && game.status === 'playing' && game.countdownEndsAt && now < game.countdownEndsAt);
+}
+
 function createGameState(mode = '1v1') {
   const definition = ROOM_MODES[mode] || ROOM_MODES['1v1'];
   return {
@@ -1319,8 +1431,10 @@ function createGameState(mode = '1v1') {
     nextUnitId: 1,
     nextSpellId: 1,
     nextChatId: 1,
+    rules: defaultGameRules(),
     startedAt: 0,
     endsAt: 0,
+    countdownEndsAt: 0,
     suddenDeath: false,
     suddenDeathEndsAt: 0,
     freezeUntil: 0,
@@ -1330,6 +1444,7 @@ function createGameState(mode = '1v1') {
     lastTickAt: Date.now(),
     lastBroadcastAt: 0,
     winner: null,
+    winnerName: '',
     reason: '',
     trophyChanges: null,
     trophiesSettled: false
@@ -1361,30 +1476,40 @@ function clearRoomPlayer(player) {
   Object.assign(player, createPlayer(slot));
 }
 
-function resetPlayerForMatch(player) {
-  const deck = deckForPlayer(player.userId);
+function resetPlayerForMatch(player, rules = defaultGameRules()) {
+  const deck = deckForPlayer(player.userId, rules);
   player.elixir = 5;
   player.maxElixir = MAX_ELIXIR;
-  player.hand = deck.slice(0, 4);
-  player.cycle = deck.slice(4);
+  player.hand = deck.slice(0, rules.handSize || HAND_SIZE);
+  player.cycle = deck.slice(rules.handSize || HAND_SIZE);
   player.usedOneTimeCards = {};
   player.rematchAccepted = false;
 }
 
-function deckForPlayer(userId) {
-  return getSavedDeck(userId) || shuffledDeck();
+function deckForPlayer(userId, rules = defaultGameRules()) {
+  const deckSize = rules.deckSize || DECK_SIZE;
+  if (rules.final) {
+    return getSavedDeck(userId, FINAL_DECK_SIZE) || expandedFinalDeck(userId);
+  }
+  return getSavedDeck(userId, deckSize) || shuffledDeck(deckSize);
 }
 
-function shuffledDeck() {
+function expandedFinalDeck(userId) {
+  const baseDeck = getSavedDeck(userId, DECK_SIZE) || shuffledDeck(DECK_SIZE);
+  const extras = shuffle(CARD_IDS.filter((cardId) => !baseDeck.includes(cardId))).slice(0, FINAL_DECK_SIZE - baseDeck.length);
+  return [...baseDeck, ...extras].slice(0, FINAL_DECK_SIZE);
+}
+
+function shuffledDeck(deckSize = DECK_SIZE) {
   for (let attempt = 0; attempt < 500; attempt += 1) {
-    const deck = shuffle([...CARD_IDS]).slice(0, DECK_SIZE);
+    const deck = shuffle([...CARD_IDS]).slice(0, deckSize);
     const totalCost = deck.reduce((sum, id) => sum + CARDS[id].cost, 0);
-    if (totalCost >= DECK_COST_MIN && totalCost <= DECK_COST_MAX) {
+    if (deckSize !== DECK_SIZE || (totalCost >= DECK_COST_MIN && totalCost <= DECK_COST_MAX)) {
       return deck;
     }
   }
 
-  throw new Error(`카드 8장의 총 코스트가 ${DECK_COST_MIN}-${DECK_COST_MAX} 범위인 덱을 만들 수 없습니다.`);
+  throw new Error(`카드 ${deckSize}장의 덱을 만들 수 없습니다.`);
 }
 
 function shuffle(items) {
@@ -1395,8 +1520,8 @@ function shuffle(items) {
   return items;
 }
 
-function createTowers(mode = '1v1') {
-  const hpMultiplier = mode === '2v2' ? 1.5 : 1;
+function createTowers(mode = '1v1', rules = defaultGameRules()) {
+  const hpMultiplier = rules.towerHpMultiplier || (mode === '2v2' ? 1.5 : 1);
   return [
     createTower(0, 'king', ARENA.width / 2, 560, hpMultiplier),
     createTower(0, 'princess-left', 255, 492, hpMultiplier),
@@ -1436,15 +1561,17 @@ function startMatch(room) {
     return;
   }
 
+  const rules = gameRulesForRoom(room);
   for (const player of game.players) {
     refreshPlayerProfile(player);
-    resetPlayerForMatch(player);
+    resetPlayerForMatch(player, rules);
   }
 
   const now = Date.now();
   game.status = 'playing';
   game.message = '전투 중';
-  game.towers = createTowers(room.mode);
+  game.rules = rules;
+  game.towers = createTowers(room.mode, rules);
   game.units = [];
   game.spellZones = [];
   game.pendingSpawns = [];
@@ -1454,7 +1581,8 @@ function startMatch(room) {
   game.nextSpellId = 1;
   game.nextChatId = 1;
   game.startedAt = now;
-  game.endsAt = now + GAME_DURATION_MS;
+  game.countdownEndsAt = now + (rules.startCountdownMs || 0);
+  game.endsAt = game.countdownEndsAt + rules.durationMs;
   game.suddenDeath = false;
   game.suddenDeathEndsAt = 0;
   game.freezeUntil = 0;
@@ -1462,6 +1590,7 @@ function startMatch(room) {
   game.elixirBoostLockedUntil = 0;
   game.elixirBoostLockedMultiplier = 1;
   game.winner = null;
+  game.winnerName = '';
   game.reason = '';
   game.trophyChanges = null;
   game.trophiesSettled = false;
@@ -1474,12 +1603,13 @@ function playCard(room, slot, payload = {}) {
   const game = room.game;
   if (game.status !== 'playing') return;
   const now = Date.now();
+  if (isInStartCountdown(game, now)) return;
   if (game.freezeUntil > now) return;
 
   const player = game.players[slot];
   if (!player || !player.connected) return;
   const handIndex = Number(payload.handIndex);
-  if (!Number.isInteger(handIndex) || handIndex < 0 || handIndex > 3) return;
+  if (!Number.isInteger(handIndex) || handIndex < 0 || handIndex >= (game.rules.handSize || HAND_SIZE)) return;
 
   const cardId = player.hand[handIndex];
   const card = CARDS[cardId];
@@ -1874,6 +2004,10 @@ setInterval(() => {
 
 function tickGame(room, now, deltaSeconds) {
   const game = room.game;
+  if (isInStartCountdown(game, now)) {
+    return;
+  }
+
   if (game.pendingAscensionAt && now >= game.pendingAscensionAt) {
     for (const unit of game.units) {
       if (unit.cardId === 'kimrui') detachRui(room, unit, now, false);
@@ -2712,8 +2846,13 @@ function endMatch(room, winner, reason) {
   }
   game.status = 'ended';
   game.winner = winner;
+  game.winnerName = winnerNameForRoom(room, winner);
   game.reason = reason;
-  game.message = winner === null ? `무승부: ${reason}` : `${teamLabel(winner)} 승리: ${reason}`;
+  game.message = winner === null
+    ? `무승부: ${reason}`
+    : room.mode === '2v2'
+      ? `${teamLabel(winner)} 승리: ${reason}`
+      : `${game.winnerName || teamLabel(winner)} 승: ${reason}`;
   game.freezeUntil = 0;
   game.pendingAscensionAt = 0;
   for (const player of game.players) {
@@ -2725,12 +2864,18 @@ function endMatch(room, winner, reason) {
   } else {
     settleTrophies(room, winner, reason);
   }
-  broadcastEffect(room, { type: 'match-end', winner, reason });
+  broadcastEffect(room, { type: 'match-end', winner, winnerName: game.winnerName, reason });
   broadcastState(room);
   emitRooms();
   if (room.tournament) {
     completeTournamentMatchFromRoom(room, winner, reason);
   }
+}
+
+function winnerNameForRoom(room, winner) {
+  if (winner === null || winner === undefined || room.mode === '2v2') return '';
+  const player = room.game.players.find((candidate) => candidate.team === winner && candidate.userId);
+  return player ? player.username : '';
 }
 
 function requestRematch(socket) {
@@ -2934,9 +3079,12 @@ function getElixirMultiplier(game, now) {
   const endsAt = game.suddenDeath ? game.suddenDeathEndsAt : game.endsAt;
   if (!endsAt) return 1;
   const remainingMs = endsAt - now;
+  const rules = game.rules || defaultGameRules();
+  const doubleRemainingMs = rules.doubleElixirRemainingMs || DOUBLE_ELIXIR_REMAINING_MS;
+  const tripleRemainingMs = rules.tripleElixirRemainingMs || TRIPLE_ELIXIR_REMAINING_MS;
   let multiplier = 1;
-  if (remainingMs <= TRIPLE_ELIXIR_REMAINING_MS) multiplier = TRIPLE_ELIXIR_MULTIPLIER;
-  else if (game.suddenDeath || remainingMs <= DOUBLE_ELIXIR_REMAINING_MS) multiplier = DOUBLE_ELIXIR_MULTIPLIER;
+  if (remainingMs <= tripleRemainingMs) multiplier = TRIPLE_ELIXIR_MULTIPLIER;
+  else if (game.suddenDeath || remainingMs <= doubleRemainingMs) multiplier = DOUBLE_ELIXIR_MULTIPLIER;
   if ((game.elixirBoostLockedUntil || 0) > now) {
     multiplier = Math.max(multiplier, game.elixirBoostLockedMultiplier || 1);
   }
@@ -2972,6 +3120,8 @@ function serializeState(room, viewerSlot = null, options = {}) {
   const game = room.game;
   const now = Date.now();
   const spectator = Boolean(options.spectator);
+  const startCountdownMs = Math.max(0, (game.countdownEndsAt || 0) - now);
+  const startSignalMs = startCountdownMs > 0 ? 0 : Math.max(0, (game.countdownEndsAt || 0) + START_SIGNAL_MS - now);
   return {
     room: publicRoomDetail(room),
     arena: ARENA,
@@ -2983,10 +3133,14 @@ function serializeState(room, viewerSlot = null, options = {}) {
     status: game.status,
     message: game.message,
     winner: game.winner,
+    winnerName: game.winnerName || '',
     reason: game.reason,
     remainingMs: Math.max(0, (game.suddenDeath ? game.suddenDeathEndsAt : game.endsAt) - now),
+    startCountdownMs,
+    startSignalMs,
     suddenDeath: game.suddenDeath,
     elixirMultiplier: getElixirMultiplier(game, now),
+    rules: publicGameRules(game.rules),
     chatMessages: visibleChatMessages(room, viewerSlot, spectator),
     freezeMs: Math.max(0, game.freezeUntil - now),
     trophyChange: spectator || viewerSlot === null || viewerSlot === undefined ? null : game.trophyChanges && game.trophyChanges[viewerSlot],
@@ -3089,6 +3243,105 @@ function publicLatestTournamentWinner() {
   };
 }
 
+function publicTournamentHistory() {
+  return statements.listCompletedTournaments.all().map((row, index) => publicTournamentSummary(row, index + 1));
+}
+
+function publicTournamentSummary(row, number) {
+  const title = `제 ${number}회 토너먼트 대회`;
+  return {
+    id: row.id,
+    number,
+    title,
+    name: row.name,
+    status: row.status,
+    winnerUserId: row.winner_user_id,
+    winnerUsername: row.winner_username,
+    wonAt: row.winner_won_at || row.ended_at,
+    date: row.winner_won_at || row.ended_at,
+    stake: Math.max(0, Number(row.stake) || 0),
+    pool: Math.max(0, Number(row.pool) || 0),
+    participantTarget: Math.max(0, Number(row.participant_target) || 0)
+  };
+}
+
+function publicTournamentDetail(id) {
+  const rows = statements.listCompletedTournaments.all();
+  const index = rows.findIndex((row) => row.id === id);
+  if (index < 0) return null;
+  const row = statements.getCompletedTournamentById.get(id);
+  if (!row) return null;
+
+  const state = safeJsonParse(row.state_json, {});
+  const participants = Array.isArray(state.participants) ? state.participants : [];
+  const participantMap = new Map(participants.map((participant) => [participant.userId, participant]));
+  const bracket = safeJsonParse(row.bracket_json, []);
+  const summary = publicTournamentSummary(row, index + 1);
+
+  return {
+    ...summary,
+    createdAt: row.created_at,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    participantCount: participants.length || summary.participantTarget,
+    participants: participants.map((participant) => ({
+      userId: participant.userId,
+      username: participant.username,
+      eliminated: Boolean(participant.eliminated)
+    })),
+    rounds: publicSavedTournamentRounds(bracket, participantMap)
+  };
+}
+
+function publicSavedTournamentRounds(rounds, participantMap) {
+  if (!Array.isArray(rounds)) return [];
+  return rounds.map((round) => ({
+    id: round.id,
+    index: round.index,
+    label: round.label,
+    phase: round.phase,
+    status: round.status,
+    matches: Array.isArray(round.matches) ? round.matches.map((match) => ({
+      id: match.id,
+      label: match.label,
+      phase: match.phase,
+      status: match.status,
+      bye: Boolean(match.bye),
+      participants: (match.participantUserIds || []).map((userId) => publicSavedParticipant(participantMap, userId)),
+      participantUserIds: match.participantUserIds || [],
+      winnerUserId: match.winnerUserId,
+      winner: publicSavedParticipant(participantMap, match.winnerUserId),
+      loserUserIds: match.loserUserIds || [],
+      score: match.score || null,
+      startedAt: match.startedAt || null,
+      endedAt: match.endedAt || null,
+      rules: match.rules || null
+    })) : []
+  }));
+}
+
+function publicSavedParticipant(participantMap, userId) {
+  if (!userId) return null;
+  const participant = participantMap.get(userId);
+  return participant ? {
+    userId: participant.userId,
+    username: participant.username,
+    eliminated: Boolean(participant.eliminated)
+  } : {
+    userId,
+    username: '알 수 없음',
+    eliminated: false
+  };
+}
+
+function safeJsonParse(value, fallback) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
 function publicTiers() {
   return TIER_DEFINITIONS.map((tier) => ({
     key: tier.key,
@@ -3115,32 +3368,34 @@ function publicPlayableCards() {
   return cards;
 }
 
-function getSavedDeck(userId) {
+function getSavedDeck(userId, deckSize = DECK_SIZE) {
   if (!userId) return null;
-  const row = statements.getDeck.get(userId);
+  const row = deckSize === FINAL_DECK_SIZE
+    ? statements.getFinalDeck.get(userId)
+    : statements.getDeck.get(userId);
   if (!row) return null;
 
   try {
     const parsed = JSON.parse(row.cards);
-    const validation = validateDeck(parsed);
+    const validation = validateDeck(parsed, deckSize);
     return validation.error ? null : validation.deck;
   } catch {
     return null;
   }
 }
 
-function validateDeck(value) {
+function validateDeck(value, deckSize = DECK_SIZE) {
   if (!Array.isArray(value)) {
-    return { error: '덱은 카드 8장으로 구성해야 합니다.' };
+    return { error: `덱은 카드 ${deckSize}장으로 구성해야 합니다.` };
   }
 
   const deck = value.map((cardId) => String(cardId || ''));
-  if (deck.length !== DECK_SIZE) {
-    return { error: `덱은 정확히 ${DECK_SIZE}장을 선택해야 합니다.` };
+  if (deck.length !== deckSize) {
+    return { error: `덱은 정확히 ${deckSize}장을 선택해야 합니다.` };
   }
 
   const unique = new Set(deck);
-  if (unique.size !== DECK_SIZE) {
+  if (unique.size !== deckSize) {
     return { error: '같은 카드는 덱에 한 번만 넣을 수 있습니다.' };
   }
 
@@ -3152,6 +3407,11 @@ function validateDeck(value) {
   }
 
   return { deck };
+}
+
+function normalizeDeckSize(value) {
+  const size = Number(value);
+  return size === FINAL_DECK_SIZE ? FINAL_DECK_SIZE : DECK_SIZE;
 }
 
 function refreshPlayerProfile(player) {
@@ -3411,6 +3671,7 @@ function createTournamentRecord(room, options) {
     rounds: [],
     currentRoundIndex: -1,
     activeMatchIds: [],
+    break: null,
     winner: null,
     winnerWonAt: null,
     createdAt: options.now,
@@ -3583,6 +3844,7 @@ function createNextTournamentRound(tournament, participantUserIds) {
       winnerUserId: byeUserId,
       loserUserIds: [],
       roomId: null,
+      rules: null,
       score: { reason: '부전승' },
       startedAt: null,
       endedAt: new Date().toISOString()
@@ -3602,6 +3864,7 @@ function createNextTournamentRound(tournament, participantUserIds) {
       winnerUserId: null,
       loserUserIds: [],
       roomId: null,
+      rules: tournamentMatchRules(round.phase),
       score: null,
       startedAt: null,
       endedAt: null
@@ -3657,6 +3920,7 @@ function startTournamentMatch(tournament, match) {
   }
 
   const phase = match.phase;
+  match.rules = tournamentMatchRules(phase);
   const room = {
     id: crypto.randomUUID(),
     name: `${tournament.name} · ${match.label}`,
@@ -3745,18 +4009,68 @@ function advanceTournamentAfterRound(tournament, round) {
     return;
   }
 
-  createNextTournamentRound(tournament, winners);
+  startTournamentBreak(tournament, winners);
+}
+
+function startTournamentBreak(tournament, nextUserIds) {
+  if (!tournament || !Array.isArray(nextUserIds) || nextUserIds.length <= 1) return;
+  const nowMs = Date.now();
+  const nextPhase = tournamentRoundPhase(nextUserIds.length);
+  const durationMs = nextPhase === 'final' ? TOURNAMENT_FINAL_BREAK_MS : TOURNAMENT_BREAK_MS;
+  tournament.status = 'break';
+  tournament.activeMatchIds = [];
+  tournament.break = {
+    active: true,
+    nextUserIds,
+    nextRoundLabel: tournamentRoundLabel(nextUserIds.length),
+    nextRoundPhase: nextPhase,
+    deckSize: nextPhase === 'final' ? FINAL_DECK_SIZE : DECK_SIZE,
+    handSize: nextPhase === 'final' ? FINAL_HAND_SIZE : HAND_SIZE,
+    rules: nextPhase === 'final' ? publicGameRules(finalGameRules()) : publicGameRules(defaultGameRules()),
+    startedAt: new Date(nowMs).toISOString(),
+    endsAt: new Date(nowMs + durationMs).toISOString(),
+    durationMs
+  };
+  tournament.updatedAt = new Date().toISOString();
+
+  if (tournamentBreakTimers.has(tournament.id)) {
+    clearTimeout(tournamentBreakTimers.get(tournament.id));
+  }
+  tournamentBreakTimers.set(tournament.id, setTimeout(() => finishTournamentBreak(tournament.id), durationMs));
+  persistTournamentState(tournament);
+  broadcastTournamentState(tournament);
+  emitRooms();
+}
+
+function finishTournamentBreak(tournamentId) {
+  const tournament = tournaments.get(tournamentId);
+  if (!tournament || tournament.status !== 'break' || !tournament.break) return;
+  const nextUserIds = Array.isArray(tournament.break.nextUserIds) ? tournament.break.nextUserIds : [];
+  tournamentBreakTimers.delete(tournament.id);
+  tournament.status = 'playing';
+  tournament.break = null;
+  tournament.updatedAt = new Date().toISOString();
+  createNextTournamentRound(tournament, nextUserIds);
   persistTournamentState(tournament);
   broadcastTournamentState(tournament);
   startReadyTournamentMatches(tournament);
+}
+
+function tournamentMatchRules(phase) {
+  return phase === 'final' ? publicGameRules(finalGameRules()) : null;
 }
 
 function finishTournament(tournament, winnerUserId) {
   if (!tournament || tournament.status === 'completed') return;
   const winner = tournament.participants.find((participant) => participant.userId === winnerUserId);
   const now = new Date().toISOString();
+  if (tournamentBreakTimers.has(tournament.id)) {
+    clearTimeout(tournamentBreakTimers.get(tournament.id));
+    tournamentBreakTimers.delete(tournament.id);
+  }
   tournament.status = 'completed';
   tournament.activeMatchIds = [];
+  tournament.break = null;
   tournament.winner = winner ? {
     userId: winner.userId,
     username: winner.username
@@ -3775,8 +4089,31 @@ function finishTournament(tournament, winnerUserId) {
 
   persistTournamentState(tournament);
   broadcastTournamentState(tournament);
+  if (winner) {
+    broadcastTournamentEffect(tournament, {
+      type: 'tournament-celebration',
+      username: winner.username
+    });
+  }
   io.emit('tournament-winner', publicLatestTournamentWinner());
   emitRooms();
+}
+
+function broadcastTournamentEffect(tournament, effect) {
+  const sentRooms = new Set();
+  for (const room of rooms.values()) {
+    if (room.tournamentId !== tournament.id) continue;
+    sentRooms.add(room.id);
+    broadcastEffect(room, effect);
+  }
+  for (const socket of io.of('/').sockets.values()) {
+    if (socket.data.tournamentId === tournament.id) {
+      const currentRoomId = socket.data.roomId || socket.data.spectatingRoomId;
+      if (!currentRoomId || !sentRooms.has(currentRoomId)) {
+        socket.emit('effect', { ...effect, at: Date.now() });
+      }
+    }
+  }
 }
 
 function routeTournamentSpectators(tournament) {
@@ -3877,7 +4214,7 @@ function markTournamentParticipantDisconnected(socket) {
   const tournamentId = socket.data.tournamentId;
   if (!tournamentId) return;
   const tournament = tournaments.get(tournamentId);
-  if (!tournament || tournament.status !== 'playing') return;
+  if (!tournament || (tournament.status !== 'playing' && tournament.status !== 'break')) return;
   const participant = tournament.participants.find((candidate) => candidate.userId === socket.data.user.id);
   if (!participant) return;
   participant.connected = false;
@@ -3950,6 +4287,7 @@ function publicTournamentState(tournament, viewingMatchId = null) {
     currentRoundIndex: tournament.currentRoundIndex,
     activeMatchIds: [...tournament.activeMatchIds],
     viewingMatchId,
+    break: publicTournamentBreak(tournament.break),
     winner: tournament.winner,
     winnerWonAt: tournament.winnerWonAt,
     participants: tournament.participants.map((participant) => ({
@@ -3975,9 +4313,28 @@ function publicTournamentState(tournament, viewingMatchId = null) {
         participants: match.participantUserIds.map((userId) => publicTournamentParticipant(tournament, userId)),
         winnerUserId: match.winnerUserId,
         loserUserIds: match.loserUserIds,
-        score: match.score
+        score: match.score,
+        rules: match.rules || null
       }))
     }))
+  };
+}
+
+function publicTournamentBreak(breakState) {
+  if (!breakState || !breakState.active) return null;
+  const endsAtMs = new Date(breakState.endsAt).getTime();
+  return {
+    active: true,
+    nextUserIds: Array.isArray(breakState.nextUserIds) ? breakState.nextUserIds : [],
+    nextRoundLabel: breakState.nextRoundLabel,
+    nextRoundPhase: breakState.nextRoundPhase,
+    deckSize: breakState.deckSize || DECK_SIZE,
+    handSize: breakState.handSize || HAND_SIZE,
+    rules: breakState.rules || null,
+    startedAt: breakState.startedAt,
+    endsAt: breakState.endsAt,
+    durationMs: breakState.durationMs || TOURNAMENT_BREAK_MS,
+    remainingMs: Math.max(0, endsAtMs - Date.now())
   };
 }
 
@@ -4025,6 +4382,7 @@ function persistableTournamentState(tournament) {
     })),
     currentRoundIndex: tournament.currentRoundIndex,
     activeMatchIds: tournament.activeMatchIds,
+    break: tournament.break,
     winner: tournament.winner,
     winnerWonAt: tournament.winnerWonAt,
     createdAt: tournament.createdAt,
@@ -4182,7 +4540,7 @@ function registerBadSocketEvent(socket) {
 
 function isValidPlayCardPayload(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
-  if (!Number.isInteger(payload.handIndex) || payload.handIndex < 0 || payload.handIndex > 3) return false;
+  if (!Number.isInteger(payload.handIndex) || payload.handIndex < 0 || payload.handIndex >= FINAL_HAND_SIZE) return false;
   if (!Number.isFinite(payload.x) || !Number.isFinite(payload.y)) return false;
   return payload.x >= 0 && payload.x <= ARENA.width && payload.y >= 0 && payload.y <= ARENA.height;
 }

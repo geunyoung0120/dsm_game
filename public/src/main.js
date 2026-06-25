@@ -5,6 +5,9 @@ const VIEW = { width: ARENA_W + SIDEBAR_W, height: 760 };
 const ARENA_H = 620;
 const CARD_H = 108;
 const DECK_SIZE = 8;
+const FINAL_DECK_SIZE = 10;
+const HAND_SIZE = 4;
+const FINAL_HAND_SIZE = 5;
 const DEPLOY_X_MIN = 48;
 const DEPLOY_X_MAX = ARENA_W - 48;
 const TOP_DEPLOY_Y_MIN = 42;
@@ -21,6 +24,23 @@ function clampNumber(value, min, max) {
 }
 
 const PATCH_NOTICES = [
+  {
+    title: '토너먼트 대회 확장',
+    date: '2026.06.25',
+    items: [
+      '트리형 토너먼트 대진표와 역대 우승 기록 추가',
+      '라운드 사이 준비시간과 결승전 특별 규칙 추가',
+      '모든 관전 모드 채팅과 경기 시작 카운트다운 적용'
+    ],
+    details: [
+      '토너먼트 진행 화면의 대진표를 실제 대회처럼 라운드별 트리 구조로 표시하고, 승자는 강조하며 진행 중인 경기는 펄스 표시로 구분한다.',
+      '메인 화면의 토너먼트 대회 우승자 버튼에서 역대 완료된 토너먼트를 시간순으로 볼 수 있고, 각 대회 상세 화면에서 참가자, 참가비, 상금, 전체 경기 결과를 확인할 수 있다.',
+      '각 라운드 종료 후 다음 라운드 준비시간이 시작되며, 결승 직전 준비시간은 2분이다. 준비시간에는 다음 경기용 덱을 수정할 수 있다.',
+      '결승전은 5분 경기, 10장 덱, 5장 손패, 타워 체력 1.5배, 1분 40초부터 X2, 40초부터 X3 규칙으로 진행된다.',
+      '1대1과 토너먼트 경기는 시작 전 3초 카운트다운을 표시하고, 모든 관전자는 전투 채팅을 사용할 수 있다.',
+      '토너먼트 우승이 확정되면 우승자 이름과 함께 전체 화면 축하 연출을 보여준 뒤 메인 화면으로 돌아간다.'
+    ]
+  },
   {
     title: '토너먼트 모드 추가',
     date: '2026.06.25',
@@ -860,8 +880,12 @@ let latestRankings = [];
 let latestTiers = [];
 let latestSpectatorRooms = [];
 let latestTournamentWinner = null;
+let latestTournamentHistory = [];
+let currentTournamentDetail = null;
 let deckCards = {};
 let selectedDeck = [];
+let activeDeckSize = DECK_SIZE;
+let returnToGameAfterDeck = false;
 let showingSpectatorRooms = false;
 let battleChatMessages = [];
 
@@ -875,6 +899,7 @@ class BattleScene extends Phaser.Scene {
     this.effects = [];
     this.selectedHandIndex = null;
     this.cardBounds = [];
+    this.breakDeckButtonBounds = null;
     this.textPool = [];
     this.usedTextCount = 0;
     this.notice = '';
@@ -919,6 +944,11 @@ class BattleScene extends Phaser.Scene {
     if (effect.type === 'ascension-start') {
       playAscensionTone();
     }
+    if (effect.type === 'tournament-celebration') {
+      window.setTimeout(() => {
+        if (typeof window.showHomeScreen === 'function') window.showHomeScreen();
+      }, 5200);
+    }
     this.effects.push({ ...effect, bornAt: this.time ? this.time.now : 0 });
   }
 
@@ -943,6 +973,10 @@ class BattleScene extends Phaser.Scene {
   }
 
   handlePointer(pointer) {
+    if (this.breakDeckButtonBounds && isPointInside(pointer, this.breakDeckButtonBounds)) {
+      if (typeof window.openDeckBuilderForBreak === 'function') window.openDeckBuilderForBreak();
+      return;
+    }
     if (!this.socket || !this.state || this.slot === null || this.slot === undefined) return;
 
     const cardIndex = this.cardBounds.findIndex((bounds) => {
@@ -954,7 +988,7 @@ class BattleScene extends Phaser.Scene {
       return;
     }
 
-    if (pointer.y > ARENA_H || this.selectedHandIndex === null || this.state.status !== 'playing') return;
+    if (pointer.y > ARENA_H || this.selectedHandIndex === null || this.state.status !== 'playing' || isStartCountdownActive(this.state)) return;
     if (!this.canPlaySelectedAt(pointer.x, pointer.y)) return;
 
     this.socket.emit('play-card', {
@@ -971,7 +1005,8 @@ class BattleScene extends Phaser.Scene {
     if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' || (target && target.isContentEditable)) return;
 
     const keyNumber = Number(event && event.key);
-    if (!Number.isInteger(keyNumber) || keyNumber < 1 || keyNumber > 4) return;
+    const handSize = getStateHandSize(this.state);
+    if (!Number.isInteger(keyNumber) || keyNumber < 1 || keyNumber > handSize) return;
 
     if (this.selectHandIndex(keyNumber - 1) && event && typeof event.preventDefault === 'function') {
       event.preventDefault();
@@ -980,7 +1015,7 @@ class BattleScene extends Phaser.Scene {
 
   selectHandIndex(cardIndex) {
     if (!this.socket || !this.state || this.slot === null || this.slot === undefined) return false;
-    if (cardIndex < 0 || cardIndex >= 4 || this.state.status !== 'playing') return false;
+    if (cardIndex < 0 || cardIndex >= getStateHandSize(this.state) || this.state.status !== 'playing' || isStartCountdownActive(this.state)) return false;
 
     const player = this.state.players[this.slot];
     const cardId = player && player.hand && player.hand[cardIndex];
@@ -1025,7 +1060,7 @@ class BattleScene extends Phaser.Scene {
   }
 
   drawSpawnPreview() {
-    if (this.slot === null || this.slot === undefined || this.selectedHandIndex === null || this.state.status !== 'playing') return;
+    if (this.slot === null || this.slot === undefined || this.selectedHandIndex === null || this.state.status !== 'playing' || isStartCountdownActive(this.state)) return;
     const player = this.state.players[this.slot];
     const team = player ? player.team : this.slot;
     const card = this.getSelectedCard();
@@ -1492,7 +1527,9 @@ class BattleScene extends Phaser.Scene {
       const t = Phaser.Math.Clamp(age / duration, 0, 1);
       const alpha = 1 - t;
 
-      if (effect.type === 'ascension-start') {
+      if (effect.type === 'tournament-celebration') {
+        this.drawTournamentCelebration(effect, age, t, alpha);
+      } else if (effect.type === 'ascension-start') {
         this.g.fillStyle(0xfff6b0, 0.18 + 0.14 * Math.sin(age / 90));
         this.g.fillRect(0, 0, ARENA_W, ARENA_H);
         this.g.lineStyle(8, 0xfff2a8, alpha);
@@ -2005,11 +2042,12 @@ class BattleScene extends Phaser.Scene {
     }
     const player = this.slot === null || this.slot === undefined ? null : this.state.players[this.slot];
     const startX = 28;
-    const gap = 14;
-    const w = 128;
+    const handSize = getStateHandSize(this.state);
+    const gap = handSize > HAND_SIZE ? 10 : 14;
+    const w = handSize > HAND_SIZE ? 116 : 128;
     const y = 638;
 
-    for (let i = 0; i < 4; i += 1) {
+    for (let i = 0; i < handSize; i += 1) {
       const x = startX + i * (w + gap);
       this.cardBounds.push({ x, y, w, h: CARD_H });
 
@@ -2019,7 +2057,7 @@ class BattleScene extends Phaser.Scene {
       const usedOneTime = card && card.oneUse && player && (player.usedOneTimeCards || []).includes(card.id);
       const effectiveCost = getEffectiveCardCost(card, player);
       const bestFriendCombo = card && hasBestFriendCombo(player) && isBestFriendCard(card.id);
-      const disabled = !player || !card || this.state.status !== 'playing' || player.elixir < effectiveCost || usedOneTime;
+      const disabled = !player || !card || this.state.status !== 'playing' || isStartCountdownActive(this.state) || player.elixir < effectiveCost || usedOneTime;
       const selected = this.selectedHandIndex === i;
 
       this.g.fillStyle(disabled ? 0x282b31 : theme.fill, disabled ? 0.7 : 1);
@@ -2044,10 +2082,45 @@ class BattleScene extends Phaser.Scene {
         this.g.fillCircle(x + w - 54, y + 20, 12);
         this.drawCenteredText(typeIcon, x + w - 54, y + 12, 12, disabled ? '#b9b9b9' : '#ffffff');
       }
-      this.drawCenteredText(theme.short, x + w / 2, y + 33, 30, disabled ? '#b9b9b9' : '#111318');
-      this.drawCenteredText(card.name, x + w / 2, y + 69, 15, '#ffffff');
+      this.drawCenteredText(theme.short, x + w / 2, y + 33, handSize > HAND_SIZE ? 26 : 30, disabled ? '#b9b9b9' : '#111318');
+      this.drawCenteredText(card.name, x + w / 2, y + 69, handSize > HAND_SIZE ? 13 : 15, '#ffffff');
       this.drawCenteredText(bestFriendCombo ? '절친 출격' : card.role, x + w / 2, y + 91, 10, '#f5ead8');
     }
+  }
+
+  drawTournamentCelebration(effect, age, t, alpha) {
+    const flash = Math.max(0, 1 - t * 2);
+    this.g.fillStyle(0xfff4a7, 0.26 * flash + 0.08 * Math.sin(age / 80));
+    this.g.fillRect(0, 0, ARENA_W, ARENA_H);
+    this.g.fillStyle(0xff4f5f, 0.2 * alpha);
+    this.g.fillCircle(FIELD_CENTER_X, ARENA_H / 2, 80 + t * 360);
+    this.g.lineStyle(9, 0xfff4a7, alpha);
+    this.g.strokeCircle(FIELD_CENTER_X, ARENA_H / 2, 42 + t * 240);
+
+    for (let i = 0; i < 18; i += 1) {
+      const seed = (i * 97) % 360;
+      const burstAge = (age + i * 170) % 1300;
+      const burstT = burstAge / 1300;
+      const cx = 90 + ((i * 137) % 720);
+      const cy = 80 + ((i * 89) % 430);
+      const color = i % 3 === 0 ? 0xfff4a7 : i % 3 === 1 ? 0xff5b66 : 0x65c7f7;
+      const burstAlpha = 1 - burstT;
+      this.g.lineStyle(4, color, burstAlpha);
+      for (let ray = 0; ray < 8; ray += 1) {
+        const angle = ((seed + ray * 45) * Math.PI) / 180;
+        const inner = 16 + burstT * 24;
+        const outer = 44 + burstT * 82;
+        this.g.lineBetween(
+          cx + Math.cos(angle) * inner,
+          cy + Math.sin(angle) * inner,
+          cx + Math.cos(angle) * outer,
+          cy + Math.sin(angle) * outer
+        );
+      }
+    }
+
+    this.drawCenteredText(`${effect.username || '우승자'} 우승!!`, FIELD_CENTER_X, 246, 56, '#fff4a7');
+    this.drawCenteredText('토너먼트 대회 종료', FIELD_CENTER_X, 316, 22, '#f7f2e8');
   }
 
   drawSpectatorHands() {
@@ -2065,8 +2138,10 @@ class BattleScene extends Phaser.Scene {
       const accent = player.team === 0 ? '#cbe1ff' : '#ffd5d1';
       this.drawText(truncateText(player.username || `플레이어 ${player.slot + 1}`, 14), x, y, 13, accent);
       this.drawMiniElixir(player.elixir || 0, player.maxElixir || 10, x, y + 20, Math.min(168, columnW - 12));
-      for (let i = 0; i < 4; i += 1) {
-        this.drawMiniCard(player.hand && player.hand[i], x + i * 42, y + 48, 36, 46);
+      const handSize = Math.min(getStateHandSize(this.state), FINAL_HAND_SIZE);
+      const miniGap = handSize > HAND_SIZE ? 36 : 42;
+      for (let i = 0; i < handSize; i += 1) {
+        this.drawMiniCard(player.hand && player.hand[i], x + i * miniGap, y + 48, 32, 46);
       }
     });
   }
@@ -2096,9 +2171,24 @@ class BattleScene extends Phaser.Scene {
   }
 
   drawOverlay() {
+    this.breakDeckButtonBounds = null;
     if (this.state.freezeMs > 0) {
       this.g.fillStyle(0xfff3b5, 0.11);
       this.g.fillRect(0, 0, ARENA_W, ARENA_H);
+    }
+
+    const breakState = this.state.tournament && this.state.tournament.break;
+    if (breakState && breakState.active) {
+      this.drawTournamentBreakOverlay(breakState);
+      return;
+    }
+
+    if (this.state.status === 'playing' && (this.state.startCountdownMs > 0 || this.state.startSignalMs > 0)) {
+      this.g.fillStyle(0x0c0e11, 0.5);
+      this.g.fillRect(0, 0, ARENA_W, ARENA_H);
+      const label = this.state.startCountdownMs > 0 ? String(Math.ceil(this.state.startCountdownMs / 1000)) : '시작!';
+      this.drawCenteredText(label, FIELD_CENTER_X, 242, 82, '#fff4a7');
+      this.drawCenteredText('경기 준비', FIELD_CENTER_X, 340, 20, '#f7f2e8');
     }
 
     if (this.state.status === 'waiting') {
@@ -2115,7 +2205,11 @@ class BattleScene extends Phaser.Scene {
     if (this.state.status === 'ended') {
       this.g.fillStyle(0x0c0e11, 0.68);
       this.g.fillRect(0, 0, ARENA_W, ARENA_H);
-      const result = this.state.winner === null ? '무승부' : `${teamName(this.state.winner)} 승리`;
+      const result = this.state.winner === null
+        ? '무승부'
+        : this.state.mode === '2v2'
+          ? `${teamName(this.state.winner)} 승리`
+          : `${this.state.winnerName || teamName(this.state.winner)} 승!`;
       this.drawCenteredText(result, FIELD_CENTER_X, 276, 34, '#f7f2e8');
       this.drawCenteredText(this.state.reason || '', FIELD_CENTER_X, 318, 17, '#d6d0c6');
       if (this.state.trophyChange) {
@@ -2131,6 +2225,38 @@ class BattleScene extends Phaser.Scene {
         this.drawCenteredText(`재경기 동의 ${rematchCount}/${requiredRematches}`, FIELD_CENTER_X, 386, 15, '#fff4a7');
         this.drawCenteredText('모든 플레이어가 재경기를 누르면 같은 방에서 다시 시작합니다.', FIELD_CENTER_X, 414, 14, '#d6d0c6');
       }
+    }
+  }
+
+  drawTournamentBreakOverlay(breakState) {
+    this.g.fillStyle(0x0c0e11, 0.74);
+    this.g.fillRect(0, 0, ARENA_W, ARENA_H);
+    this.drawCenteredText(`다음 경기까지 ${formatClock(breakState.remainingMs || 0)}`, FIELD_CENTER_X, 212, 38, '#fff4a7');
+    this.drawCenteredText(`${breakState.nextRoundLabel || '다음 라운드'} 준비시간`, FIELD_CENTER_X, 258, 18, '#f7f2e8');
+
+    if (breakState.nextRoundPhase === 'final') {
+      const rules = breakState.rules || {};
+      const lines = [
+        '결승전 특별 규칙',
+        `경기 시간 ${formatMinutes(rules.durationMs || 300000)} · 덱 ${rules.deckSize || FINAL_DECK_SIZE}장 · 손패 ${rules.handSize || FINAL_HAND_SIZE}장`,
+        '타워 체력 1.5배 · 1:40부터 X2 · 0:40부터 X3'
+      ];
+      lines.forEach((line, index) => {
+        this.drawCenteredText(line, FIELD_CENTER_X, 302 + index * 26, index === 0 ? 20 : 15, index === 0 ? '#ffb2bf' : '#d6d0c6');
+      });
+    }
+
+    if (canEditTournamentBreakDeck(this.state)) {
+      const w = 172;
+      const h = 44;
+      const x = FIELD_CENTER_X - w / 2;
+      const y = breakState.nextRoundPhase === 'final' ? 408 : 312;
+      this.breakDeckButtonBounds = { x, y, w, h };
+      this.g.fillStyle(0xe8c15c, 1);
+      this.g.fillRoundedRect(x, y, w, h, 8);
+      this.g.lineStyle(2, 0xfff4a7, 1);
+      this.g.strokeRoundedRect(x, y, w, h, 8);
+      this.drawCenteredText('덱 수정하기', FIELD_CENTER_X, y + 11, 17, '#15130d');
     }
   }
 
@@ -2199,6 +2325,7 @@ class BattleScene extends Phaser.Scene {
   }
 
   effectDuration(type) {
+    if (type === 'tournament-celebration') return 5200;
     if (type === 'ascension-start') return 2500;
     if (type === 'ascension-end') return 850;
     if (type === 'sudden-death') return 1600;
@@ -2274,6 +2401,18 @@ function formatTime(ms) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+function formatClock(ms) {
+  const seconds = Math.ceil(Math.max(0, ms) / 1000);
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function formatMinutes(ms) {
+  const minutes = Math.round(Math.max(0, ms) / 60000);
+  return `${minutes}분`;
+}
+
 function teamName(team) {
   return team === 0 ? '아래 진영' : '위 진영';
 }
@@ -2282,6 +2421,24 @@ function truncateText(value, maxLength) {
   const text = String(value || '');
   if (text.length <= maxLength) return text;
   return `${text.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+function getStateHandSize(state) {
+  return state && state.rules && state.rules.handSize ? state.rules.handSize : HAND_SIZE;
+}
+
+function isStartCountdownActive(state) {
+  return Boolean(state && state.startCountdownMs > 0);
+}
+
+function isPointInside(point, bounds) {
+  return Boolean(point && bounds && point.x >= bounds.x && point.x <= bounds.x + bounds.w && point.y >= bounds.y && point.y <= bounds.y + bounds.h);
+}
+
+function canEditTournamentBreakDeck(state) {
+  const breakState = state && state.tournament && state.tournament.break;
+  if (!breakState || !breakState.active || !currentUser) return false;
+  return Array.isArray(breakState.nextUserIds) && breakState.nextUserIds.includes(currentUser.id);
 }
 
 function buildFallbackCards(state) {
@@ -2317,6 +2474,8 @@ function setupShell() {
   const homeScreen = document.getElementById('home-screen');
   const brandHomeButton = document.getElementById('brand-home');
   const updateHistoryScreen = document.getElementById('update-history-screen');
+  const tournamentHistoryScreen = document.getElementById('tournament-history-screen');
+  const tournamentDetailScreen = document.getElementById('tournament-detail-screen');
   const roomScreen = document.getElementById('room-screen');
   const encyclopediaScreen = document.getElementById('encyclopedia-screen');
   const rankingScreen = document.getElementById('ranking-screen');
@@ -2328,8 +2487,11 @@ function setupShell() {
   const encyclopediaButton = document.getElementById('open-encyclopedia');
   const rankingButton = document.getElementById('open-ranking');
   const updateHistoryButton = document.getElementById('open-update-history');
+  const tournamentHistoryButton = document.getElementById('open-tournament-history');
   const tierButton = document.getElementById('open-tier-chart');
   const backUpdateHistoryButton = document.getElementById('back-update-history');
+  const backTournamentHistoryButton = document.getElementById('back-tournament-history');
+  const backTournamentDetailButton = document.getElementById('back-tournament-detail');
   const backRankingButton = document.getElementById('back-ranking');
   const backTierButton = document.getElementById('back-tier');
   const backDeckButton = document.getElementById('back-deck');
@@ -2396,8 +2558,9 @@ function setupShell() {
   });
 
   deckButton.addEventListener('click', async () => {
+    returnToGameAfterDeck = false;
     showScreen(deckScreen);
-    await loadDeckBuilder();
+    await loadDeckBuilder({ deckSize: DECK_SIZE });
   });
 
   encyclopediaButton.addEventListener('click', () => {
@@ -2414,6 +2577,13 @@ function setupShell() {
     showScreen(updateHistoryScreen);
   });
 
+  if (tournamentHistoryButton) {
+    tournamentHistoryButton.addEventListener('click', async () => {
+      showScreen(tournamentHistoryScreen);
+      await loadTournamentHistory();
+    });
+  }
+
   tierButton.addEventListener('click', async () => {
     showScreen(tierScreen);
     await loadTiers();
@@ -2422,6 +2592,18 @@ function setupShell() {
   backUpdateHistoryButton.addEventListener('click', () => {
     showScreen(homeScreen);
   });
+
+  if (backTournamentHistoryButton) {
+    backTournamentHistoryButton.addEventListener('click', () => {
+      showScreen(homeScreen);
+    });
+  }
+
+  if (backTournamentDetailButton) {
+    backTournamentDetailButton.addEventListener('click', () => {
+      showScreen(tournamentHistoryScreen);
+    });
+  }
 
   backRankingButton.addEventListener('click', () => {
     showScreen(homeScreen);
@@ -2432,6 +2614,11 @@ function setupShell() {
   });
 
   backDeckButton.addEventListener('click', () => {
+    if (returnToGameAfterDeck && currentRoom) {
+      showScreen(gameScreen);
+      startGame();
+      return;
+    }
     showScreen(homeScreen);
   });
 
@@ -2454,6 +2641,8 @@ function setupShell() {
     currentSlot = null;
     latestState = null;
     latestTournamentWinner = null;
+    latestTournamentHistory = [];
+    currentTournamentDetail = null;
     renderTournamentWinnerBanner();
     renderTournamentPanel();
     resetAuthForms();
@@ -2530,7 +2719,7 @@ function setupShell() {
   saveDeckButton.addEventListener('click', saveDeck);
 
   function showScreen(target) {
-    for (const screen of [authScreen, homeScreen, updateHistoryScreen, roomScreen, encyclopediaScreen, rankingScreen, tierScreen, deckScreen, gameScreen]) {
+    for (const screen of [authScreen, homeScreen, updateHistoryScreen, tournamentHistoryScreen, tournamentDetailScreen, roomScreen, encyclopediaScreen, rankingScreen, tierScreen, deckScreen, gameScreen]) {
       screen.classList.toggle('hidden', screen !== target);
     }
   }
@@ -2569,6 +2758,16 @@ function setupShell() {
 
   window.showHomeScreen = () => showScreen(homeScreen);
   window.showRoomScreen = () => showScreen(roomScreen);
+  window.showTournamentDetailScreen = () => showScreen(tournamentDetailScreen);
+  window.openDeckBuilderForBreak = async () => {
+    const breakState = latestState && latestState.tournament && latestState.tournament.break;
+    returnToGameAfterDeck = true;
+    showScreen(deckScreen);
+    await loadDeckBuilder({ deckSize: breakState && breakState.deckSize === FINAL_DECK_SIZE ? FINAL_DECK_SIZE : DECK_SIZE });
+    setMessage('deck-message', breakState && breakState.nextRoundPhase === 'final'
+      ? '결승전 전용 10장 덱입니다. 휴식 시간이 끝나면 자동으로 잠깁니다.'
+      : '다음 라운드 전까지 덱을 저장할 수 있습니다.');
+  };
 }
 
 function initializeTheme(button) {
@@ -2719,6 +2918,7 @@ function connectSocket() {
     currentRoom = payload.room;
     currentSlot = payload.slot;
     isSpectating = false;
+    returnToGameAfterDeck = false;
     resetBattleChat();
     setMessage('room-message', '');
     updateGameRoomTitle();
@@ -2729,6 +2929,7 @@ function connectSocket() {
     currentRoom = payload.room;
     currentSlot = null;
     isSpectating = true;
+    returnToGameAfterDeck = false;
     resetBattleChat();
     setMessage('room-message', '');
     updateGameRoomTitle();
@@ -2832,6 +3033,134 @@ async function loadTournamentWinner() {
   }
 }
 
+async function loadTournamentHistory() {
+  const list = document.getElementById('tournament-history-list');
+  if (list) {
+    list.replaceChildren();
+    const loading = document.createElement('p');
+    loading.className = 'empty-list';
+    loading.textContent = '토너먼트 기록을 불러오는 중입니다.';
+    list.appendChild(loading);
+  }
+  try {
+    const data = await apiRequest('/api/tournaments');
+    latestTournamentHistory = data.tournaments || [];
+    renderTournamentHistory();
+  } catch (error) {
+    renderTournamentHistory(error.message || '토너먼트 기록을 불러오지 못했습니다.');
+  }
+}
+
+function renderTournamentHistory(errorMessage = '') {
+  const list = document.getElementById('tournament-history-list');
+  if (!list) return;
+  list.replaceChildren();
+
+  if (errorMessage || latestTournamentHistory.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = errorMessage || '아직 완료된 토너먼트가 없습니다.';
+    list.appendChild(empty);
+    return;
+  }
+
+  for (const tournament of latestTournamentHistory) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'tournament-history-card';
+
+    const title = document.createElement('strong');
+    title.textContent = tournament.title || `제 ${tournament.number}회 토너먼트 대회`;
+    const winner = document.createElement('span');
+    winner.textContent = `${title.textContent} 우승자 "${tournament.winnerUsername || '알 수 없음'}"`;
+    const meta = document.createElement('small');
+    meta.textContent = `${formatKoreanDate(tournament.date)} · 참가비 ${tournament.stake || 0} 트로피 · 상금 ${tournament.pool || 0} 트로피`;
+
+    button.append(title, winner, meta);
+    button.addEventListener('click', () => loadTournamentDetail(tournament.id));
+    list.appendChild(button);
+  }
+}
+
+async function loadTournamentDetail(id) {
+  try {
+    const data = await apiRequest(`/api/tournaments/${encodeURIComponent(id)}`);
+    currentTournamentDetail = data.tournament || null;
+    renderTournamentDetail();
+    const detailScreen = document.getElementById('tournament-detail-screen');
+    if (detailScreen && typeof window.showTournamentDetailScreen === 'function') {
+      window.showTournamentDetailScreen();
+    }
+  } catch (error) {
+    currentTournamentDetail = null;
+    renderTournamentDetail(error.message || '토너먼트 상세 기록을 불러오지 못했습니다.');
+    if (typeof window.showTournamentDetailScreen === 'function') window.showTournamentDetailScreen();
+  }
+}
+
+function renderTournamentDetail(errorMessage = '') {
+  const title = document.getElementById('tournament-detail-title');
+  const content = document.getElementById('tournament-detail-content');
+  if (!content) return;
+  content.replaceChildren();
+
+  if (errorMessage || !currentTournamentDetail) {
+    if (title) title.textContent = '토너먼트 대회';
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = errorMessage || '상세 기록이 없습니다.';
+    content.appendChild(empty);
+    return;
+  }
+
+  const tournament = currentTournamentDetail;
+  if (title) title.textContent = tournament.title || `제 ${tournament.number}회 토너먼트 대회`;
+
+  const summary = document.createElement('section');
+  summary.className = 'tournament-detail-summary';
+  summary.replaceChildren(
+    detailStat('대회 날짜', formatKoreanDate(tournament.date)),
+    detailStat('트로피 참가비', `${tournament.stake || 0}개`),
+    detailStat('우승자 상금', `${tournament.pool || 0}개`),
+    detailStat('참가자 수', `${tournament.participantCount || 0}명`),
+    detailStat('우승자', tournament.winnerUsername || '알 수 없음')
+  );
+
+  const participants = document.createElement('section');
+  participants.className = 'tournament-detail-participants';
+  const participantTitle = document.createElement('h2');
+  participantTitle.textContent = '참가자 목록';
+  const participantList = document.createElement('div');
+  participantList.className = 'participant-chip-list';
+  for (const participant of tournament.participants || []) {
+    const chip = document.createElement('span');
+    chip.textContent = participant.username || '알 수 없음';
+    participantList.appendChild(chip);
+  }
+  participants.append(participantTitle, participantList);
+
+  const bracketSection = document.createElement('section');
+  bracketSection.className = 'tournament-detail-bracket-section';
+  const bracketTitle = document.createElement('h2');
+  bracketTitle.textContent = '전체 대진 결과';
+  const bracket = document.createElement('div');
+  bracket.className = 'tournament-bracket tournament-bracket-tree tournament-history-bracket';
+  renderTournamentBracket(bracket, { rounds: tournament.rounds || [], viewingMatchId: null });
+  bracketSection.append(bracketTitle, bracket);
+
+  content.append(summary, participants, bracketSection);
+}
+
+function detailStat(label, value) {
+  const item = document.createElement('div');
+  const strong = document.createElement('strong');
+  strong.textContent = value || '-';
+  const span = document.createElement('span');
+  span.textContent = label;
+  item.append(strong, span);
+  return item;
+}
+
 async function loadTiers() {
   if (!currentUser) return;
   try {
@@ -2847,14 +3176,15 @@ async function loadTiers() {
   }
 }
 
-async function loadDeckBuilder() {
+async function loadDeckBuilder(options = {}) {
   if (!currentUser) return;
+  activeDeckSize = options.deckSize === FINAL_DECK_SIZE ? FINAL_DECK_SIZE : DECK_SIZE;
   setMessage('deck-message', '덱을 불러오는 중...');
   try {
-    const data = await apiRequest('/api/deck');
+    const data = await apiRequest(`/api/deck?deckSize=${activeDeckSize}`);
     deckCards = data.cards || {};
     selectedDeck = Array.isArray(data.deck) ? [...data.deck] : [];
-    setMessage('deck-message', selectedDeck.length === DECK_SIZE ? '저장된 덱입니다.' : '카드 8장을 선택하세요.');
+    setMessage('deck-message', selectedDeck.length === activeDeckSize ? '저장된 덱입니다.' : `카드 ${activeDeckSize}장을 선택하세요.`);
     renderDeckBuilder();
   } catch (error) {
     setMessage('deck-message', error.message || '덱을 불러오지 못했습니다.');
@@ -2863,8 +3193,8 @@ async function loadDeckBuilder() {
 }
 
 async function saveDeck() {
-  if (selectedDeck.length !== DECK_SIZE) {
-    setMessage('deck-message', `카드 ${DECK_SIZE}장을 선택해야 저장할 수 있습니다.`);
+  if (selectedDeck.length !== activeDeckSize) {
+    setMessage('deck-message', `카드 ${activeDeckSize}장을 선택해야 저장할 수 있습니다.`);
     return;
   }
 
@@ -2873,11 +3203,11 @@ async function saveDeck() {
     if (button) button.disabled = true;
     const data = await apiRequest('/api/deck', {
       method: 'PUT',
-      body: JSON.stringify({ deck: selectedDeck })
+      body: JSON.stringify({ deck: selectedDeck, deckSize: activeDeckSize })
     });
     deckCards = data.cards || deckCards;
     selectedDeck = Array.isArray(data.deck) ? [...data.deck] : selectedDeck;
-    setMessage('deck-message', '덱을 저장했습니다. 다음 경기부터 이 덱으로 시작합니다.');
+    setMessage('deck-message', activeDeckSize === FINAL_DECK_SIZE ? '결승전 전용 덱을 저장했습니다.' : '덱을 저장했습니다. 다음 경기부터 이 덱으로 시작합니다.');
     renderDeckBuilder();
   } catch (error) {
     setMessage('deck-message', error.message || '덱을 저장하지 못했습니다.');
@@ -2894,12 +3224,13 @@ function renderSelectedDeck() {
   const count = document.getElementById('deck-count');
   const list = document.getElementById('selected-deck-list');
   const saveButton = document.getElementById('save-deck');
-  if (count) count.textContent = `${selectedDeck.length} / ${DECK_SIZE}`;
-  if (saveButton) saveButton.disabled = selectedDeck.length !== DECK_SIZE;
+  if (count) count.textContent = `${selectedDeck.length} / ${activeDeckSize}`;
+  if (saveButton) saveButton.disabled = selectedDeck.length !== activeDeckSize;
   if (!list) return;
 
+  list.style.setProperty('--deck-columns', String(activeDeckSize));
   list.replaceChildren();
-  for (let i = 0; i < DECK_SIZE; i += 1) {
+  for (let i = 0; i < activeDeckSize; i += 1) {
     const cardId = selectedDeck[i];
     const card = deckCards[cardId];
     const slot = document.createElement('button');
@@ -2955,7 +3286,7 @@ function renderDeckCardGrid() {
 
 function deckPoolCard(card) {
   const selected = selectedDeck.includes(card.id);
-  const full = selectedDeck.length >= DECK_SIZE;
+  const full = selectedDeck.length >= activeDeckSize;
   const theme = CARD_THEME[card.id] || { fill: 0xcaa862, short: '?' };
   const detail = CHARACTER_DETAILS.find((character) => character.id === card.id);
 
@@ -2983,9 +3314,9 @@ function deckPoolCard(card) {
     if (index >= 0) {
       selectedDeck.splice(index, 1);
       setMessage('deck-message', '선택한 카드를 뺐습니다.');
-    } else if (selectedDeck.length < DECK_SIZE) {
+    } else if (selectedDeck.length < activeDeckSize) {
       selectedDeck.push(card.id);
-      setMessage('deck-message', selectedDeck.length === DECK_SIZE ? '저장할 수 있습니다.' : '카드를 더 선택하세요.');
+      setMessage('deck-message', selectedDeck.length === activeDeckSize ? '저장할 수 있습니다.' : '카드를 더 선택하세요.');
     }
     renderDeckBuilder();
   });
@@ -3038,7 +3369,10 @@ function renderTournamentPanel() {
     const count = `${tournament.participantCount || 0}/${tournament.participantTarget || 0} 명 참가중`;
     const pool = `상금 풀 ${tournament.pool || 0} 트로피`;
     const stake = `참가비 ${tournament.stake || 0} 트로피`;
-    const winner = tournament.winner ? `우승자 ${tournament.winner.username}` : tournamentStatusLabel(tournament.status);
+    const breakText = tournament.break && tournament.break.active
+      ? `${tournament.break.nextRoundLabel || '다음 경기'}까지 ${formatClock(tournament.break.remainingMs || 0)}`
+      : '';
+    const winner = tournament.winner ? `우승자 ${tournament.winner.username}` : breakText || tournamentStatusLabel(tournament.status);
     meta.textContent = `${count} · ${stake} · ${pool} · ${winner}`;
   }
 
@@ -3047,8 +3381,13 @@ function renderTournamentPanel() {
   if (nextButton) nextButton.disabled = !canSwitch;
 
   if (!bracket) return;
+  renderTournamentBracket(bracket, tournament);
+}
+
+function renderTournamentBracket(bracket, tournament) {
   bracket.replaceChildren();
-  const rounds = Array.isArray(tournament.rounds) ? tournament.rounds : [];
+  bracket.classList.add('tournament-bracket-tree');
+  const rounds = roundsForBracket(tournament);
   if (rounds.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'empty-list';
@@ -3072,9 +3411,63 @@ function renderTournamentPanel() {
   }
 }
 
+function roundsForBracket(tournament) {
+  const rounds = Array.isArray(tournament.rounds) ? tournament.rounds.map((round) => ({ ...round, matches: round.matches || [] })) : [];
+  if (!['waiting', 'playing', 'break'].includes(tournament.status) || rounds.length === 0) return rounds;
+  let remaining = estimateNextRoundSize(rounds[rounds.length - 1]);
+  let index = rounds.length;
+  while (remaining > 1) {
+    const label = tournamentRoundLabelBySize(remaining);
+    const phase = tournamentRoundPhaseBySize(remaining);
+    const matchCount = Math.ceil(remaining / 2);
+    const matches = [];
+    for (let i = 0; i < matchCount; i += 1) {
+      matches.push({
+        id: `placeholder-${index}-${i}`,
+        label,
+        phase,
+        status: 'upcoming',
+        bye: remaining % 2 === 1 && i === 0,
+        participants: [],
+        participantUserIds: [null, null],
+        winnerUserId: null,
+        loserUserIds: [],
+        placeholder: true
+      });
+    }
+    rounds.push({ id: `placeholder-${index}`, index, label, phase, status: 'upcoming', matches, placeholder: true });
+    remaining = Math.ceil(remaining / 2);
+    index += 1;
+  }
+  return rounds;
+}
+
+function estimateNextRoundSize(round) {
+  if (!round || !Array.isArray(round.matches)) return 0;
+  if (round.phase === 'final') return 1;
+  const completedWinners = round.matches.map((match) => match.winnerUserId).filter(Boolean).length;
+  if (round.status === 'completed' && completedWinners > 0) return completedWinners;
+  return round.matches.length;
+}
+
+function tournamentRoundLabelBySize(size) {
+  if (size <= 2) return '결승';
+  if (size <= 4) return '4강';
+  let current = 1;
+  while (current < size) current *= 2;
+  return `${current}강`;
+}
+
+function tournamentRoundPhaseBySize(size) {
+  if (size <= 2) return 'final';
+  if (size <= 4) return 'semifinal';
+  return 'regular';
+}
+
 function tournamentMatchCard(match, tournament) {
   const card = document.createElement('article');
   card.className = `tournament-match-card tournament-match-${match.status || 'upcoming'} tournament-phase-${match.phase || 'regular'}`;
+  if (match.placeholder) card.classList.add('tournament-match-placeholder');
   if (tournament.viewingMatchId && tournament.viewingMatchId === match.id) {
     card.classList.add('tournament-match-viewing');
   }
@@ -3084,7 +3477,13 @@ function tournamentMatchCard(match, tournament) {
   const label = document.createElement('strong');
   label.textContent = match.label || '경기';
   const status = document.createElement('span');
-  status.textContent = tournamentMatchStatusLabel(match);
+  if (match.status === 'playing') {
+    const dot = document.createElement('i');
+    dot.className = 'tournament-live-dot';
+    status.append(dot, document.createTextNode(tournamentMatchStatusLabel(match)));
+  } else {
+    status.textContent = tournamentMatchStatusLabel(match);
+  }
   head.append(label, status);
 
   const players = document.createElement('div');
@@ -3095,7 +3494,8 @@ function tournamentMatchCard(match, tournament) {
     const row = document.createElement('div');
     row.className = 'tournament-match-player';
     if (participant && participant.userId === match.winnerUserId) row.classList.add('winner');
-    row.textContent = participant ? participant.username : match.bye ? '부전승 대기' : '상대 대기';
+    if (!participant) row.classList.add('empty');
+    row.textContent = participant ? participant.username : match.bye ? '부전승 대기' : '승자 대기';
     players.appendChild(row);
   }
 
@@ -3111,6 +3511,7 @@ function tournamentMatchCard(match, tournament) {
 function tournamentStatusLabel(status) {
   if (status === 'waiting') return '대기 중';
   if (status === 'playing') return '진행 중';
+  if (status === 'break') return '준비시간';
   if (status === 'completed') return '종료';
   if (status === 'cancelled') return '취소됨';
   return '상태 확인 중';
@@ -3552,7 +3953,7 @@ function watchRoom(room) {
 
 function sendBattleChat(event) {
   event.preventDefault();
-  if (!socket || !latestState || isSpectating) return;
+  if (!socket || !latestState) return;
 
   const input = document.getElementById('battle-chat-input');
   const channelSelect = document.getElementById('battle-chat-channel');
@@ -3560,7 +3961,7 @@ function sendBattleChat(event) {
   if (!text) return;
 
   socket.emit('battle-chat', {
-    channel: channelSelect ? channelSelect.value : 'all',
+    channel: isSpectating ? 'all' : channelSelect ? channelSelect.value : 'all',
     text
   });
   if (input) input.value = '';
@@ -3601,7 +4002,7 @@ function renderBattleChat() {
 
       const meta = document.createElement('div');
       meta.className = 'battle-chat-meta';
-      meta.textContent = `${message.channel === 'team' ? '팀' : '전체'} · ${message.username || '플레이어'}`;
+      meta.textContent = `${message.channel === 'team' ? '팀' : message.spectator ? '관전' : '전체'} · ${message.username || '플레이어'}`;
 
       const text = document.createElement('div');
       text.className = 'battle-chat-text';
@@ -3621,8 +4022,8 @@ function updateBattleChatControls() {
   const input = document.getElementById('battle-chat-input');
   const sendButton = document.getElementById('battle-chat-send');
   const player = latestState && currentSlot !== null && currentSlot !== undefined ? latestState.players[currentSlot] : null;
-  const canSend = Boolean(latestState && latestState.status === 'playing' && player && player.connected && !isSpectating);
-  const isTeamMode = Boolean(latestState && latestState.mode === '2v2');
+  const canSend = Boolean(latestState && latestState.status === 'playing' && (isSpectating || (player && player.connected)));
+  const isTeamMode = Boolean(latestState && latestState.mode === '2v2' && !isSpectating);
 
   if (channelSelect) {
     channelSelect.disabled = !canSend || !isTeamMode;
@@ -3630,7 +4031,7 @@ function updateBattleChatControls() {
   }
   if (input) {
     input.disabled = !canSend;
-    input.placeholder = isSpectating ? '관전 중에는 채팅할 수 없습니다.' : '메시지 입력';
+    input.placeholder = isSpectating ? '관전 채팅 입력' : '메시지 입력';
   }
   if (sendButton) sendButton.disabled = !canSend;
   if (status) {

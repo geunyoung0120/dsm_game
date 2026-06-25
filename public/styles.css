@@ -119,6 +119,8 @@ body {
 .room-screen,
 .encyclopedia-screen,
 .update-history-screen,
+.tournament-history-screen,
+.tournament-detail-screen,
 .tier-screen,
 .game-screen {
   width: min(100%, 1080px);
@@ -1190,6 +1192,8 @@ html[data-theme="light"] .tournament-winner-banner {
 .encyclopedia-screen,
 .ranking-screen,
 .update-history-screen,
+.tournament-history-screen,
+.tournament-detail-screen,
 .tier-screen,
 .deck-screen {
   padding: 20px 0 40px;
@@ -1198,6 +1202,8 @@ html[data-theme="light"] .tournament-winner-banner {
 .encyclopedia-header,
 .ranking-header,
 .update-history-header,
+.tournament-history-header,
+.tournament-detail-header,
 .tier-header,
 .deck-header,
 .room-header {
@@ -1211,6 +1217,8 @@ html[data-theme="light"] .tournament-winner-banner {
 .encyclopedia-header h1,
 .ranking-header h1,
 .update-history-header h1,
+.tournament-history-header h1,
+.tournament-detail-header h1,
 .tier-header h1,
 .deck-header h1,
 .room-header h1 {
@@ -1221,6 +1229,97 @@ html[data-theme="light"] .tournament-winner-banner {
 .update-history-list {
   display: grid;
   gap: 12px;
+}
+
+.tournament-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.tournament-history-card {
+  width: 100%;
+  min-height: 90px;
+  padding: 16px;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 5px solid var(--gold);
+  border-radius: 8px;
+}
+
+.tournament-history-card strong {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.tournament-history-card span {
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.tournament-history-card small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.tournament-detail-content {
+  display: grid;
+  gap: 16px;
+}
+
+.tournament-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.tournament-detail-summary div,
+.tournament-detail-participants,
+.tournament-detail-bracket-section {
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.tournament-detail-summary div {
+  display: grid;
+  gap: 5px;
+}
+
+.tournament-detail-summary strong {
+  color: var(--ink);
+  font-size: 20px;
+}
+
+.tournament-detail-summary span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.tournament-detail-participants h2,
+.tournament-detail-bracket-section h2 {
+  margin: 0 0 12px;
+  font-size: 20px;
+}
+
+.participant-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.participant-chip-list span {
+  padding: 7px 10px;
+  color: var(--ink);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .deck-builder-layout {
@@ -1240,7 +1339,7 @@ html[data-theme="light"] .tournament-winner-banner {
 
 .selected-deck-list {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--deck-columns, 8), minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1849,16 +1948,35 @@ html[data-theme="light"] .tournament-winner-banner {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(220px, 1fr);
-  gap: 10px;
+  gap: 24px;
   overflow-x: auto;
   padding-bottom: 4px;
 }
 
+.tournament-bracket-tree {
+  align-items: stretch;
+}
+
 .tournament-round {
+  position: relative;
   display: grid;
   align-content: start;
-  gap: 8px;
+  gap: 18px;
   min-width: 0;
+}
+
+.tournament-round:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 52px;
+  right: -13px;
+  width: 13px;
+  bottom: 18px;
+  border-top: 2px solid var(--line-strong);
+  border-right: 2px solid var(--line-strong);
+  border-bottom: 2px solid var(--line-strong);
+  opacity: 0.7;
+  pointer-events: none;
 }
 
 .tournament-round h3 {
@@ -1868,6 +1986,7 @@ html[data-theme="light"] .tournament-winner-banner {
 }
 
 .tournament-match-card {
+  position: relative;
   min-height: 112px;
   padding: 11px;
   display: grid;
@@ -1876,6 +1995,20 @@ html[data-theme="light"] .tournament-winner-banner {
   border: 1px solid var(--line);
   border-left: 4px solid #4cd964;
   border-radius: 8px;
+}
+
+.tournament-match-card::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -25px;
+  width: 25px;
+  border-top: 2px solid var(--line-strong);
+  opacity: 0.7;
+}
+
+.tournament-round:last-child .tournament-match-card::after {
+  display: none;
 }
 
 .tournament-match-head {
@@ -1889,6 +2022,9 @@ html[data-theme="light"] .tournament-winner-banner {
 
 .tournament-match-head span,
 .tournament-match-card small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
@@ -1915,6 +2051,12 @@ html[data-theme="light"] .tournament-winner-banner {
   color: var(--badge-ink);
   background: var(--gold);
   border-color: var(--gold);
+  font-weight: 1000;
+}
+
+.tournament-match-player.empty {
+  color: var(--muted);
+  border-style: dashed;
 }
 
 .tournament-phase-semifinal {
@@ -1927,15 +2069,41 @@ html[data-theme="light"] .tournament-winner-banner {
 
 .tournament-match-playing {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24);
+  animation: tournamentPulse 1.25s ease-in-out infinite;
 }
 
 .tournament-match-completed {
   opacity: 0.82;
 }
 
+.tournament-match-placeholder {
+  opacity: 0.72;
+  border-style: dashed;
+}
+
 .tournament-match-viewing {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
+}
+
+.tournament-live-dot {
+  width: 8px;
+  height: 8px;
+  display: inline-block;
+  background: #4cd964;
+  border-radius: 50%;
+  box-shadow: 0 0 0 0 rgba(76, 217, 100, 0.55);
+  animation: liveDotPulse 1s ease-out infinite;
+}
+
+@keyframes tournamentPulse {
+  0%, 100% { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2), 0 0 0 rgba(76, 217, 100, 0); }
+  50% { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.34), 0 0 18px rgba(76, 217, 100, 0.28); }
+}
+
+@keyframes liveDotPulse {
+  0% { box-shadow: 0 0 0 0 rgba(76, 217, 100, 0.55); }
+  100% { box-shadow: 0 0 0 9px rgba(76, 217, 100, 0); }
 }
 
 .game-frame {
@@ -2173,6 +2341,8 @@ canvas {
   .home-actions,
   .encyclopedia-header,
   .update-history-header,
+  .tournament-history-header,
+  .tournament-detail-header,
   .tier-header,
   .deck-header,
   .room-header,

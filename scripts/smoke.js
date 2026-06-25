@@ -36,7 +36,10 @@ async function main() {
       ...process.env,
       PORT: String(port),
       DATA_DIR: dataDir,
-      SESSION_SECRET: 'smoke-test-secret'
+      SESSION_SECRET: 'smoke-test-secret',
+      START_COUNTDOWN_MS: '0',
+      TOURNAMENT_BREAK_MS: '200',
+      TOURNAMENT_FINAL_BREAK_MS: '300'
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -577,6 +580,12 @@ async function expectSpectatorFlow(roomId, accounts) {
     throw new Error('Spectator state did not expose player elixir values.');
   }
 
+  await delay(120);
+  const spectatorMessage = `관전-${Date.now()}`;
+  const spectatorChatPromise = onceBattleChat(clients[0], (message) => message.spectator && message.text === spectatorMessage, 'spectator battle chat');
+  spectatorClients[0].emit('battle-chat', { channel: 'all', text: spectatorMessage });
+  await spectatorChatPromise;
+
   await delay(100);
   const secondStatePromise = waitForState(spectatorClients[0], (payload) => payload.spectator && payload.spectatorCount === 2, 'spectator count 2');
   const secondJoinPromise = once(spectatorClients[1], 'spectator-joined', 'second spectator joined');
@@ -654,9 +663,21 @@ async function expectTournamentMode(accounts) {
   }
 
   clients[activeIndexes[1]].disconnect();
-  await delay(300);
+  await delay(50);
 
   const finalistIndexes = [activeIndexes[0], byeIndex];
+  const breakStates = await Promise.all(finalistIndexes.map((index) => waitForState(clients[index], (payload) => {
+    return payload.tournament
+      && payload.tournament.status === 'break'
+      && payload.tournament.break
+      && payload.tournament.break.nextRoundPhase === 'final'
+      && payload.tournament.break.deckSize === 10
+      && payload.tournament.break.remainingMs > 0;
+  }, `tournament final break state ${index}`)));
+  if (breakStates.some((state) => !state.tournament.break.rules || !state.tournament.break.rules.final)) {
+    throw new Error('Tournament final break did not expose final rules.');
+  }
+
   const finalStates = await Promise.all(finalistIndexes.map((index) => waitForState(clients[index], (payload) => {
     if (!payload.tournament || payload.tournament.status !== 'playing' || payload.spectator) return false;
     const matches = payload.tournament.rounds.flatMap((round) => round.matches || []);
@@ -665,6 +686,16 @@ async function expectTournamentMode(accounts) {
   }, `tournament final state ${index}`)));
   if (finalStates.some((state) => state.maxSpectators !== null)) {
     throw new Error('Tournament final did not expose unlimited spectators.');
+  }
+  const finalState = finalStates[0];
+  const finalKingTower = finalState.towers.find((tower) => tower.type === 'king');
+  const finalPrincessTower = finalState.towers.find((tower) => tower.type === 'princess-left');
+  const finalViewer = finalState.players.find((player) => player.username === accounts[finalistIndexes[0]].user.username);
+  if (!finalState.rules || !finalState.rules.final || finalState.rules.durationMs !== 300000 || finalState.rules.handSize !== 5 || !finalViewer || finalViewer.hand.length !== 5) {
+    throw new Error('Tournament final did not expose the expected special rules and five-card hand.');
+  }
+  if (!finalKingTower || finalKingTower.maxHp !== 13800 || !finalPrincessTower || finalPrincessTower.maxHp !== 8100) {
+    throw new Error('Tournament final tower HP did not use the expected 1.5x values.');
   }
 
   const winnerIndex = activeIndexes[0];
@@ -684,6 +715,15 @@ async function expectTournamentMode(accounts) {
   const latestWinner = await fetchTournamentWinner(accounts[winnerIndex]);
   if (!latestWinner || latestWinner.username !== accounts[winnerIndex].user.username || !latestWinner.wonAt) {
     throw new Error('Tournament latest winner API did not return the final winner.');
+  }
+  const history = await fetchTournamentHistory(accounts[winnerIndex]);
+  const completed = history.find((entry) => entry.winnerUsername === accounts[winnerIndex].user.username);
+  if (!completed || !completed.title || !completed.date) {
+    throw new Error('Tournament history API did not list the completed tournament.');
+  }
+  const detail = await fetchTournamentDetail(accounts[winnerIndex], completed.id);
+  if (!detail || detail.winnerUsername !== accounts[winnerIndex].user.username || detail.pool !== 15 || !Array.isArray(detail.rounds) || detail.rounds.length < 2) {
+    throw new Error('Tournament detail API did not expose bracket results.');
   }
 
   for (const client of clients) client.disconnect();
@@ -721,6 +761,24 @@ async function fetchTournamentWinner(account) {
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || 'Tournament winner lookup failed.');
   return body.winner;
+}
+
+async function fetchTournamentHistory(account) {
+  const response = await fetch(`${url}/api/tournaments`, {
+    headers: { Cookie: account.cookie }
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || 'Tournament history lookup failed.');
+  return body.tournaments || [];
+}
+
+async function fetchTournamentDetail(account, id) {
+  const response = await fetch(`${url}/api/tournaments/${encodeURIComponent(id)}`, {
+    headers: { Cookie: account.cookie }
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || 'Tournament detail lookup failed.');
+  return body.tournament;
 }
 
 function effectiveSmokeCost(player, card) {
