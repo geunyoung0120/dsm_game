@@ -141,7 +141,7 @@ const CARDS = {
     attackMs: 0,
     radius: 34,
     buildingDurationMs: 24000,
-    spawnMinionMs: 3000,
+    spawnMinionMs: 4000,
     spawnImmediately: true,
     spawnPair: ['nerdMale', 'nerdFemale']
   },
