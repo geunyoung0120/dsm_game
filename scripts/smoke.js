@@ -613,12 +613,12 @@ function expectHeoseonNerf(cards) {
   }
 
   const expected = {
-    maxHp: 405,
+    maxHp: 450,
     range: 16,
     speed: 37,
     radius: 14,
     berserkerThreshold: 0.243,
-    berserkerMaxHp: 810,
+    berserkerMaxHp: 900,
     berserkerDamage: 70,
     berserkerSpeed: 95,
     berserkerAttackMs: 303,
@@ -629,6 +629,10 @@ function expectHeoseonNerf(cards) {
     if (heoseon[key] !== value) {
       throw new Error(`Heoseon ${key} expected ${value}, got ${heoseon[key]}.`);
     }
+  }
+
+  if (!cards.baduk || cards.baduk.damage !== 100 || cards.baduk.chaosEnemyDamage !== 100 || cards.baduk.chaosFriendlyDamage !== 29) {
+    throw new Error('Baduk damage tuning was not present.');
   }
 
   if (!cards.badukFart || !cards.badukFart.spell || cards.badukFart.damagePerSecond !== 60 || cards.badukFart.radius !== 59 || cards.badukFart.durationMs !== 4000) {
