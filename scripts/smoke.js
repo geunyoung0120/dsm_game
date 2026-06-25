@@ -822,8 +822,8 @@ function expectHeoseonNerf(cards) {
   if (!cards.baduk || cards.baduk.damage !== 100 || cards.baduk.chaosEnemyDamage !== 100 || cards.baduk.chaosFriendlyDamage !== 29) {
     throw new Error('Baduk damage tuning was not present.');
   }
-  if (!cards.zzangga || cards.zzangga.cost !== 4) {
-    throw new Error('Zzangga cost tuning was not present.');
+  if (!cards.zzangga || cards.zzangga.cost !== 4 || cards.zzangga.maxHp !== 646 || cards.zzangga.damage !== 83) {
+    throw new Error('Zzangga latest tuning was not present.');
   }
   if (!cards.mythos || cards.mythos.damage !== 63 || cards.mythos.awakenedDamage !== 108) {
     throw new Error('Mythos damage tuning was not present.');
@@ -839,7 +839,7 @@ function expectHeoseonNerf(cards) {
   if (playableCount !== 20) {
     throw new Error(`Playable card count expected 20, got ${playableCount}.`);
   }
-  if (!cards.dagwasil || !cards.dagwasil.building || cards.dagwasil.cost !== 5 || cards.dagwasil.maxHp !== 1500 || cards.dagwasil.radius !== 34 || cards.dagwasil.buildingDurationMs !== 20000 || cards.dagwasil.spawnMinionMs !== 4000 || !cards.dagwasil.spawnImmediately) {
+  if (!cards.dagwasil || !cards.dagwasil.building || cards.dagwasil.cost !== 5 || cards.dagwasil.maxHp !== 1320 || cards.dagwasil.radius !== 34 || cards.dagwasil.buildingDurationMs !== 20000 || cards.dagwasil.spawnMinionMs !== 4000 || !cards.dagwasil.spawnImmediately) {
     throw new Error('Dagwasil building card did not expose the expected fields.');
   }
   if (!cards.nerdMale || cards.nerdMale.playable !== false || cards.nerdMale.maxHp !== 180 || cards.nerdMale.damage !== 32 || cards.nerdMale.attackMs !== 717) {
@@ -862,6 +862,9 @@ function expectHeoseonNerf(cards) {
   }
   if (!cards.seongjoo || cards.seongjoo.attackMs !== 686) {
     throw new Error('Seongjoo attack speed nerf was not present.');
+  }
+  if (!cards.osj || cards.osj.cost !== 6 || cards.osj.maxHp !== 1200 || cards.osj.damage !== 20) {
+    throw new Error('OSJ latest tuning was not present.');
   }
   if (!cards.kimgeunyoung || cards.kimgeunyoung.maxHp !== 2300 || cards.kimgeunyoung.damage !== 80 || cards.kimgeunyoung.timeExtensionMs !== 30000) {
     throw new Error('Kim Geunyoung return tuning was not present.');
