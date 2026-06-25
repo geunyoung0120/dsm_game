@@ -22,6 +22,20 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: '꽁 착탄 멈춤 긴급 수정',
+    date: '2026.06.25',
+    items: [
+      '꽁 착탄 폭발 순간 화면이 멈출 수 있던 클라이언트 오류 수정',
+      '이펙트 지속 시간 계산을 안전하게 공통 변수로 정리',
+      '같은 오류를 막는 클라이언트 검사 추가'
+    ],
+    details: [
+      '꽁 농구공이 착탄하는 프레임에 폭발 이펙트가 시작되면서 선언되지 않은 duration 값을 참조할 수 있었다.',
+      '이펙트마다 지속 시간을 먼저 계산한 뒤 그 값을 이동, 폭발, 제거 판정에 함께 쓰도록 정리했다.',
+      '앞으로 drawEffects 안에서 duration 없이 폭발 계산을 추가하면 검사에서 잡히도록 했다.'
+    ]
+  },
+  {
     title: '꽁 착탄 판정과 밸런스·이름 조정',
     date: '2026.06.25',
     items: [
@@ -1385,7 +1399,8 @@ class BattleScene extends Phaser.Scene {
 
     for (const effect of this.effects) {
       const age = now - effect.bornAt;
-      const t = Phaser.Math.Clamp(age / this.effectDuration(effect.type), 0, 1);
+      const duration = this.effectDuration(effect.type);
+      const t = Phaser.Math.Clamp(age / duration, 0, 1);
       const alpha = 1 - t;
 
       if (effect.type === 'ascension-start') {

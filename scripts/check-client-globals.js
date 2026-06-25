@@ -15,4 +15,13 @@ if (unsafeEllipseLine) {
   throw new Error('public/src/main.js passes Math.PI to fillEllipse(...). The fifth argument is smoothness, not rotation.');
 }
 
+const drawEffectsStart = source.indexOf('  drawEffects() {');
+const drawEffectsEnd = source.indexOf('  drawKingReturnEffect(', drawEffectsStart);
+const drawEffectsSource = drawEffectsStart >= 0 && drawEffectsEnd > drawEffectsStart
+  ? source.slice(drawEffectsStart, drawEffectsEnd)
+  : '';
+if (!drawEffectsSource.includes('const duration = this.effectDuration(effect.type);')) {
+  throw new Error('drawEffects must define duration before using effect timing math.');
+}
+
 console.log('client globals ok');
