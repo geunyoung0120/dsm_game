@@ -3,6 +3,7 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const { io } = require('socket.io-client');
+const Database = require('better-sqlite3');
 
 const root = path.resolve(__dirname, '..');
 const port = Number(process.env.SMOKE_PORT || 3100);
@@ -70,12 +71,18 @@ async function main() {
     signup(`연습유저${Date.now()}I`)
   ]);
   const twoVersusTwo = await expectTwoVersusTwoRoom(twoVersusTwoAccounts.slice(0, 4), twoVersusTwoAccounts.slice(4));
+  const tournamentAccounts = await Promise.all([
+    signup(`토너유저${Date.now()}A`),
+    signup(`토너유저${Date.now()}B`),
+    signup(`토너유저${Date.now()}C`)
+  ]);
+  const tournament = await expectTournamentMode(tournamentAccounts);
   const expectedOpeningHand = smokeDeck.slice(0, 4).join('|');
   const actualOpeningHand = (result.initialHands[0] || []).join('|');
   if (actualOpeningHand !== expectedOpeningHand) {
     throw new Error(`Saved deck was not used for player 1. Expected ${expectedOpeningHand}, got ${actualOpeningHand}.`);
   }
-  console.log(JSON.stringify({ ...result, dagwasil, cherryTree, giantHyeonjik, kkongMeteor, twoVersusTwo }));
+  console.log(JSON.stringify({ ...result, dagwasil, cherryTree, giantHyeonjik, kkongMeteor, twoVersusTwo, tournament }));
   cleanup();
 }
 
@@ -596,6 +603,124 @@ async function expectSpectatorFlow(roomId, accounts) {
     count: 2,
     fullRejected: true
   };
+}
+
+async function expectTournamentMode(accounts) {
+  seedSmokeTrophies(accounts, 10);
+  clients = accounts.map((account) => io(url, {
+    transports: ['websocket'],
+    extraHeaders: { Cookie: account.cookie }
+  }));
+
+  await Promise.all(clients.map((client) => once(client, 'welcome')));
+  clients[0].emit('create-room', {
+    name: '토너먼트 스모크 테스트 방',
+    password: '',
+    mode: 'tournament',
+    participantCount: 3,
+    stake: 5
+  });
+  const hostJoin = await once(clients[0], 'room-joined', 'tournament host room-joined');
+  if (!hostJoin.room || hostJoin.room.mode !== 'tournament' || hostJoin.room.stake !== 5 || hostJoin.room.maxPlayers !== 3) {
+    throw new Error('Tournament room did not expose mode, stake, and participant count.');
+  }
+
+  clients[1].emit('join-room', { roomId: hostJoin.room.id, password: '' });
+  await once(clients[1], 'room-joined', 'tournament second room-joined');
+  clients[2].emit('join-room', { roomId: hostJoin.room.id, password: '' });
+  await once(clients[2], 'room-joined', 'tournament third room-joined');
+
+  const openingStates = await Promise.all(clients.map((client, index) => waitForState(client, (payload) => {
+    return payload.tournament
+      && payload.tournament.status === 'playing'
+      && payload.tournament.pool === 15
+      && payload.tournament.rounds.length === 1
+      && payload.status === 'playing';
+  }, `tournament opening state ${index}`)));
+  const activeIndexes = openingStates
+    .map((state, index) => state.spectator ? null : index)
+    .filter((index) => index !== null);
+  const byeIndex = openingStates.findIndex((state) => state.spectator);
+  if (activeIndexes.length !== 2 || byeIndex < 0) {
+    throw new Error('Three-player tournament did not start with one bye spectator and one active match.');
+  }
+
+  await delay(120);
+  const spectatorRoomsPromise = once(clients[byeIndex], 'spectator-rooms', 'tournament spectator room list');
+  clients[byeIndex].emit('request-spectator-rooms');
+  const spectatorRooms = await spectatorRoomsPromise;
+  if (!Array.isArray(spectatorRooms) || !spectatorRooms[0] || !spectatorRooms[0].tournament || spectatorRooms[0].tournament.phase !== 'semifinal') {
+    throw new Error('Tournament match was not listed at the top of spectator rooms with round metadata.');
+  }
+
+  clients[activeIndexes[1]].disconnect();
+  await delay(300);
+
+  const finalistIndexes = [activeIndexes[0], byeIndex];
+  const finalStates = await Promise.all(finalistIndexes.map((index) => waitForState(clients[index], (payload) => {
+    if (!payload.tournament || payload.tournament.status !== 'playing' || payload.spectator) return false;
+    const matches = payload.tournament.rounds.flatMap((round) => round.matches || []);
+    const current = matches.find((match) => match.id === payload.tournament.viewingMatchId);
+    return current && current.label === '결승' && current.status === 'playing';
+  }, `tournament final state ${index}`)));
+  if (finalStates.some((state) => state.maxSpectators !== null)) {
+    throw new Error('Tournament final did not expose unlimited spectators.');
+  }
+
+  const winnerIndex = activeIndexes[0];
+  const loserIndex = byeIndex;
+  const winnerEventPromise = once(clients[winnerIndex], 'tournament-winner', 'latest tournament winner event');
+  clients[loserIndex].disconnect();
+  const winnerEvent = await winnerEventPromise;
+  if (!winnerEvent || winnerEvent.username !== accounts[winnerIndex].user.username || !winnerEvent.wonAt) {
+    throw new Error('Tournament winner event did not include the expected champion and date.');
+  }
+
+  await delay(200);
+  const winnerProfile = await fetchSessionUser(accounts[winnerIndex]);
+  if (winnerProfile.trophies !== 20 || winnerProfile.tournamentWins !== 1) {
+    throw new Error(`Tournament winner profile expected 20 trophies and 1 win. Got ${winnerProfile.trophies}, ${winnerProfile.tournamentWins}.`);
+  }
+  const latestWinner = await fetchTournamentWinner(accounts[winnerIndex]);
+  if (!latestWinner || latestWinner.username !== accounts[winnerIndex].user.username || !latestWinner.wonAt) {
+    throw new Error('Tournament latest winner API did not return the final winner.');
+  }
+
+  for (const client of clients) client.disconnect();
+  return {
+    pool: 15,
+    winner: winnerProfile.username,
+    trophies: winnerProfile.trophies,
+    tournamentWins: winnerProfile.tournamentWins
+  };
+}
+
+function seedSmokeTrophies(accounts, trophies) {
+  const database = new Database(path.join(dataDir, 'game.sqlite'));
+  const statement = database.prepare('UPDATE users SET trophies = ?, tier = ?, updated_at = ? WHERE username = ?');
+  const now = new Date().toISOString();
+  for (const account of accounts) {
+    statement.run(trophies, trophies >= 10 ? '브론즈' : '마이어스', now, account.user.username);
+  }
+  database.close();
+}
+
+async function fetchSessionUser(account) {
+  const response = await fetch(`${url}/api/me`, {
+    headers: { Cookie: account.cookie }
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || 'Session user lookup failed.');
+  return body.user;
+}
+
+async function fetchTournamentWinner(account) {
+  const response = await fetch(`${url}/api/tournament-winner`, {
+    headers: { Cookie: account.cookie }
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || 'Tournament winner lookup failed.');
+  return body.winner;
 }
 
 function effectiveSmokeCost(player, card) {

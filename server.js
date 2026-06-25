@@ -56,8 +56,10 @@ const KKONGHO_MAX_ELIXIR_BONUS = 2;
 const DEFAULT_DEPLOY_DELAY_MS = 650;
 const ROOM_MODES = {
   '1v1': { key: '1v1', label: '1대1', maxPlayers: 2 },
-  '2v2': { key: '2v2', label: '2대2', maxPlayers: 4 }
+  '2v2': { key: '2v2', label: '2대2', maxPlayers: 4 },
+  tournament: { key: 'tournament', label: '토너먼트 모드', maxPlayers: 0 }
 };
+const TOURNAMENT_MIN_PARTICIPANTS = 3;
 
 const TIER_DEFINITIONS = [
   { key: 'mayers', name: '마이어스', icon: '🪨', min: 0, max: 9 },
@@ -416,6 +418,7 @@ db.exec(`
     trophies INTEGER NOT NULL DEFAULT 0,
     tier TEXT NOT NULL DEFAULT '마이어스',
     loss_counter INTEGER NOT NULL DEFAULT 0,
+    tournament_wins INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -431,8 +434,31 @@ db.exec(`
     cards TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS tournaments (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    creator_user_id INTEGER NOT NULL,
+    participant_target INTEGER NOT NULL,
+    stake INTEGER NOT NULL,
+    pool INTEGER NOT NULL DEFAULT 0,
+    state_json TEXT NOT NULL,
+    bracket_json TEXT NOT NULL,
+    winner_user_id INTEGER,
+    winner_username TEXT,
+    winner_won_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    started_at TEXT,
+    ended_at TEXT,
+    FOREIGN KEY (creator_user_id) REFERENCES users(id),
+    FOREIGN KEY (winner_user_id) REFERENCES users(id)
   )
 `);
+
+ensureUserColumn('tournament_wins', 'INTEGER NOT NULL DEFAULT 0');
 
 const statements = {
   createUser: db.prepare(`
@@ -446,6 +472,26 @@ const statements = {
     FROM users
     ORDER BY trophies DESC, username COLLATE NOCASE ASC
   `),
+  createTournament: db.prepare(`
+    INSERT INTO tournaments (
+      id, name, status, creator_user_id, participant_target, stake, pool,
+      state_json, bracket_json, created_at, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `),
+  updateTournamentState: db.prepare(`
+    UPDATE tournaments
+    SET status = ?, pool = ?, state_json = ?, bracket_json = ?, winner_user_id = ?,
+      winner_username = ?, winner_won_at = ?, updated_at = ?, started_at = ?, ended_at = ?
+    WHERE id = ?
+  `),
+  latestTournamentWinner: db.prepare(`
+    SELECT winner_user_id, winner_username, winner_won_at
+    FROM tournaments
+    WHERE status = 'completed' AND winner_user_id IS NOT NULL
+    ORDER BY winner_won_at DESC, ended_at DESC
+    LIMIT 1
+  `),
   getDeck: db.prepare('SELECT cards FROM user_decks WHERE user_id = ?'),
   upsertDeck: db.prepare(`
     INSERT INTO user_decks (user_id, cards, updated_at)
@@ -455,6 +501,11 @@ const statements = {
   updateUserStats: db.prepare(`
     UPDATE users
     SET trophies = ?, tier = ?, loss_counter = ?, updated_at = ?
+    WHERE id = ?
+  `),
+  incrementTournamentWins: db.prepare(`
+    UPDATE users
+    SET tournament_wins = tournament_wins + 1, updated_at = ?
     WHERE id = ?
   `)
 };
@@ -622,6 +673,10 @@ app.get('/api/rankings', requireAuthApi, (req, res) => {
   res.json({ rankings: publicRankings() });
 });
 
+app.get('/api/tournament-winner', requireAuthApi, (req, res) => {
+  res.json({ winner: publicLatestTournamentWinner() });
+});
+
 app.get('/api/tiers', requireAuthApi, (req, res) => {
   res.json({ tiers: publicTiers(), user: publicUser(req.user) });
 });
@@ -675,6 +730,7 @@ app.use((err, req, res, next) => {
 const httpRateBuckets = new Map();
 const socketRateBuckets = new Map();
 const rooms = new Map();
+const tournaments = new Map();
 
 io.use((socket, next) => {
   const sessionData = socket.request.session;
@@ -694,6 +750,7 @@ io.use((socket, next) => {
   socket.data.slot = null;
   socket.data.roomId = null;
   socket.data.spectatingRoomId = null;
+  socket.data.tournamentId = null;
   socket.data.lastPlayCardAt = 0;
   socket.data.lastChatAt = 0;
   socket.data.badEventCount = 0;
@@ -705,9 +762,11 @@ io.on('connection', (socket) => {
     arena: ARENA,
     cards: CARDS,
     deckCostRange: [DECK_COST_MIN, DECK_COST_MAX],
-    user: socket.data.user
+    user: socket.data.user,
+    tournamentWinner: publicLatestTournamentWinner()
   });
   socket.emit('profile', socket.data.user);
+  socket.emit('tournament-winner', publicLatestTournamentWinner());
   socket.emit('rooms', publicRooms());
   socket.emit('spectator-rooms', publicSpectatorRooms());
 
@@ -729,6 +788,11 @@ io.on('connection', (socket) => {
   socket.on('watch-room', (payload = {}) => {
     if (!canUseSocketAction(socket)) return;
     joinSpectatorRoom(socket, payload);
+  });
+
+  socket.on('watch-tournament-match', (payload = {}) => {
+    if (!canUseSocketAction(socket)) return;
+    switchTournamentSpectatorMatch(socket, payload);
   });
 
   socket.on('leave-room', () => {
@@ -766,6 +830,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    markTournamentParticipantDisconnected(socket);
     leaveCurrentRoom(socket, { disconnecting: true });
   });
 });
@@ -788,6 +853,10 @@ function createRoomForSocket(socket, payload) {
   const password = normalizeRoomPassword(payload.password);
   const mode = normalizeRoomMode(payload.mode);
   const modeDefinition = ROOM_MODES[mode];
+  if (mode === 'tournament') {
+    createTournamentRoomForSocket(socket, payload, { name, password });
+    return;
+  }
   const requestedTeam = mode === '2v2' ? normalizeRoomTeam(payload.team) : null;
   if (mode === '2v2' && requestedTeam === null) {
     socket.emit('room-error', '2대2는 시작할 팀을 선택하세요.');
@@ -810,6 +879,90 @@ function createRoomForSocket(socket, payload) {
   if (slot === null) {
     rooms.delete(room.id);
     socket.emit('room-error', '선택한 팀에 들어갈 수 없습니다.');
+    return;
+  }
+  socket.emit('room-joined', { room: publicRoomDetail(room), slot: socket.data.slot });
+  broadcastState(room);
+  emitRooms();
+}
+
+function createTournamentRoomForSocket(socket, payload, normalized) {
+  const creator = statements.getUserById.get(socket.data.user.id);
+  if (!creator) {
+    socket.emit('room-error', '계정을 찾을 수 없습니다.');
+    return;
+  }
+
+  const participantTarget = normalizeTournamentParticipantCount(payload.participantCount);
+  if (!participantTarget) {
+    socket.emit('room-error', '토너먼트 참가 인원은 3명 이상이어야 합니다.');
+    return;
+  }
+
+  const stake = normalizeTournamentStake(payload.stake);
+  if (stake === null) {
+    socket.emit('room-error', '트로피 참가비는 0개 이상 정수로 입력하세요.');
+    return;
+  }
+  if (Math.max(0, Number(creator.trophies) || 0) < stake) {
+    socket.emit('room-error', '참가비로 걸 트로피가 부족합니다.');
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const room = {
+    id: crypto.randomUUID(),
+    name: normalized.name,
+    mode: 'tournament',
+    modeLabel: ROOM_MODES.tournament.label,
+    maxPlayers: participantTarget,
+    passwordHash: normalized.password ? bcrypt.hashSync(normalized.password, 8) : '',
+    createdAt: Date.now(),
+    creatorUserId: creator.id,
+    tournamentId: null,
+    spectators: new Map(),
+    game: createGameState('tournament')
+  };
+  room.game.message = waitingRoomMessage(room);
+
+  const tournament = createTournamentRecord(room, {
+    creatorUserId: creator.id,
+    participantTarget,
+    stake,
+    now
+  });
+  room.tournamentId = tournament.id;
+  tournaments.set(tournament.id, tournament);
+
+  try {
+    statements.createTournament.run(
+      tournament.id,
+      tournament.name,
+      tournament.status,
+      tournament.creatorUserId,
+      tournament.participantTarget,
+      tournament.stake,
+      tournament.pool,
+      JSON.stringify(persistableTournamentState(tournament)),
+      JSON.stringify(tournament.rounds),
+      now,
+      now
+    );
+  } catch (error) {
+    tournaments.delete(tournament.id);
+    throw error;
+  }
+
+  rooms.set(room.id, room);
+  const joinResult = assignSocketToTournamentRoom(socket, room);
+  if (!joinResult.ok) {
+    rooms.delete(room.id);
+    tournament.status = 'cancelled';
+    tournament.endedAt = new Date().toISOString();
+    tournament.updatedAt = tournament.endedAt;
+    persistTournamentState(tournament);
+    tournaments.delete(tournament.id);
+    socket.emit('room-error', joinResult.error || '토너먼트 방을 만들 수 없습니다.');
     return;
   }
   socket.emit('room-joined', { room: publicRoomDetail(room), slot: socket.data.slot });
@@ -851,6 +1004,24 @@ function joinRoomForSocket(socket, payload) {
     return;
   }
 
+  if (room.mode === 'tournament') {
+    leaveCurrentRoom(socket, { disconnecting: false, silent: true });
+    const joinResult = assignSocketToTournamentRoom(socket, room);
+    if (!joinResult.ok) {
+      socket.emit('room-error', joinResult.error || '토너먼트 방에 참가할 수 없습니다.');
+      emitRooms();
+      return;
+    }
+    room.game.message = waitingRoomMessage(room);
+    socket.emit('room-joined', { room: publicRoomDetail(room), slot: socket.data.slot });
+    broadcastState(room);
+    if (getConnectedPlayerCount(room) === room.maxPlayers) {
+      startTournament(room);
+    }
+    emitRooms();
+    return;
+  }
+
   leaveCurrentRoom(socket, { disconnecting: false, silent: true });
   const slot = assignSocketToRoom(socket, room, requestedTeam);
   if (slot === null) {
@@ -881,7 +1052,8 @@ function joinSpectatorRoom(socket, payload) {
     emitRooms();
     return;
   }
-  if (getSpectatorCount(room) >= MAX_SPECTATORS_PER_ROOM && !(room.spectators && room.spectators.has(socket.id))) {
+  const maxSpectators = getMaxSpectators(room);
+  if (Number.isFinite(maxSpectators) && getSpectatorCount(room) >= maxSpectators && !(room.spectators && room.spectators.has(socket.id))) {
     socket.emit('room-error', '관전자 자리가 가득 찼습니다.');
     emitRooms();
     return;
@@ -1045,6 +1217,22 @@ function leaveCurrentRoom(socket, options = {}) {
   if (room && slot !== null && slot !== undefined) {
     const player = room.game.players[slot];
     if (player && player.socketId === socket.id) {
+      if (room.mode === 'tournament' && room.game.status === 'waiting') {
+        const result = removeTournamentWaitingParticipant(socket, room, player, options);
+        if (!result || !result.cleanedUp) {
+          socket.leave(roomChannel(roomId));
+          socket.data.roomId = null;
+          socket.data.slot = null;
+          if (!options.disconnecting && !options.silent) {
+            socket.emit('room-left');
+          }
+        }
+        emitRooms();
+        return;
+      }
+      if (room.tournament && room.game.status === 'playing') {
+        markTournamentParticipantDisconnected(socket);
+      }
       player.connected = false;
       player.socketId = null;
       if (room.game.status === 'playing') {
@@ -2518,6 +2706,10 @@ function checkWinConditions(room, now) {
 function endMatch(room, winner, reason) {
   const game = room.game;
   if (game.status === 'ended') return;
+  if (room.tournament && winner === null) {
+    winner = tournamentTiebreakerWinner(room);
+    reason = `${reason} · 토너먼트 판정승`;
+  }
   game.status = 'ended';
   game.winner = winner;
   game.reason = reason;
@@ -2527,10 +2719,18 @@ function endMatch(room, winner, reason) {
   for (const player of game.players) {
     player.rematchAccepted = false;
   }
-  settleTrophies(room, winner, reason);
+  if (room.tournament) {
+    game.trophyChanges = game.players.map(() => null);
+    game.trophiesSettled = true;
+  } else {
+    settleTrophies(room, winner, reason);
+  }
   broadcastEffect(room, { type: 'match-end', winner, reason });
   broadcastState(room);
   emitRooms();
+  if (room.tournament) {
+    completeTournamentMatchFromRoom(room, winner, reason);
+  }
 }
 
 function requestRematch(socket) {
@@ -2538,6 +2738,10 @@ function requestRematch(socket) {
   const slot = socket.data.slot;
   if (!room || slot === null || slot === undefined || room.game.status !== 'ended') {
     registerBadSocketEvent(socket);
+    return;
+  }
+  if (room.tournament) {
+    socket.emit('room-error', '토너먼트 경기는 재경기를 할 수 없습니다.');
     return;
   }
   if (getConnectedPlayerCount(room) !== room.maxPlayers) {
@@ -2775,7 +2979,7 @@ function serializeState(room, viewerSlot = null, options = {}) {
     maxPlayers: room.maxPlayers,
     spectator,
     spectatorCount: getSpectatorCount(room),
-    maxSpectators: MAX_SPECTATORS_PER_ROOM,
+    maxSpectators: getMaxSpectators(room),
     status: game.status,
     message: game.message,
     winner: game.winner,
@@ -2786,6 +2990,7 @@ function serializeState(room, viewerSlot = null, options = {}) {
     chatMessages: visibleChatMessages(room, viewerSlot, spectator),
     freezeMs: Math.max(0, game.freezeUntil - now),
     trophyChange: spectator || viewerSlot === null || viewerSlot === undefined ? null : game.trophyChanges && game.trophyChanges[viewerSlot],
+    tournament: room.tournamentId ? publicTournamentState(tournaments.get(room.tournamentId), room.tournament && room.tournament.matchId) : null,
     players: game.players.map((player) => ({
       slot: player.slot,
       team: player.team,
@@ -2855,7 +3060,8 @@ function publicUser(user) {
       icon: nextTier.icon,
       min: nextTier.min
     } : null,
-    lossCounter: Math.max(0, Number(user.loss_counter) || 0)
+    lossCounter: Math.max(0, Number(user.loss_counter) || 0),
+    tournamentWins: Math.max(0, Number(user.tournament_wins) || 0)
   };
 }
 
@@ -2871,6 +3077,16 @@ function publicRankings() {
       tierIcon: tier.icon
     };
   });
+}
+
+function publicLatestTournamentWinner() {
+  const row = statements.latestTournamentWinner.get();
+  if (!row || !row.winner_user_id) return null;
+  return {
+    userId: row.winner_user_id,
+    username: row.winner_username,
+    wonAt: row.winner_won_at
+  };
 }
 
 function publicTiers() {
@@ -3045,8 +3261,12 @@ function publicRooms() {
 
 function publicSpectatorRooms() {
   return [...rooms.values()]
-    .filter((room) => room.game.status === 'playing' && getSpectatorCount(room) < MAX_SPECTATORS_PER_ROOM)
-    .sort((a, b) => b.game.startedAt - a.game.startedAt)
+    .filter((room) => room.game.status === 'playing' && canListSpectatorRoom(room))
+    .sort((a, b) => {
+      const tournamentOrder = Number(Boolean(b.tournament)) - Number(Boolean(a.tournament));
+      if (tournamentOrder !== 0) return tournamentOrder;
+      return b.game.startedAt - a.game.startedAt;
+    })
     .map(publicSpectatorRoomDetail);
 }
 
@@ -3058,20 +3278,28 @@ function publicSpectatorRoomDetail(room) {
       team: player.team,
       connected: player.connected
     }));
+  const maxSpectators = getMaxSpectators(room);
   return {
     id: room.id,
     name: room.name,
     mode: room.mode,
     modeLabel: room.modeLabel,
     battleLabel: spectatorBattleLabel(room),
+    tournament: room.tournament ? {
+      id: room.tournament.id,
+      matchId: room.tournament.matchId,
+      roundLabel: room.tournament.roundLabel,
+      phase: room.tournament.phase
+    } : null,
     players,
     spectatorCount: getSpectatorCount(room),
-    maxSpectators: MAX_SPECTATORS_PER_ROOM,
-    full: getSpectatorCount(room) >= MAX_SPECTATORS_PER_ROOM
+    maxSpectators,
+    full: Number.isFinite(maxSpectators) && getSpectatorCount(room) >= maxSpectators
   };
 }
 
 function publicRoomDetail(room) {
+  const maxSpectators = getMaxSpectators(room);
   return {
     id: room.id,
     name: room.name,
@@ -3092,8 +3320,12 @@ function publicRoomDetail(room) {
     teams: room.mode === '2v2' ? publicRoomTeams(room) : [],
     playerCount: getConnectedPlayerCount(room),
     maxPlayers: room.maxPlayers,
+    stake: room.mode === 'tournament' && room.tournamentId && tournaments.get(room.tournamentId)
+      ? tournaments.get(room.tournamentId).stake
+      : 0,
+    tournament: room.tournamentId ? publicTournamentState(tournaments.get(room.tournamentId), room.tournament && room.tournament.matchId) : null,
     spectatorCount: getSpectatorCount(room),
-    maxSpectators: MAX_SPECTATORS_PER_ROOM
+    maxSpectators
   };
 }
 
@@ -3112,6 +3344,11 @@ function getSpectatorCount(room) {
 
 function spectatorBattleLabel(room) {
   const players = room.game.players.filter((player) => player.userId);
+  if (room.tournament) {
+    const first = players[0] ? players[0].username : 'Player 1';
+    const second = players[1] ? players[1].username : 'Player 2';
+    return `${room.tournament.roundLabel} · ${first} vs ${second}`;
+  }
   if (room.mode === '2v2') {
     const bottom = players.filter((player) => player.team === 0).map((player) => player.username).join(', ') || '아래 진영';
     const top = players.filter((player) => player.team === 1).map((player) => player.username).join(', ') || '위 진영';
@@ -3153,8 +3390,734 @@ function getKnownPlayerCount(room) {
 }
 
 function waitingRoomMessage(room) {
+  if (room.mode === 'tournament') {
+    return `${getConnectedPlayerCount(room)}/${room.maxPlayers} 명 참가중`;
+  }
   const remaining = Math.max(0, room.maxPlayers - getConnectedPlayerCount(room));
   return remaining > 0 ? `${remaining}명 더 들어오면 시작합니다` : '전투 준비 중';
+}
+
+function createTournamentRecord(room, options) {
+  return {
+    id: room.id,
+    lobbyRoomId: room.id,
+    name: room.name,
+    status: 'waiting',
+    creatorUserId: options.creatorUserId,
+    participantTarget: options.participantTarget,
+    stake: options.stake,
+    pool: 0,
+    participants: [],
+    rounds: [],
+    currentRoundIndex: -1,
+    activeMatchIds: [],
+    winner: null,
+    winnerWonAt: null,
+    createdAt: options.now,
+    updatedAt: options.now,
+    startedAt: null,
+    endedAt: null
+  };
+}
+
+function assignSocketToTournamentRoom(socket, room) {
+  const tournament = tournaments.get(room.tournamentId);
+  if (!tournament || tournament.status !== 'waiting') {
+    return { ok: false, error: '참가할 수 없는 토너먼트입니다.' };
+  }
+
+  const user = statements.getUserById.get(socket.data.user.id);
+  if (!user) return { ok: false, error: '계정을 찾을 수 없습니다.' };
+  if (tournament.participants.some((participant) => participant.userId === user.id && participant.connected)) {
+    return { ok: false, error: '이미 참가 중인 토너먼트입니다.' };
+  }
+  if (getConnectedPlayerCount(room) >= room.maxPlayers) {
+    return { ok: false, error: '이미 가득 찬 토너먼트입니다.' };
+  }
+
+  const profile = deductTournamentStake(user.id, tournament.stake);
+  if (!profile) {
+    return { ok: false, error: '참가비로 걸 트로피가 부족합니다.' };
+  }
+
+  let slot = room.game.players.findIndex((player) => !player.userId);
+  if (slot < 0) {
+    slot = room.game.players.length;
+    room.game.players.push(createPlayer(slot));
+  }
+
+  const player = room.game.players[slot];
+  Object.assign(player, profile, {
+    slot,
+    userId: profile.id,
+    socketId: socket.id,
+    connected: true
+  });
+
+  const participant = {
+    userId: profile.id,
+    username: profile.username,
+    trophies: profile.trophies,
+    tier: profile.tier,
+    tierIcon: profile.tierIcon,
+    slot,
+    socketId: socket.id,
+    connected: true,
+    stakePaid: true,
+    eliminated: false,
+    currentMatchId: null
+  };
+  tournament.participants.push(participant);
+  tournament.pool = tournament.participants.filter((candidate) => candidate.stakePaid).length * tournament.stake;
+  tournament.updatedAt = new Date().toISOString();
+
+  socket.data.user = profile;
+  socket.data.roomId = room.id;
+  socket.data.slot = slot;
+  socket.data.tournamentId = tournament.id;
+  socket.join(roomChannel(room.id));
+  socket.emit('profile', profile);
+  persistTournamentState(tournament);
+  return { ok: true, slot };
+}
+
+function removeTournamentWaitingParticipant(socket, room, player, options = {}) {
+  const tournament = tournaments.get(room.tournamentId);
+  if (!tournament || tournament.status !== 'waiting') return { cleanedUp: false };
+  const participant = tournament.participants.find((candidate) => candidate.userId === player.userId);
+  if (!participant) return { cleanedUp: false };
+
+  if (room.creatorUserId === player.userId) {
+    cancelTournamentBeforeStart(room, '방장이 나가 토너먼트가 취소되었습니다.');
+    return { cleanedUp: true };
+  }
+
+  refundTournamentParticipant(tournament, participant);
+  participant.connected = false;
+  participant.socketId = null;
+  participant.stakePaid = false;
+  tournament.participants = tournament.participants.filter((candidate) => candidate.userId !== participant.userId);
+  tournament.pool = tournament.participants.filter((candidate) => candidate.stakePaid).length * tournament.stake;
+  tournament.updatedAt = new Date().toISOString();
+  clearRoomPlayer(player);
+  room.game.message = waitingRoomMessage(room);
+  socket.data.tournamentId = null;
+  emitProfileToUser(participant.userId);
+  persistTournamentState(tournament);
+  if (!options.disconnecting) broadcastState(room);
+  return { cleanedUp: false };
+}
+
+function cancelTournamentBeforeStart(room, reason) {
+  const tournament = tournaments.get(room.tournamentId);
+  if (!tournament || tournament.status !== 'waiting') return;
+  tournament.status = 'cancelled';
+  tournament.endedAt = new Date().toISOString();
+  tournament.updatedAt = tournament.endedAt;
+
+  for (const participant of tournament.participants) {
+    refundTournamentParticipant(tournament, participant);
+    const participantSocket = participant.socketId ? io.of('/').sockets.get(participant.socketId) : null;
+    if (participantSocket) {
+      participantSocket.leave(roomChannel(room.id));
+      participantSocket.data.roomId = null;
+      participantSocket.data.slot = null;
+      participantSocket.data.tournamentId = null;
+      participantSocket.emit('room-error', reason);
+      participantSocket.emit('room-left');
+    }
+    emitProfileToUser(participant.userId);
+  }
+
+  tournament.pool = 0;
+  rooms.delete(room.id);
+  persistTournamentState(tournament);
+}
+
+function startTournament(room) {
+  const tournament = tournaments.get(room.tournamentId);
+  if (!tournament || tournament.status !== 'waiting') return;
+  const readyParticipants = tournament.participants.filter((participant) => participant.connected && participant.stakePaid);
+  if (readyParticipants.length !== tournament.participantTarget) return;
+
+  const now = new Date().toISOString();
+  tournament.status = 'playing';
+  tournament.startedAt = now;
+  tournament.updatedAt = now;
+  tournament.pool = readyParticipants.length * tournament.stake;
+  room.game.status = 'tournament';
+  room.game.message = '토너먼트 진행 중';
+  rooms.delete(room.id);
+
+  createNextTournamentRound(tournament, readyParticipants.map((participant) => participant.userId));
+  persistTournamentState(tournament);
+  broadcastTournamentState(tournament);
+  emitRooms();
+  startReadyTournamentMatches(tournament);
+}
+
+function createNextTournamentRound(tournament, participantUserIds) {
+  const roundIndex = tournament.rounds.length;
+  const size = participantUserIds.length;
+  const round = {
+    id: `r${roundIndex + 1}`,
+    index: roundIndex,
+    label: tournamentRoundLabel(size),
+    phase: tournamentRoundPhase(size),
+    status: 'upcoming',
+    matches: []
+  };
+
+  const seeded = shuffle([...participantUserIds]);
+  if (seeded.length % 2 === 1) {
+    const byeUserId = seeded.pop();
+    round.matches.push({
+      id: `${round.id}-m1`,
+      roundIndex,
+      matchIndex: 0,
+      label: `${round.label} 부전승`,
+      phase: round.phase,
+      participantUserIds: [byeUserId, null],
+      status: 'completed',
+      bye: true,
+      winnerUserId: byeUserId,
+      loserUserIds: [],
+      roomId: null,
+      score: { reason: '부전승' },
+      startedAt: null,
+      endedAt: new Date().toISOString()
+    });
+  }
+
+  for (let i = 0; i < seeded.length; i += 2) {
+    round.matches.push({
+      id: `${round.id}-m${round.matches.length + 1}`,
+      roundIndex,
+      matchIndex: round.matches.length,
+      label: round.label,
+      phase: round.phase,
+      participantUserIds: [seeded[i], seeded[i + 1]],
+      status: 'upcoming',
+      bye: false,
+      winnerUserId: null,
+      loserUserIds: [],
+      roomId: null,
+      score: null,
+      startedAt: null,
+      endedAt: null
+    });
+  }
+
+  tournament.rounds.push(round);
+  tournament.currentRoundIndex = roundIndex;
+  return round;
+}
+
+function startReadyTournamentMatches(tournament) {
+  if (!tournament || tournament.status !== 'playing') return;
+  const round = tournament.rounds[tournament.currentRoundIndex];
+  if (!round) return;
+
+  const activeMatches = round.matches.filter((match) => match.status === 'playing');
+  if (round.phase === 'regular') {
+    for (const match of round.matches.filter((candidate) => candidate.status === 'upcoming')) {
+      startTournamentMatch(tournament, match);
+    }
+  } else if (activeMatches.length === 0) {
+    const nextMatch = round.matches.find((candidate) => candidate.status === 'upcoming');
+    if (nextMatch) startTournamentMatch(tournament, nextMatch);
+  }
+
+  updateTournamentRoundStatus(round);
+  if (round.matches.every((match) => match.status === 'completed')) {
+    advanceTournamentAfterRound(tournament, round);
+    return;
+  }
+  routeTournamentSpectators(tournament);
+  persistTournamentState(tournament);
+  broadcastTournamentState(tournament);
+  emitRooms();
+}
+
+function startTournamentMatch(tournament, match) {
+  if (!match || match.status !== 'upcoming') return;
+  const participants = match.participantUserIds
+    .filter((userId) => userId)
+    .map((userId) => tournament.participants.find((participant) => participant.userId === userId));
+  if (participants.length < 2) return;
+
+  const connected = participants.filter((participant) => participant && participant.connected && participant.socketId && io.of('/').sockets.has(participant.socketId));
+  if (connected.length < 2) {
+    const winner = connected[0] || participants[0];
+    completeTournamentMatch(tournament, match, winner.userId, '상대 연결 종료', {
+      reason: '상대 연결 종료',
+      forfeit: true
+    });
+    return;
+  }
+
+  const phase = match.phase;
+  const room = {
+    id: crypto.randomUUID(),
+    name: `${tournament.name} · ${match.label}`,
+    mode: '1v1',
+    modeLabel: '토너먼트 경기',
+    maxPlayers: 2,
+    passwordHash: '',
+    createdAt: Date.now(),
+    spectators: new Map(),
+    tournamentId: tournament.id,
+    tournament: {
+      id: tournament.id,
+      matchId: match.id,
+      roundIndex: match.roundIndex,
+      roundLabel: match.label,
+      phase
+    },
+    game: createGameState('1v1')
+  };
+  rooms.set(room.id, room);
+
+  for (const participant of participants) {
+    const participantSocket = io.of('/').sockets.get(participant.socketId);
+    if (!participantSocket) continue;
+    detachSocketForTournamentTransition(participantSocket);
+    const slot = assignSocketToRoom(participantSocket, room, null);
+    participant.currentMatchId = match.id;
+    participantSocket.data.tournamentId = tournament.id;
+    participantSocket.emit('room-joined', { room: publicRoomDetail(room), slot });
+  }
+
+  match.status = 'playing';
+  match.roomId = room.id;
+  match.startedAt = new Date().toISOString();
+  tournament.activeMatchIds = activeTournamentMatches(tournament).map((candidate) => candidate.id);
+  startMatch(room);
+}
+
+function completeTournamentMatchFromRoom(room, winnerTeam, reason) {
+  const tournament = tournaments.get(room.tournamentId);
+  if (!tournament) return;
+  const match = findTournamentMatch(tournament, room.tournament.matchId);
+  if (!match || match.status === 'completed') return;
+  const winnerPlayer = room.game.players.find((player) => player.team === winnerTeam && player.userId);
+  if (!winnerPlayer) return;
+  completeTournamentMatch(tournament, match, winnerPlayer.userId, reason, {
+    reason,
+    winnerTeam,
+    towerHp: [totalTowerHp(room.game, 0), totalTowerHp(room.game, 1)]
+  });
+}
+
+function completeTournamentMatch(tournament, match, winnerUserId, reason, score = {}) {
+  if (!tournament || !match || match.status === 'completed') return;
+  match.status = 'completed';
+  match.winnerUserId = winnerUserId;
+  match.loserUserIds = match.participantUserIds.filter((userId) => userId && userId !== winnerUserId);
+  match.score = { ...score, reason };
+  match.endedAt = new Date().toISOString();
+
+  for (const participant of tournament.participants) {
+    if (participant.currentMatchId === match.id) participant.currentMatchId = null;
+    if (match.loserUserIds.includes(participant.userId)) participant.eliminated = true;
+  }
+
+  tournament.activeMatchIds = activeTournamentMatches(tournament).map((candidate) => candidate.id);
+  const round = tournament.rounds[match.roundIndex];
+  updateTournamentRoundStatus(round);
+
+  if (round && round.matches.every((candidate) => candidate.status === 'completed')) {
+    advanceTournamentAfterRound(tournament, round);
+  } else {
+    startReadyTournamentMatches(tournament);
+  }
+}
+
+function advanceTournamentAfterRound(tournament, round) {
+  if (!round) return;
+  round.status = 'completed';
+  const winners = round.matches
+    .map((match) => match.winnerUserId)
+    .filter((userId) => userId);
+
+  if (winners.length <= 1) {
+    finishTournament(tournament, winners[0]);
+    return;
+  }
+
+  createNextTournamentRound(tournament, winners);
+  persistTournamentState(tournament);
+  broadcastTournamentState(tournament);
+  startReadyTournamentMatches(tournament);
+}
+
+function finishTournament(tournament, winnerUserId) {
+  if (!tournament || tournament.status === 'completed') return;
+  const winner = tournament.participants.find((participant) => participant.userId === winnerUserId);
+  const now = new Date().toISOString();
+  tournament.status = 'completed';
+  tournament.activeMatchIds = [];
+  tournament.winner = winner ? {
+    userId: winner.userId,
+    username: winner.username
+  } : null;
+  tournament.winnerWonAt = now;
+  tournament.endedAt = now;
+  tournament.updatedAt = now;
+
+  if (winner) {
+    awardTournamentWinner(winner.userId, tournament.pool);
+    emitProfileToUser(winner.userId);
+    for (const participant of tournament.participants) {
+      if (participant.userId !== winner.userId) emitProfileToUser(participant.userId);
+    }
+  }
+
+  persistTournamentState(tournament);
+  broadcastTournamentState(tournament);
+  io.emit('tournament-winner', publicLatestTournamentWinner());
+  emitRooms();
+}
+
+function routeTournamentSpectators(tournament) {
+  const activeRooms = activeTournamentMatches(tournament)
+    .map((match) => rooms.get(match.roomId))
+    .filter((room) => room && room.game.status === 'playing');
+  if (activeRooms.length === 0) return;
+
+  for (const participant of tournament.participants) {
+    if (!participant.connected || !participant.socketId) continue;
+    const participantSocket = io.of('/').sockets.get(participant.socketId);
+    if (!participantSocket) continue;
+    const playingMatch = activeTournamentMatches(tournament).find((match) => {
+      return match.participantUserIds.includes(participant.userId);
+    });
+    if (playingMatch) continue;
+
+    const currentSpectating = participantSocket.data.spectatingRoomId
+      ? rooms.get(participantSocket.data.spectatingRoomId)
+      : null;
+    if (currentSpectating && currentSpectating.tournamentId === tournament.id && currentSpectating.game.status === 'playing') continue;
+    joinTournamentSpectatorSocket(participantSocket, activeRooms[0]);
+  }
+}
+
+function switchTournamentSpectatorMatch(socket, payload = {}) {
+  const tournament = tournamentForSocket(socket, payload.tournamentId);
+  if (!tournament || tournament.status !== 'playing') {
+    socket.emit('room-error', '전환할 토너먼트 경기가 없습니다.');
+    return;
+  }
+  if (isSocketPlayingActiveTournamentMatch(socket, tournament)) {
+    socket.emit('room-error', '진행 중인 본인 경기는 관전 전환을 할 수 없습니다.');
+    return;
+  }
+
+  const activeRooms = activeTournamentMatches(tournament)
+    .map((match) => rooms.get(match.roomId))
+    .filter((room) => room && room.game.status === 'playing');
+  if (activeRooms.length === 0) {
+    socket.emit('room-error', '진행 중인 토너먼트 경기가 없습니다.');
+    return;
+  }
+
+  const requestedMatchId = String(payload.matchId || '');
+  let nextRoom = requestedMatchId
+    ? activeRooms.find((room) => room.tournament && room.tournament.matchId === requestedMatchId)
+    : null;
+  if (!nextRoom) {
+    const currentRoomId = socket.data.spectatingRoomId || socket.data.roomId;
+    const currentIndex = Math.max(0, activeRooms.findIndex((room) => room.id === currentRoomId));
+    const direction = payload.direction === 'prev' ? -1 : 1;
+    nextRoom = activeRooms[(currentIndex + direction + activeRooms.length) % activeRooms.length];
+  }
+  joinTournamentSpectatorSocket(socket, nextRoom);
+}
+
+function joinTournamentSpectatorSocket(socket, room) {
+  if (!room || !room.tournament || room.game.status !== 'playing') return;
+  detachSocketForTournamentTransition(socket);
+  if (!room.spectators) room.spectators = new Map();
+  room.spectators.set(socket.id, {
+    userId: socket.data.user.id,
+    username: socket.data.user.username
+  });
+  socket.data.spectatingRoomId = room.id;
+  socket.data.roomId = null;
+  socket.data.slot = null;
+  socket.data.tournamentId = room.tournament.id;
+  socket.join(roomChannel(room.id));
+  socket.emit('spectator-joined', { room: publicRoomDetail(room), spectator: true });
+  socket.emit('state', serializeState(room, null, { spectator: true }));
+  broadcastSpectatorCount(room);
+  broadcastState(room);
+  emitRooms();
+}
+
+function detachSocketForTournamentTransition(socket) {
+  if (socket.data.spectatingRoomId) {
+    const spectatingRoom = rooms.get(socket.data.spectatingRoomId);
+    if (spectatingRoom && spectatingRoom.spectators) {
+      spectatingRoom.spectators.delete(socket.id);
+      broadcastSpectatorCount(spectatingRoom);
+      broadcastState(spectatingRoom);
+    }
+    socket.leave(roomChannel(socket.data.spectatingRoomId));
+    socket.data.spectatingRoomId = null;
+  }
+
+  if (socket.data.roomId) {
+    socket.leave(roomChannel(socket.data.roomId));
+    socket.data.roomId = null;
+    socket.data.slot = null;
+  }
+}
+
+function markTournamentParticipantDisconnected(socket) {
+  const tournamentId = socket.data.tournamentId;
+  if (!tournamentId) return;
+  const tournament = tournaments.get(tournamentId);
+  if (!tournament || tournament.status !== 'playing') return;
+  const participant = tournament.participants.find((candidate) => candidate.userId === socket.data.user.id);
+  if (!participant) return;
+  participant.connected = false;
+  participant.socketId = null;
+  participant.currentMatchId = null;
+  tournament.updatedAt = new Date().toISOString();
+  persistTournamentState(tournament);
+}
+
+function activeTournamentMatches(tournament) {
+  return tournament.rounds
+    .flatMap((round) => round.matches)
+    .filter((match) => match.status === 'playing');
+}
+
+function findTournamentMatch(tournament, matchId) {
+  return tournament.rounds
+    .flatMap((round) => round.matches)
+    .find((match) => match.id === matchId);
+}
+
+function updateTournamentRoundStatus(round) {
+  if (!round) return;
+  if (round.matches.every((match) => match.status === 'completed')) {
+    round.status = 'completed';
+  } else if (round.matches.some((match) => match.status === 'playing')) {
+    round.status = 'playing';
+  } else {
+    round.status = 'upcoming';
+  }
+}
+
+function tournamentRoundLabel(size) {
+  if (size <= 2) return '결승';
+  if (size <= 4) return '4강';
+  return `${nextPowerOfTwo(size)}강`;
+}
+
+function tournamentRoundPhase(size) {
+  if (size <= 2) return 'final';
+  if (size <= 4) return 'semifinal';
+  return 'regular';
+}
+
+function nextPowerOfTwo(value) {
+  let current = 1;
+  while (current < value) current *= 2;
+  return current;
+}
+
+function tournamentTiebreakerWinner(room) {
+  const hp0 = totalTowerHp(room.game, 0);
+  const hp1 = totalTowerHp(room.game, 1);
+  if (hp0 !== hp1) return hp0 > hp1 ? 0 : 1;
+  const connected = room.game.players.filter((player) => player.connected && player.userId);
+  if (connected.length === 1) return connected[0].team;
+  return Math.random() < 0.5 ? 0 : 1;
+}
+
+function publicTournamentState(tournament, viewingMatchId = null) {
+  if (!tournament) return null;
+  return {
+    id: tournament.id,
+    name: tournament.name,
+    status: tournament.status,
+    participantCount: tournament.participants.filter((participant) => participant.stakePaid).length,
+    participantTarget: tournament.participantTarget,
+    stake: tournament.stake,
+    pool: tournament.pool,
+    currentRoundIndex: tournament.currentRoundIndex,
+    activeMatchIds: [...tournament.activeMatchIds],
+    viewingMatchId,
+    winner: tournament.winner,
+    winnerWonAt: tournament.winnerWonAt,
+    participants: tournament.participants.map((participant) => ({
+      userId: participant.userId,
+      username: participant.username,
+      connected: participant.connected,
+      eliminated: participant.eliminated
+    })),
+    rounds: tournament.rounds.map((round) => ({
+      id: round.id,
+      index: round.index,
+      label: round.label,
+      phase: round.phase,
+      status: round.status,
+      matches: round.matches.map((match) => ({
+        id: match.id,
+        label: match.label,
+        phase: match.phase,
+        status: match.status,
+        bye: Boolean(match.bye),
+        roomId: match.roomId,
+        participantUserIds: match.participantUserIds,
+        participants: match.participantUserIds.map((userId) => publicTournamentParticipant(tournament, userId)),
+        winnerUserId: match.winnerUserId,
+        loserUserIds: match.loserUserIds,
+        score: match.score
+      }))
+    }))
+  };
+}
+
+function publicTournamentParticipant(tournament, userId) {
+  if (!userId) return null;
+  const participant = tournament.participants.find((candidate) => candidate.userId === userId);
+  if (!participant) return { userId, username: '대기 중' };
+  return {
+    userId: participant.userId,
+    username: participant.username,
+    eliminated: participant.eliminated,
+    connected: participant.connected
+  };
+}
+
+function broadcastTournamentState(tournament) {
+  for (const room of rooms.values()) {
+    if (room.tournamentId === tournament.id) broadcastState(room);
+  }
+  for (const socket of io.of('/').sockets.values()) {
+    if (socket.data.tournamentId === tournament.id) {
+      const currentRoom = socket.data.roomId ? rooms.get(socket.data.roomId) : socket.data.spectatingRoomId ? rooms.get(socket.data.spectatingRoomId) : null;
+      socket.emit('tournament-state', publicTournamentState(tournament, currentRoom && currentRoom.tournament && currentRoom.tournament.matchId));
+    }
+  }
+}
+
+function persistableTournamentState(tournament) {
+  return {
+    id: tournament.id,
+    lobbyRoomId: tournament.lobbyRoomId,
+    name: tournament.name,
+    status: tournament.status,
+    creatorUserId: tournament.creatorUserId,
+    participantTarget: tournament.participantTarget,
+    stake: tournament.stake,
+    pool: tournament.pool,
+    participants: tournament.participants.map((participant) => ({
+      userId: participant.userId,
+      username: participant.username,
+      connected: participant.connected,
+      stakePaid: participant.stakePaid,
+      eliminated: participant.eliminated,
+      currentMatchId: participant.currentMatchId
+    })),
+    currentRoundIndex: tournament.currentRoundIndex,
+    activeMatchIds: tournament.activeMatchIds,
+    winner: tournament.winner,
+    winnerWonAt: tournament.winnerWonAt,
+    createdAt: tournament.createdAt,
+    updatedAt: tournament.updatedAt,
+    startedAt: tournament.startedAt,
+    endedAt: tournament.endedAt
+  };
+}
+
+function persistTournamentState(tournament) {
+  if (!tournament) return;
+  const now = new Date().toISOString();
+  tournament.updatedAt = tournament.updatedAt || now;
+  statements.updateTournamentState.run(
+    tournament.status,
+    tournament.pool,
+    JSON.stringify(persistableTournamentState(tournament)),
+    JSON.stringify(tournament.rounds),
+    tournament.winner ? tournament.winner.userId : null,
+    tournament.winner ? tournament.winner.username : null,
+    tournament.winnerWonAt,
+    tournament.updatedAt,
+    tournament.startedAt,
+    tournament.endedAt,
+    tournament.id
+  );
+}
+
+function tournamentForSocket(socket, requestedTournamentId = '') {
+  const direct = String(requestedTournamentId || socket.data.tournamentId || '');
+  if (direct && tournaments.has(direct)) return tournaments.get(direct);
+  const currentRoom = socket.data.roomId ? rooms.get(socket.data.roomId) : socket.data.spectatingRoomId ? rooms.get(socket.data.spectatingRoomId) : null;
+  return currentRoom && currentRoom.tournamentId ? tournaments.get(currentRoom.tournamentId) : null;
+}
+
+function isSocketPlayingActiveTournamentMatch(socket, tournament) {
+  if (!socket.data.roomId) return false;
+  const room = rooms.get(socket.data.roomId);
+  return Boolean(room && room.tournamentId === tournament.id && room.game.status === 'playing');
+}
+
+function deductTournamentStake(userId, stake) {
+  return adjustTournamentTrophies(userId, -stake, { requireBalance: true });
+}
+
+function refundTournamentParticipant(tournament, participant) {
+  if (!participant || !participant.stakePaid) return null;
+  const profile = adjustTournamentTrophies(participant.userId, tournament.stake);
+  participant.stakePaid = false;
+  return profile;
+}
+
+function awardTournamentWinner(userId, amount) {
+  const transaction = db.transaction(() => {
+    const profile = adjustTournamentTrophies(userId, amount);
+    statements.incrementTournamentWins.run(new Date().toISOString(), userId);
+    return profile;
+  });
+  return transaction();
+}
+
+function adjustTournamentTrophies(userId, delta, options = {}) {
+  const user = statements.getUserById.get(userId);
+  if (!user) return null;
+  const currentTrophies = Math.max(0, Number(user.trophies) || 0);
+  if (options.requireBalance && currentTrophies + delta < 0) return null;
+  const trophies = Math.max(0, currentTrophies + delta);
+  const lossCounter = Math.max(0, Number(user.loss_counter) || 0);
+  const tier = getTierForTrophies(trophies);
+  statements.updateUserStats.run(trophies, tier.name, lossCounter, new Date().toISOString(), userId);
+  return publicUser(statements.getUserById.get(userId));
+}
+
+function normalizeTournamentParticipantCount(value) {
+  const count = Number(value);
+  if (!Number.isSafeInteger(count) || count < TOURNAMENT_MIN_PARTICIPANTS) return null;
+  return count;
+}
+
+function normalizeTournamentStake(value) {
+  if (value === '' || value === null || value === undefined) return 0;
+  const stake = Number(value);
+  if (!Number.isSafeInteger(stake) || stake < 0) return null;
+  return stake;
+}
+
+function canListSpectatorRoom(room) {
+  const maxSpectators = getMaxSpectators(room);
+  return !Number.isFinite(maxSpectators) || getSpectatorCount(room) < maxSpectators;
+}
+
+function getMaxSpectators(room) {
+  return room && room.tournament ? null : MAX_SPECTATORS_PER_ROOM;
 }
 
 function roomChannel(roomId) {
@@ -3295,6 +4258,12 @@ function isAllowedOrigin(origin, host) {
   }
 
   return Boolean(host && parsed.host === host);
+}
+
+function ensureUserColumn(columnName, definition) {
+  const columns = db.prepare('PRAGMA table_info(users)').all();
+  if (columns.some((column) => column.name === columnName)) return;
+  db.exec(`ALTER TABLE users ADD COLUMN ${columnName} ${definition}`);
 }
 
 function resolveDataDir() {

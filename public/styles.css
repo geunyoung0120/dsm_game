@@ -957,8 +957,24 @@ html[data-theme="light"] .lobby-hero {
 
 .profile-summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
+}
+
+.tournament-winner-banner {
+  padding: 14px 18px;
+  color: #132018;
+  background: linear-gradient(90deg, #b7f0a2, #e8c15c);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  font-size: 17px;
+  font-weight: 900;
+}
+
+html[data-theme="light"] .tournament-winner-banner {
+  color: #132018;
+  border-color: rgba(32, 36, 44, 0.16);
 }
 
 .profile-stat {
@@ -1570,6 +1586,33 @@ html[data-theme="light"] .lobby-hero {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.tournament-spectator-card {
+  border-color: rgba(76, 217, 100, 0.72);
+  border-left: 5px solid #4cd964;
+}
+
+.tournament-spectator-card h3 {
+  color: #b7f0a2;
+}
+
+.tournament-spectator-card.tournament-phase-semifinal {
+  border-color: rgba(93, 156, 236, 0.76);
+  border-left-color: var(--blue);
+}
+
+.tournament-spectator-card.tournament-phase-semifinal h3 {
+  color: #a9ccff;
+}
+
+.tournament-spectator-card.tournament-phase-final {
+  border-color: rgba(228, 83, 109, 0.8);
+  border-left-color: var(--red);
+}
+
+.tournament-spectator-card.tournament-phase-final h3 {
+  color: #ffb2bf;
+}
+
 .room-card h3 {
   margin: 0;
   font-size: 18px;
@@ -1761,6 +1804,140 @@ html[data-theme="light"] .lobby-hero {
   gap: 8px;
 }
 
+.tournament-panel {
+  margin-bottom: 12px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--card-shadow);
+}
+
+.tournament-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.tournament-panel h2 {
+  margin: 0;
+  font-size: 21px;
+}
+
+.tournament-meta {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.tournament-switch-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.tournament-switch-controls button {
+  width: 44px;
+  min-width: 44px;
+  padding-inline: 0;
+  font-size: 20px;
+}
+
+.tournament-bracket {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(220px, 1fr);
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.tournament-round {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tournament-round h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.tournament-match-card {
+  min-height: 112px;
+  padding: 11px;
+  display: grid;
+  gap: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-left: 4px solid #4cd964;
+  border-radius: 8px;
+}
+
+.tournament-match-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.tournament-match-head span,
+.tournament-match-card small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tournament-match-players {
+  display: grid;
+  gap: 6px;
+}
+
+.tournament-match-player {
+  min-height: 28px;
+  padding: 6px 8px;
+  color: var(--ink);
+  background: var(--input-bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.tournament-match-player.winner {
+  color: var(--badge-ink);
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+.tournament-phase-semifinal {
+  border-left-color: var(--blue);
+}
+
+.tournament-phase-final {
+  border-left-color: var(--red);
+}
+
+.tournament-match-playing {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24);
+}
+
+.tournament-match-completed {
+  opacity: 0.82;
+}
+
+.tournament-match-viewing {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
 .game-frame {
   width: min(100%, 1120px);
   aspect-ratio: 1120 / 760;
@@ -1888,6 +2065,10 @@ canvas {
     grid-template-columns: 1fr;
   }
 
+  .tournament-bracket {
+    grid-auto-columns: minmax(190px, 82vw);
+  }
+
   .battle-chat-panel {
     order: 2;
   }
@@ -1996,6 +2177,7 @@ canvas {
   .deck-header,
   .room-header,
   .game-toolbar,
+  .tournament-panel-head,
   .room-card,
   .room-list-title {
     align-items: stretch;
@@ -2007,6 +2189,10 @@ canvas {
   }
 
   button {
+    width: 100%;
+  }
+
+  .tournament-switch-controls button {
     width: 100%;
   }
 }

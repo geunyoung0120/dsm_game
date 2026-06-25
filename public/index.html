@@ -86,6 +86,7 @@
 
       <section id="home-screen" class="home-screen hidden">
         <div class="lobby-layout">
+          <div id="tournament-winner-banner" class="tournament-winner-banner hidden" aria-live="polite"></div>
           <section class="lobby-hero">
             <div class="lobby-hero-copy">
               <p class="eyebrow">LIVE ARENA</p>
@@ -284,7 +285,16 @@
                 <select id="room-mode" name="roomMode">
                   <option value="1v1">1대1</option>
                   <option value="2v2">2대2</option>
+                  <option value="tournament">토너먼트 모드</option>
                 </select>
+              </label>
+              <label id="tournament-participants-field" class="hidden">
+                <span>참가 인원</span>
+                <input id="tournament-participants" name="tournamentParticipants" type="number" min="3" step="1" value="8" />
+              </label>
+              <label id="tournament-stake-field" class="hidden">
+                <span>트로피 참가비</span>
+                <input id="tournament-stake" name="tournamentStake" type="number" min="0" step="1" value="5" />
               </label>
               <label id="create-team-field" class="hidden">
                 <span>내 팀</span>
@@ -334,6 +344,20 @@
             <button id="leave-room" type="button" class="secondary">로비로 나가기</button>
           </div>
         </div>
+        <section id="tournament-panel" class="tournament-panel hidden" aria-label="토너먼트 대진표">
+          <div class="tournament-panel-head">
+            <div>
+              <p class="eyebrow">토너먼트</p>
+              <h2 id="tournament-title">대진표</h2>
+              <p id="tournament-meta" class="tournament-meta"></p>
+            </div>
+            <div class="tournament-switch-controls">
+              <button id="tournament-prev-match" type="button" class="secondary" aria-label="이전 토너먼트 경기 관전">←</button>
+              <button id="tournament-next-match" type="button" class="secondary" aria-label="다음 토너먼트 경기 관전">→</button>
+            </div>
+          </div>
+          <div id="tournament-bracket" class="tournament-bracket"></div>
+        </section>
         <div class="game-battle-layout">
           <aside id="battle-chat-panel" class="battle-chat-panel" aria-label="전투 채팅">
             <div class="battle-chat-head">

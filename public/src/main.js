@@ -22,6 +22,22 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: '토너먼트 모드 추가',
+    date: '2026.06.25',
+    items: [
+      '토너먼트 방 생성, 참가비 베팅, 자동 대진표 추가',
+      '4강 이전 동시 경기와 4강 이후 순차 경기 진행',
+      '최근 우승자 배너와 프로필 우승 횟수 표시'
+    ],
+    details: [
+      '방 만들기에서 토너먼트 모드를 선택하면 참가 인원, 비밀번호, 트로피 참가비를 설정할 수 있다.',
+      '참가자는 방에 들어오는 즉시 참가비 트로피가 차감되고, 시작 전 취소되면 환불된다.',
+      '모든 참가자가 모이면 무작위 대진표가 생성되며 홀수 인원은 1명이 부전승을 받는다.',
+      '토너먼트 경기에는 일반 승패 트로피 규칙을 적용하지 않고, 결승 종료 시 우승자가 참가비 풀 전체를 받는다.',
+      '메인 화면에는 최근 토너먼트 우승자와 날짜가 표시되고, 내 프로필에는 토너먼트 우승 횟수가 표시된다.'
+    ]
+  },
+  {
     title: '박바둑과 허선 밸런스 조정',
     date: '2026.06.25',
     items: [
@@ -843,6 +859,7 @@ let ascensionAudioUntil = 0;
 let latestRankings = [];
 let latestTiers = [];
 let latestSpectatorRooms = [];
+let latestTournamentWinner = null;
 let deckCards = {};
 let selectedDeck = [];
 let showingSpectatorRooms = false;
@@ -2087,16 +2104,18 @@ class BattleScene extends Phaser.Scene {
     if (this.state.status === 'waiting') {
       this.g.fillStyle(0x0c0e11, 0.62);
       this.g.fillRect(0, 0, ARENA_W, ARENA_H);
-      this.drawCenteredText('플레이어 대기 중', FIELD_CENTER_X, 286, 30, '#f7f2e8');
+      const tournament = this.state.tournament;
+      this.drawCenteredText(tournament ? '토너먼트 대기실' : '플레이어 대기 중', FIELD_CENTER_X, 286, 30, '#f7f2e8');
       this.drawCenteredText(this.state.message || '필요 인원이 모두 들어오면 자동으로 시작됩니다.', FIELD_CENTER_X, 326, 16, '#d6d0c6');
+      if (tournament) {
+        this.drawCenteredText(`참가비 ${tournament.stake || 0} 트로피 · 상금 풀 ${tournament.pool || 0} 트로피`, FIELD_CENTER_X, 356, 15, '#fff4a7');
+      }
     }
 
     if (this.state.status === 'ended') {
       this.g.fillStyle(0x0c0e11, 0.68);
       this.g.fillRect(0, 0, ARENA_W, ARENA_H);
       const result = this.state.winner === null ? '무승부' : `${teamName(this.state.winner)} 승리`;
-      const rematchCount = this.state.players.filter((player) => player.rematchAccepted).length;
-      const requiredRematches = this.state.maxPlayers || this.state.players.length || 2;
       this.drawCenteredText(result, FIELD_CENTER_X, 276, 34, '#f7f2e8');
       this.drawCenteredText(this.state.reason || '', FIELD_CENTER_X, 318, 17, '#d6d0c6');
       if (this.state.trophyChange) {
@@ -2104,8 +2123,14 @@ class BattleScene extends Phaser.Scene {
         const sign = change.delta > 0 ? '+' : '';
         this.drawCenteredText(`트로피 ${sign}${change.delta} | 현재 ${change.trophies}개 | ${change.tierIcon} ${change.tier}`, FIELD_CENTER_X, 356, 15, '#fff4a7');
       }
-      this.drawCenteredText(`재경기 동의 ${rematchCount}/${requiredRematches}`, FIELD_CENTER_X, 386, 15, '#fff4a7');
-      this.drawCenteredText('모든 플레이어가 재경기를 누르면 같은 방에서 다시 시작합니다.', FIELD_CENTER_X, 414, 14, '#d6d0c6');
+      if (this.state.tournament) {
+        this.drawCenteredText('토너먼트 대진표에 따라 다음 경기가 진행됩니다.', FIELD_CENTER_X, 386, 15, '#fff4a7');
+      } else {
+        const rematchCount = this.state.players.filter((player) => player.rematchAccepted).length;
+        const requiredRematches = this.state.maxPlayers || this.state.players.length || 2;
+        this.drawCenteredText(`재경기 동의 ${rematchCount}/${requiredRematches}`, FIELD_CENTER_X, 386, 15, '#fff4a7');
+        this.drawCenteredText('모든 플레이어가 재경기를 누르면 같은 방에서 다시 시작합니다.', FIELD_CENTER_X, 414, 14, '#d6d0c6');
+      }
     }
   }
 
@@ -2324,11 +2349,17 @@ function setupShell() {
   const watchRoomsButton = document.getElementById('watch-rooms');
   const roomModeSelect = document.getElementById('room-mode');
   const createTeamField = document.getElementById('create-team-field');
+  const tournamentParticipantsField = document.getElementById('tournament-participants-field');
+  const tournamentStakeField = document.getElementById('tournament-stake-field');
+  const tournamentPrevButton = document.getElementById('tournament-prev-match');
+  const tournamentNextButton = document.getElementById('tournament-next-match');
 
   initializeTheme(themeButton);
   renderCharacterGrid();
   renderPatchNotices();
-  updateCreateTeamField();
+  updateCreateModeFields();
+  renderTournamentWinnerBanner();
+  renderTournamentPanel();
 
   setAuthMode('login');
   showScreen(authScreen);
@@ -2422,6 +2453,9 @@ function setupShell() {
     currentRoom = null;
     currentSlot = null;
     latestState = null;
+    latestTournamentWinner = null;
+    renderTournamentWinnerBanner();
+    renderTournamentPanel();
     resetAuthForms();
     setAuthMode('login');
     showScreen(authScreen);
@@ -2433,12 +2467,21 @@ function setupShell() {
     const password = document.getElementById('room-password').value;
     const mode = document.getElementById('room-mode').value;
     const team = document.getElementById('room-team').value;
+    const participantCount = document.getElementById('tournament-participants').value;
+    const stake = document.getElementById('tournament-stake').value;
     connectSocket();
-    getSocket().emit('create-room', { name, password, mode, team: mode === '2v2' ? team : null });
+    getSocket().emit('create-room', {
+      name,
+      password,
+      mode,
+      team: mode === '2v2' ? team : null,
+      participantCount: mode === 'tournament' ? participantCount : null,
+      stake: mode === 'tournament' ? stake : null
+    });
   });
 
   if (roomModeSelect) {
-    roomModeSelect.addEventListener('change', updateCreateTeamField);
+    roomModeSelect.addEventListener('change', updateCreateModeFields);
   }
 
   refreshRoomsButton.addEventListener('click', () => {
@@ -2460,6 +2503,7 @@ function setupShell() {
     isSpectating = false;
     latestState = null;
     updateRematchControls();
+    renderTournamentPanel();
     showingSpectatorRooms = false;
     updateRoomListMode();
     showScreen(roomScreen);
@@ -2470,6 +2514,13 @@ function setupShell() {
     if (socket) socket.emit('request-rematch');
     updateRematchControls(true);
   });
+
+  if (tournamentPrevButton) {
+    tournamentPrevButton.addEventListener('click', () => switchTournamentMatch('prev'));
+  }
+  if (tournamentNextButton) {
+    tournamentNextButton.addEventListener('click', () => switchTournamentMatch('next'));
+  }
 
   const battleChatForm = document.getElementById('battle-chat-form');
   if (battleChatForm) {
@@ -2493,9 +2544,12 @@ function setupShell() {
     }
   }
 
-  function updateCreateTeamField() {
-    if (!roomModeSelect || !createTeamField) return;
-    createTeamField.classList.toggle('hidden', roomModeSelect.value !== '2v2');
+  function updateCreateModeFields() {
+    if (!roomModeSelect) return;
+    const mode = roomModeSelect.value;
+    if (createTeamField) createTeamField.classList.toggle('hidden', mode !== '2v2');
+    if (tournamentParticipantsField) tournamentParticipantsField.classList.toggle('hidden', mode !== 'tournament');
+    if (tournamentStakeField) tournamentStakeField.classList.toggle('hidden', mode !== 'tournament');
   }
 
   function updateRoomListMode() {
@@ -2562,6 +2616,7 @@ async function loadSession() {
     const data = await apiRequest('/api/me');
     currentUser = data.user;
     renderProfile();
+    await loadTournamentWinner();
     await loadRankings();
     connectSocket();
     window.showHomeScreen();
@@ -2596,6 +2651,7 @@ function finishAuth(user) {
   currentSlot = null;
   latestState = null;
   renderProfile();
+  loadTournamentWinner();
   loadRankings();
   window.showHomeScreen();
   resetAuthForms();
@@ -2635,6 +2691,10 @@ function connectSocket() {
   socket = io({ transports: ['websocket'] });
   socket.on('welcome', (payload) => {
     serverCards = payload.cards || {};
+    if (payload.tournamentWinner !== undefined) {
+      latestTournamentWinner = payload.tournamentWinner;
+      renderTournamentWinnerBanner();
+    }
     if (payload.user) {
       currentUser = payload.user;
       renderProfile();
@@ -2645,6 +2705,10 @@ function connectSocket() {
     currentUser = profile;
     renderProfile();
     loadRankings();
+  });
+  socket.on('tournament-winner', (winner) => {
+    latestTournamentWinner = winner || null;
+    renderTournamentWinnerBanner();
   });
   socket.on('rooms', renderRoomList);
   socket.on('spectator-rooms', (rooms) => {
@@ -2658,6 +2722,7 @@ function connectSocket() {
     resetBattleChat();
     setMessage('room-message', '');
     updateGameRoomTitle();
+    renderTournamentPanel();
     window.showGameScreen();
   });
   socket.on('spectator-joined', (payload) => {
@@ -2667,6 +2732,7 @@ function connectSocket() {
     resetBattleChat();
     setMessage('room-message', '');
     updateGameRoomTitle();
+    renderTournamentPanel();
     window.showGameScreen();
   });
   socket.on('room-left', () => {
@@ -2676,6 +2742,7 @@ function connectSocket() {
     latestState = null;
     resetBattleChat();
     updateRematchControls();
+    renderTournamentPanel();
     window.showRoomScreen();
   });
   socket.on('room-error', (message) => {
@@ -2688,7 +2755,16 @@ function connectSocket() {
     syncBattleChatMessages(state.chatMessages || []);
     updateGameRoomTitle();
     updateRematchControls();
+    renderTournamentPanel();
     if (activeScene) activeScene.receiveState(state);
+  });
+  socket.on('tournament-state', (tournament) => {
+    if (!latestState || !tournament || !latestState.tournament || latestState.tournament.id !== tournament.id) return;
+    latestState.tournament = tournament;
+    if (currentRoom && currentRoom.tournament) currentRoom.tournament = tournament;
+    renderTournamentPanel();
+    updateGameRoomTitle();
+    if (activeScene) activeScene.receiveState(latestState);
   });
   socket.on('battle-chat', (message) => {
     appendBattleChatMessage(message);
@@ -2741,6 +2817,18 @@ async function loadRankings() {
   } catch (error) {
     renderTopRankings(error.message || '랭킹을 가져오지 못했습니다.');
     renderRankingList(error.message || '랭킹을 가져오지 못했습니다.');
+  }
+}
+
+async function loadTournamentWinner() {
+  if (!currentUser) return;
+  try {
+    const data = await apiRequest('/api/tournament-winner');
+    latestTournamentWinner = data.winner || null;
+    renderTournamentWinnerBanner();
+  } catch {
+    latestTournamentWinner = null;
+    renderTournamentWinnerBanner();
   }
 }
 
@@ -2911,8 +2999,146 @@ function renderProfile() {
   summary.replaceChildren(
     profileStat('이름', currentUser.username),
     profileStat('트로피', `${currentUser.trophies}개`),
+    profileStat('토너먼트 우승 횟수', `${currentUser.tournamentWins || 0}회`),
     profileTierStat()
   );
+}
+
+function renderTournamentWinnerBanner() {
+  const banner = document.getElementById('tournament-winner-banner');
+  if (!banner) return;
+  if (!latestTournamentWinner || !latestTournamentWinner.username) {
+    banner.classList.add('hidden');
+    banner.textContent = '';
+    return;
+  }
+  const dateText = formatKoreanDate(latestTournamentWinner.wonAt);
+  banner.textContent = `토너먼트 대회 우승자 '${latestTournamentWinner.username}'${dateText ? ` (${dateText})` : ''}`;
+  banner.classList.remove('hidden');
+}
+
+function renderTournamentPanel() {
+  const panel = document.getElementById('tournament-panel');
+  if (!panel) return;
+  const tournament = latestState && latestState.tournament;
+  if (!tournament) {
+    panel.classList.add('hidden');
+    return;
+  }
+
+  panel.classList.remove('hidden');
+  const title = document.getElementById('tournament-title');
+  const meta = document.getElementById('tournament-meta');
+  const bracket = document.getElementById('tournament-bracket');
+  const prevButton = document.getElementById('tournament-prev-match');
+  const nextButton = document.getElementById('tournament-next-match');
+
+  if (title) title.textContent = tournament.name || '토너먼트 대진표';
+  if (meta) {
+    const count = `${tournament.participantCount || 0}/${tournament.participantTarget || 0} 명 참가중`;
+    const pool = `상금 풀 ${tournament.pool || 0} 트로피`;
+    const stake = `참가비 ${tournament.stake || 0} 트로피`;
+    const winner = tournament.winner ? `우승자 ${tournament.winner.username}` : tournamentStatusLabel(tournament.status);
+    meta.textContent = `${count} · ${stake} · ${pool} · ${winner}`;
+  }
+
+  const canSwitch = Boolean(tournament.activeMatchIds && tournament.activeMatchIds.length > 1);
+  if (prevButton) prevButton.disabled = !canSwitch;
+  if (nextButton) nextButton.disabled = !canSwitch;
+
+  if (!bracket) return;
+  bracket.replaceChildren();
+  const rounds = Array.isArray(tournament.rounds) ? tournament.rounds : [];
+  if (rounds.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = '참가 인원이 모두 모이면 대진표가 생성됩니다.';
+    bracket.appendChild(empty);
+    return;
+  }
+
+  for (const round of rounds) {
+    const roundColumn = document.createElement('section');
+    roundColumn.className = `tournament-round tournament-round-${round.phase || 'regular'}`;
+
+    const roundTitle = document.createElement('h3');
+    roundTitle.textContent = round.label || '라운드';
+    roundColumn.appendChild(roundTitle);
+
+    for (const match of round.matches || []) {
+      roundColumn.appendChild(tournamentMatchCard(match, tournament));
+    }
+    bracket.appendChild(roundColumn);
+  }
+}
+
+function tournamentMatchCard(match, tournament) {
+  const card = document.createElement('article');
+  card.className = `tournament-match-card tournament-match-${match.status || 'upcoming'} tournament-phase-${match.phase || 'regular'}`;
+  if (tournament.viewingMatchId && tournament.viewingMatchId === match.id) {
+    card.classList.add('tournament-match-viewing');
+  }
+
+  const head = document.createElement('div');
+  head.className = 'tournament-match-head';
+  const label = document.createElement('strong');
+  label.textContent = match.label || '경기';
+  const status = document.createElement('span');
+  status.textContent = tournamentMatchStatusLabel(match);
+  head.append(label, status);
+
+  const players = document.createElement('div');
+  players.className = 'tournament-match-players';
+  const participants = Array.isArray(match.participants) ? match.participants : [];
+  for (let i = 0; i < 2; i += 1) {
+    const participant = participants[i];
+    const row = document.createElement('div');
+    row.className = 'tournament-match-player';
+    if (participant && participant.userId === match.winnerUserId) row.classList.add('winner');
+    row.textContent = participant ? participant.username : match.bye ? '부전승 대기' : '상대 대기';
+    players.appendChild(row);
+  }
+
+  card.append(head, players);
+  if (match.score && match.score.reason) {
+    const reason = document.createElement('small');
+    reason.textContent = match.score.reason;
+    card.appendChild(reason);
+  }
+  return card;
+}
+
+function tournamentStatusLabel(status) {
+  if (status === 'waiting') return '대기 중';
+  if (status === 'playing') return '진행 중';
+  if (status === 'completed') return '종료';
+  if (status === 'cancelled') return '취소됨';
+  return '상태 확인 중';
+}
+
+function tournamentMatchStatusLabel(match) {
+  if (match.bye) return '부전승';
+  if (match.status === 'playing') return '진행 중';
+  if (match.status === 'completed') return '완료';
+  return '예정';
+}
+
+function switchTournamentMatch(direction) {
+  if (!socket || !latestState || !latestState.tournament) return;
+  socket.emit('watch-tournament-match', {
+    tournamentId: latestState.tournament.id,
+    direction
+  });
+}
+
+function formatKoreanDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}.${month}.${day}`;
 }
 
 function renderTopRankings(errorMessage = '') {
@@ -3226,7 +3452,11 @@ function renderRoomList(rooms) {
     const meta = document.createElement('p');
     meta.className = 'room-meta';
     const teamSummary = room.mode === '2v2' ? ` · ${roomTeamSummary(room)}` : '';
-    meta.textContent = `${room.modeLabel || '1대1'} · ${room.playerCount}/${room.maxPlayers}명 대기${teamSummary}`;
+    if (room.mode === 'tournament') {
+      meta.textContent = `${room.modeLabel || '토너먼트 모드'} · ${room.playerCount}/${room.maxPlayers} 명 참가중 · 참가비 ${room.stake || 0} 트로피`;
+    } else {
+      meta.textContent = `${room.modeLabel || '1대1'} · ${room.playerCount}/${room.maxPlayers}명 대기${teamSummary}`;
+    }
     info.append(title, meta);
 
     const password = document.createElement('input');
@@ -3253,7 +3483,7 @@ function renderRoomList(rooms) {
     } else {
       const joinButton = document.createElement('button');
       joinButton.type = 'button';
-      joinButton.textContent = '참가';
+      joinButton.textContent = room.mode === 'tournament' ? '토너먼트 참가' : '참가';
       joinButton.addEventListener('click', () => {
         joinRoom(room, password.value);
       });
@@ -3281,13 +3511,17 @@ function renderSpectatorRoomList(rooms) {
   for (const room of rooms) {
     const card = document.createElement('article');
     card.className = 'room-card spectator-room-card';
+    if (room.tournament) {
+      card.classList.add('tournament-spectator-card', `tournament-phase-${room.tournament.phase || 'regular'}`);
+    }
 
     const info = document.createElement('div');
     const title = document.createElement('h3');
     title.textContent = room.battleLabel || room.name || '진행 중인 경기';
     const meta = document.createElement('p');
     meta.className = 'room-meta';
-    meta.textContent = `${room.modeLabel || '1대1'} · 관전자 수: ${room.spectatorCount || 0}/${room.maxSpectators || 2}`;
+    const maxText = room.maxSpectators === null || room.maxSpectators === undefined ? '무제한' : room.maxSpectators || 2;
+    meta.textContent = `${room.modeLabel || '1대1'} · 관전자 수: ${room.spectatorCount || 0}/${maxText}`;
     info.append(title, meta);
 
     const watchButton = document.createElement('button');
@@ -3434,7 +3668,12 @@ function updateGameRoomTitle() {
   const statePlayer = latestState && currentSlot !== null && currentSlot !== undefined ? latestState.players[currentSlot] : null;
   const side = isSpectating ? `관전 · 관전자 수: ${latestState ? latestState.spectatorCount || 0 : currentRoom && currentRoom.spectatorCount || 0}` : statePlayer ? teamName(statePlayer.team) : '대기';
   const mode = currentRoom && currentRoom.modeLabel ? currentRoom.modeLabel : '';
-  title.textContent = `${roomName}${mode ? ` · ${mode}` : ''} · ${side}`;
+  const tournament = latestState && latestState.tournament;
+  const match = tournament && tournament.viewingMatchId
+    ? tournament.rounds.flatMap((round) => round.matches || []).find((candidate) => candidate.id === tournament.viewingMatchId)
+    : null;
+  const roundLabel = match && match.label ? ` · ${match.label}` : tournament ? ' · 토너먼트' : '';
+  title.textContent = `${roomName}${mode ? ` · ${mode}` : ''}${roundLabel} · ${side}`;
   updateBattleChatControls();
 }
 
@@ -3443,6 +3682,11 @@ function updateRematchControls(optimistic = false) {
   if (!button) return;
 
   const state = latestState;
+  if (state && state.tournament) {
+    button.classList.add('hidden');
+    button.disabled = true;
+    return;
+  }
   const player = state && currentSlot !== null && currentSlot !== undefined ? state.players[currentSlot] : null;
   const requiredPlayers = state ? state.maxPlayers || state.players.length : 2;
   const connectedPlayers = state ? state.players.filter((candidate) => candidate.connected).length : 0;
