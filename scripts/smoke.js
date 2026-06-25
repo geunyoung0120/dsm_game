@@ -449,7 +449,7 @@ async function expectKkongMeteorDamageDelayed(accounts) {
   clients[1].emit('join-room', { roomId: joined.room.id, password: '' });
   await once(clients[1], 'room-joined', 'kkong guest room-joined');
   const readyState = await waitForState(clients[0], (payload) => {
-    return payload.status === 'playing' && payload.players[0] && Array.isArray(payload.players[0].hand) && payload.players[0].hand[0] === 'kkong' && payload.players[0].elixir >= 5;
+    return payload.status === 'playing' && payload.players[0] && Array.isArray(payload.players[0].hand) && payload.players[0].hand[0] === 'kkong' && payload.players[0].elixir >= 4;
   }, 'kkong host playing state');
   const initialHp = enemyLeftPrincessHp(readyState);
   if (initialHp !== 5400) {
@@ -828,7 +828,7 @@ function expectHeoseonNerf(cards) {
   if (playableCount !== 20) {
     throw new Error(`Playable card count expected 20, got ${playableCount}.`);
   }
-  if (!cards.dagwasil || !cards.dagwasil.building || cards.dagwasil.cost !== 5 || cards.dagwasil.maxHp !== 1500 || cards.dagwasil.radius !== 34 || cards.dagwasil.buildingDurationMs !== 24000 || cards.dagwasil.spawnMinionMs !== 4000 || !cards.dagwasil.spawnImmediately) {
+  if (!cards.dagwasil || !cards.dagwasil.building || cards.dagwasil.cost !== 5 || cards.dagwasil.maxHp !== 1500 || cards.dagwasil.radius !== 34 || cards.dagwasil.buildingDurationMs !== 20000 || cards.dagwasil.spawnMinionMs !== 4000 || !cards.dagwasil.spawnImmediately) {
     throw new Error('Dagwasil building card did not expose the expected fields.');
   }
   if (!cards.nerdMale || cards.nerdMale.playable !== false || cards.nerdMale.maxHp !== 180 || cards.nerdMale.damage !== 32 || cards.nerdMale.attackMs !== 717) {
@@ -837,10 +837,10 @@ function expectHeoseonNerf(cards) {
   if (!cards.nerdFemale || cards.nerdFemale.playable !== false || cards.nerdFemale.maxHp !== 140 || cards.nerdFemale.damage !== 32 || cards.nerdFemale.range !== 142 || cards.nerdFemale.attackMs !== 717) {
     throw new Error('Nerd female minion did not expose the expected fields.');
   }
-  if (!cards.kkong || !cards.kkong.spell || cards.kkong.spellType !== 'meteor' || cards.kkong.cost !== 5 || cards.kkong.damage !== 500 || cards.kkong.radius !== 40 || cards.kkong.impactDelayMs !== 620) {
+  if (!cards.kkong || !cards.kkong.spell || cards.kkong.spellType !== 'meteor' || cards.kkong.cost !== 4 || cards.kkong.damage !== 500 || cards.kkong.radius !== 40 || cards.kkong.impactDelayMs !== 620) {
     throw new Error('Kkong meteor spell card did not expose the expected fields.');
   }
-  if (!cards.cherryTree || !cards.cherryTree.building || cards.cherryTree.cost !== 5 || cards.cherryTree.maxHp !== 2000 || cards.cherryTree.damage !== 100 || cards.cherryTree.range !== 175 || cards.cherryTree.attackMs !== 1000 || cards.cherryTree.buildingDurationMs !== 24000 || !cards.cherryTree.cherryAttack) {
+  if (!cards.cherryTree || !cards.cherryTree.building || cards.cherryTree.cost !== 5 || cards.cherryTree.maxHp !== 2000 || cards.cherryTree.damage !== 100 || cards.cherryTree.range !== 175 || cards.cherryTree.attackMs !== 1000 || cards.cherryTree.buildingDurationMs !== 20000 || !cards.cherryTree.cherryAttack) {
     throw new Error('Cherry tree building card did not expose the expected fields.');
   }
   if (!cards.giantHyeonjik || cards.giantHyeonjik.cost !== 6 || cards.giantHyeonjik.maxHp !== 1800 || cards.giantHyeonjik.damage !== 120 || cards.giantHyeonjik.attackMs !== 1200 || cards.giantHyeonjik.radius !== 31 || !cards.giantHyeonjik.buildingDestroyer) {

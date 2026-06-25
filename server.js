@@ -149,7 +149,7 @@ const CARDS = {
     speed: 0,
     attackMs: 0,
     radius: 34,
-    buildingDurationMs: 24000,
+    buildingDurationMs: 20000,
     spawnMinionMs: 4000,
     spawnImmediately: true,
     spawnPair: ['nerdMale', 'nerdFemale']
@@ -157,7 +157,7 @@ const CARDS = {
   kkong: {
     id: 'kkong',
     name: '꽁',
-    cost: 5,
+    cost: 4,
     role: '마법 폭격',
     spell: true,
     spellType: 'meteor',
@@ -177,7 +177,7 @@ const CARDS = {
     speed: 0,
     attackMs: 1000,
     radius: 34,
-    buildingDurationMs: 24000,
+    buildingDurationMs: 20000,
     cherryAttack: true
   },
   giantHyeonjik: {
