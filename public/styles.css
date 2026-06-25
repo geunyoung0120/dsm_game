@@ -103,7 +103,7 @@ body {
 
 .shell {
   position: relative;
-  width: min(100vw, 1160px);
+  width: min(100vw, 1440px);
   min-height: 100vh;
   display: grid;
   place-items: center;
@@ -1741,6 +1741,7 @@ html[data-theme="light"] .lobby-hero {
 }
 
 .game-screen {
+  width: min(100%, 1400px);
   padding: 16px 0;
 }
 
@@ -1766,10 +1767,19 @@ html[data-theme="light"] .lobby-hero {
   overflow: hidden;
 }
 
+.game-battle-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1120px);
+  gap: 12px;
+  align-items: stretch;
+}
+
 .battle-chat-panel {
-  width: min(100%, 1120px);
-  margin-top: 10px;
+  width: 100%;
+  min-height: 0;
   padding: 12px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1796,7 +1806,7 @@ html[data-theme="light"] .lobby-hero {
 }
 
 .battle-chat-log {
-  height: 118px;
+  min-height: 0;
   padding: 8px;
   overflow-y: auto;
   display: grid;
@@ -1839,7 +1849,7 @@ html[data-theme="light"] .lobby-hero {
 .battle-chat-form {
   margin-top: 8px;
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr) 72px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 
@@ -1872,6 +1882,22 @@ canvas {
 
   .battle-chat-form {
     grid-template-columns: 84px minmax(0, 1fr);
+  }
+
+  .game-battle-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .battle-chat-panel {
+    order: 2;
+  }
+
+  .game-frame {
+    order: 1;
+  }
+
+  .battle-chat-log {
+    min-height: 118px;
   }
 
   .battle-chat-form button {

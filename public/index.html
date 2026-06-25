@@ -334,24 +334,26 @@
             <button id="leave-room" type="button" class="secondary">로비로 나가기</button>
           </div>
         </div>
-        <div id="game-frame" class="game-frame">
-          <div id="game"></div>
-        </div>
-        <aside id="battle-chat-panel" class="battle-chat-panel" aria-label="전투 채팅">
-          <div class="battle-chat-head">
-            <strong>전투 채팅</strong>
-            <span id="battle-chat-status">전체</span>
+        <div class="game-battle-layout">
+          <aside id="battle-chat-panel" class="battle-chat-panel" aria-label="전투 채팅">
+            <div class="battle-chat-head">
+              <strong>전투 채팅</strong>
+              <span id="battle-chat-status">전체</span>
+            </div>
+            <div id="battle-chat-log" class="battle-chat-log" aria-live="polite"></div>
+            <form id="battle-chat-form" class="battle-chat-form">
+              <select id="battle-chat-channel" aria-label="채팅 채널">
+                <option value="all">전체</option>
+                <option value="team">팀</option>
+              </select>
+              <input id="battle-chat-input" maxlength="120" autocomplete="off" placeholder="메시지 입력" />
+              <button id="battle-chat-send" type="submit">전송</button>
+            </form>
+          </aside>
+          <div id="game-frame" class="game-frame">
+            <div id="game"></div>
           </div>
-          <div id="battle-chat-log" class="battle-chat-log" aria-live="polite"></div>
-          <form id="battle-chat-form" class="battle-chat-form">
-            <select id="battle-chat-channel" aria-label="채팅 채널">
-              <option value="all">전체</option>
-              <option value="team">팀</option>
-            </select>
-            <input id="battle-chat-input" maxlength="120" autocomplete="off" placeholder="메시지 입력" />
-            <button id="battle-chat-send" type="submit">전송</button>
-          </form>
-        </aside>
+        </div>
       </section>
     </main>
     <script src="/socket.io/socket.io.js"></script>
