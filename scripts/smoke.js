@@ -470,8 +470,27 @@ function expectHeoseonNerf(cards) {
   if (!cards.badukFart || !cards.badukFart.spell || cards.badukFart.damagePerSecond !== 80 || cards.badukFart.radius !== 59 || cards.badukFart.durationMs !== 4000) {
     throw new Error('Baduk fart spell card did not expose the expected spell fields.');
   }
-  if (!cards.bbatman || cards.bbatman.healIntervalMs !== 400) {
+  if (!cards.bbatman || cards.bbatman.healIntervalMs !== 600) {
     throw new Error('Bbatman heal interval was not present.');
+  }
+  const playableCount = Object.values(cards).filter((card) => card && card.playable !== false).length;
+  if (playableCount !== 19) {
+    throw new Error(`Playable card count expected 19, got ${playableCount}.`);
+  }
+  if (!cards.dagwasil || !cards.dagwasil.building || cards.dagwasil.cost !== 5 || cards.dagwasil.maxHp !== 1500 || cards.dagwasil.radius !== 34 || cards.dagwasil.buildingDurationMs !== 24000 || cards.dagwasil.spawnMinionMs !== 4000) {
+    throw new Error('Dagwasil building card did not expose the expected fields.');
+  }
+  if (!cards.nerdMale || cards.nerdMale.playable !== false || cards.nerdMale.maxHp !== 200 || cards.nerdMale.damage !== 40 || cards.nerdMale.attackMs !== 717) {
+    throw new Error('Nerd male minion did not expose the expected fields.');
+  }
+  if (!cards.nerdFemale || cards.nerdFemale.playable !== false || cards.nerdFemale.maxHp !== 200 || cards.nerdFemale.damage !== 40 || cards.nerdFemale.range !== 142 || cards.nerdFemale.attackMs !== 717) {
+    throw new Error('Nerd female minion did not expose the expected fields.');
+  }
+  if (!cards.kkong || !cards.kkong.spell || cards.kkong.spellType !== 'meteor' || cards.kkong.cost !== 5 || cards.kkong.damage !== 500 || cards.kkong.radius !== 40) {
+    throw new Error('Kkong meteor spell card did not expose the expected fields.');
+  }
+  if (!cards.cherryTree || !cards.cherryTree.building || cards.cherryTree.cost !== 5 || cards.cherryTree.maxHp !== 2000 || cards.cherryTree.damage !== 100 || cards.cherryTree.attackMs !== 1000 || cards.cherryTree.buildingDurationMs !== 24000 || !cards.cherryTree.cherryAttack) {
+    throw new Error('Cherry tree building card did not expose the expected fields.');
   }
   if (!cards.taegeonBumperCar || cards.taegeonBumperCar.cost !== 1 || cards.taegeonBumperCar.speed !== 95 || cards.taegeonBumperCar.maxHp !== 120 || cards.taegeonBumperCar.damage !== 200 || cards.taegeonBumperCar.explosionDamage !== 200 || !cards.taegeonBumperCar.suicideRusher) {
     throw new Error('Taegeon bumper car did not expose the expected suicide rusher fields.');

@@ -90,7 +90,7 @@ const CARDS = {
     radius: 15,
     healer: true,
     healPerSecond: 47.25,
-    healIntervalMs: 400,
+    healIntervalMs: 600,
     healRange: 81,
     followDistance: 72,
     decayPerSecond: 8
@@ -120,6 +120,47 @@ const CARDS = {
     durationMs: 4000,
     damagePerSecond: 80,
     radius: 59
+  },
+  dagwasil: {
+    id: 'dagwasil',
+    name: '다과실',
+    cost: 5,
+    role: '건물 소환',
+    building: true,
+    maxHp: 1500,
+    damage: 0,
+    range: 0,
+    speed: 0,
+    attackMs: 0,
+    radius: 34,
+    buildingDurationMs: 24000,
+    spawnMinionMs: 4000,
+    spawnPair: ['nerdMale', 'nerdFemale']
+  },
+  kkong: {
+    id: 'kkong',
+    name: '꽁',
+    cost: 5,
+    role: '마법 폭격',
+    spell: true,
+    spellType: 'meteor',
+    damage: 500,
+    radius: 40
+  },
+  cherryTree: {
+    id: 'cherryTree',
+    name: '진해 벚꽃나무',
+    cost: 5,
+    role: '건물 원거리',
+    building: true,
+    maxHp: 2000,
+    damage: 100,
+    range: 260,
+    speed: 0,
+    attackMs: 1000,
+    radius: 34,
+    buildingDurationMs: 24000,
+    cherryAttack: true
   },
   kkongho: {
     id: 'kkongho',
@@ -305,6 +346,33 @@ const CARDS = {
     speed: 37,
     attackMs: 1155,
     radius: 16
+  },
+  nerdMale: {
+    id: 'nerdMale',
+    name: '너드남',
+    cost: 0,
+    role: '다과실 소환수',
+    playable: false,
+    maxHp: 200,
+    damage: 40,
+    range: 32,
+    speed: 48,
+    attackMs: 717,
+    radius: 15
+  },
+  nerdFemale: {
+    id: 'nerdFemale',
+    name: '너드녀',
+    cost: 0,
+    role: '다과실 소환수',
+    playable: false,
+    maxHp: 200,
+    damage: 40,
+    range: 142,
+    speed: 42,
+    attackMs: 717,
+    radius: 15,
+    female: true
   }
 };
 
@@ -1249,7 +1317,7 @@ function playCard(room, slot, payload = {}) {
 }
 
 function isValidPlayPoint(card, team, x, y) {
-  if (card && card.spell) return isValidSpellTargetPoint(x, y);
+  if (card && (card.spell || card.building)) return isValidSpellTargetPoint(x, y);
   return isValidSpawnPoint(team, x, y);
 }
 
@@ -1403,6 +1471,28 @@ function triggerAscension(room, owner, x, y) {
 function castSpellCard(room, owner, card, x, y) {
   const game = room.game;
   const now = Date.now();
+  if (card.spellType === 'meteor') {
+    const impact = {
+      owner,
+      cardId: card.id,
+      x: clamp(x, 28, ARENA.width - 28),
+      y: clamp(y, 28, ARENA.height - 28),
+      radius: card.radius,
+      damage: card.damage
+    };
+    applyAreaDamage(room, impact, card.damage, card.radius, owner, now);
+    broadcastEffect(room, {
+      type: 'meteor',
+      owner,
+      cardId: card.id,
+      x: impact.x,
+      y: impact.y,
+      radius: impact.radius,
+      damage: impact.damage
+    });
+    return;
+  }
+
   const zone = {
     id: `s${game.nextSpellId++}`,
     owner,
@@ -1424,6 +1514,22 @@ function castSpellCard(room, owner, card, x, y) {
     radius: zone.radius,
     durationMs: card.durationMs
   });
+}
+
+function applyAreaDamage(room, origin, damage, radius, owner, now) {
+  for (const unit of room.game.units) {
+    if (unit.owner === owner || unit.hp <= 0) continue;
+    if (distance(origin, unit) <= radius + getTargetRadius(unit)) {
+      applyDamageToUnit(room, unit, damage, owner, now);
+    }
+  }
+
+  for (const tower of room.game.towers) {
+    if (tower.owner === owner || tower.hp <= 0) continue;
+    if (distance(origin, tower) <= radius + getTargetRadius(tower)) {
+      applyDamage(room, tower, damage, owner, now);
+    }
+  }
 }
 
 function processPendingSpawns(room, now) {
@@ -1452,6 +1558,8 @@ function getDeployDelayMs(cardId) {
     zzangga: 760,
     kimrui: 780,
     baduk: 820,
+    dagwasil: 760,
+    cherryTree: 760,
     taegeonBumperCar: 360,
     osj: 880,
     mythos: 900,
@@ -1466,6 +1574,8 @@ function deployLabel(cardId) {
     zzangga: '폭소 준비',
     bbatman: '회복 원 전개',
     baduk: '혼돈 등장',
+    dagwasil: '다과실 개장',
+    cherryTree: '벚꽃 개화',
     yushin: '군단 집결',
     jimin: '드립 장전',
     mythos: '기운 상승',
@@ -1577,6 +1687,11 @@ function updateUnits(room, now, deltaSeconds) {
       unit.attachedById = null;
     }
 
+    if (card.building) {
+      updateBuilding(room, unit, card, deltaSeconds, now);
+      continue;
+    }
+
     if (card.suicideRusher) {
       updateSuicideRusher(room, unit, card, deltaSeconds, now);
       continue;
@@ -1633,6 +1748,64 @@ function updateUnits(room, now, deltaSeconds) {
 
     performAttack(room, unit, card, target, now);
   }
+}
+
+function updateBuilding(room, unit, card, deltaSeconds, now) {
+  if (card.buildingDurationMs) {
+    unit.hp = Math.max(0, unit.hp - (unit.maxHp / (card.buildingDurationMs / 1000)) * deltaSeconds);
+    if (unit.hp <= 0) return;
+  }
+
+  if (card.spawnPair && now >= unit.nextSummonAt) {
+    spawnBuildingPair(room, unit, card, now);
+  }
+
+  if (card.cherryAttack && now >= unit.nextAttackAt) {
+    const targets = room.game.units.filter((other) => {
+      if (other.owner === unit.owner || other.hp <= 0) return false;
+      const otherCard = CARDS[other.cardId];
+      if (otherCard && otherCard.building) return false;
+      return distance(unit, other) <= card.range + getTargetRadius(other);
+    });
+    const target = nearest(unit, targets);
+    if (target) {
+      applyDamageToUnit(room, target, card.damage, unit.owner, now);
+      unit.action = '벚꽃 투척';
+      unit.actionUntil = now + 320;
+      broadcastEffect(room, {
+        type: 'cherry-shot',
+        owner: unit.owner,
+        cardId: unit.cardId,
+        fromX: unit.x,
+        fromY: unit.y,
+        x: target.x,
+        y: target.y
+      });
+    }
+    unit.nextAttackAt = now + card.attackMs;
+  }
+}
+
+function spawnBuildingPair(room, unit, card, now) {
+  const dir = unit.owner === 0 ? 1 : -1;
+  const offsets = [
+    { cardId: card.spawnPair[0], x: -22, y: dir * 36 },
+    { cardId: card.spawnPair[1], x: 22, y: dir * 36 }
+  ];
+
+  for (const offset of offsets) {
+    const minion = spawnUnit(room, unit.owner, offset.cardId, unit.x + offset.x, unit.y + offset.y, {
+      action: '다과실 출동',
+      actionUntil: now + 480
+    });
+    if (minion) {
+      broadcastEffect(room, { type: 'snack-spawn', owner: unit.owner, cardId: minion.cardId, x: minion.x, y: minion.y });
+    }
+  }
+
+  unit.nextSummonAt = now + card.spawnMinionMs;
+  unit.action = '너드 소환';
+  unit.actionUntil = now + 520;
 }
 
 function updateDormantBerserker(room, unit, card, deltaSeconds, now) {
@@ -1930,9 +2103,12 @@ function performPushAttack(room, unit, card, target, damage, now) {
     for (const enemy of targets) {
       applyDamageToUnit(room, enemy, damage, unit.owner, now);
       enemy.targetLockId = null;
-      const sideStep = Math.sign(enemy.x - unit.x) * Math.min(18, card.pushDistance * 0.18);
-      enemy.x = clamp(enemy.x + sideStep, 16, ARENA.width - 16);
-      enemy.y = clamp(enemy.y + pushDir * card.pushDistance, 16, ARENA.height - 16);
+      const enemyCard = CARDS[enemy.cardId];
+      if (!enemyCard || !enemyCard.building) {
+        const sideStep = Math.sign(enemy.x - unit.x) * Math.min(18, card.pushDistance * 0.18);
+        enemy.x = clamp(enemy.x + sideStep, 16, ARENA.width - 16);
+        enemy.y = clamp(enemy.y + pushDir * card.pushDistance, 16, ARENA.height - 16);
+      }
     }
   }
 
@@ -2625,7 +2801,8 @@ function publicPlayableCards() {
       name: card.name,
       cost: card.cost,
       role: card.role,
-      spell: Boolean(card.spell)
+      spell: Boolean(card.spell),
+      building: Boolean(card.building)
     };
   }
   return cards;

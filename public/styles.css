@@ -1348,6 +1348,12 @@ html[data-theme="light"] .lobby-hero {
     var(--panel-2);
 }
 
+.deck-pool-card-building {
+  background:
+    linear-gradient(135deg, rgba(255, 183, 215, 0.17), rgba(155, 107, 71, 0.16) 54%, transparent 72%),
+    var(--panel-2);
+}
+
 .deck-pool-card:disabled {
   opacity: 0.52;
   cursor: not-allowed;
@@ -1621,6 +1627,9 @@ html[data-theme="light"] .lobby-hero {
 .character-card-bbatman { border-top-color: #46b9a5; }
 .character-card-baduk { border-top-color: #b7855f; }
 .character-card-badukFart { border-top-color: #b7d94b; }
+.character-card-dagwasil { border-top-color: #9b6b47; }
+.character-card-kkong { border-top-color: #d87a2c; }
+.character-card-cherryTree { border-top-color: #ffb7d7; }
 .character-card-kkongho { border-top-color: #f4df70; }
 .character-card-yushin { border-top-color: #7f7fd5; }
 .character-card-jimin { border-top-color: #4f8de8; }
@@ -1640,6 +1649,12 @@ html[data-theme="light"] .lobby-hero {
     var(--surface);
 }
 
+.character-card-building {
+  background:
+    linear-gradient(135deg, rgba(255, 183, 215, 0.18), rgba(155, 107, 71, 0.14) 50%, transparent 72%),
+    var(--surface);
+}
+
 .card-type-badge {
   position: absolute;
   top: 24px;
@@ -1651,6 +1666,10 @@ html[data-theme="light"] .lobby-hero {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 900;
+}
+
+.character-card-building .card-type-badge {
+  background: #ffb7d7;
 }
 
 .character-card h2 {

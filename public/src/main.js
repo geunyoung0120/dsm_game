@@ -16,6 +16,23 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: '신규 건물 카드와 꽁 추가',
+    date: '2026.06.25',
+    items: [
+      '빼트맨 힐 간격 0.6초로 증가',
+      '신규 건물 카드 다과실, 진해 벚꽃나무 추가',
+      '신규 마법 카드 꽁 추가로 카드 풀 19장 확장'
+    ],
+    details: [
+      '빼트맨 회복은 0.4초마다 들어가던 방식에서 0.6초마다 한 번씩 들어가도록 늦춰, 범위 힐 유지력이 조금 더 약해졌다.',
+      '다과실은 5 엘릭서 건물 카드다. 전장 위치를 지정해 배치하면 HP 1500 건물이 24초 동안 서서히 체력을 잃고, 4초마다 너드남 1명과 너드녀 1명을 동시에 소환한다.',
+      '너드남은 HP 200, 공격력 40의 빠른 근접 소환수이고, 너드녀는 HP 200, 공격력 40의 빠른 원거리 소환수로 간식과 음료를 던진다.',
+      '꽁은 5 엘릭서 마법 카드다. 지정 위치에 농구공이 운석처럼 떨어져 반지름 40 안의 적 유닛과 적 타워에 500 피해를 준다.',
+      '진해 벚꽃나무는 5 엘릭서 건물 카드다. HP 2000이며 24초 동안 서서히 체력을 잃고, 1초마다 가장 가까운 적 유닛에게 벚꽃잎을 날려 100 피해를 준다.',
+      '건물 카드는 마법 카드처럼 전장 위치를 클릭해 배치하고, 적에게 타겟팅되어 파괴될 수 있으며 움직이지 않는다. 손패, 덱 화면, 캐릭터 확인 페이지에 건물/마법 타입 표시를 추가했다.'
+    ]
+  },
+  {
     title: '대.근.영과 허선 밸런스 조정',
     date: '2026.06.25',
     items: [
@@ -254,6 +271,9 @@ const CARD_THEME = {
   bbatman: { fill: 0x46b9a5, stroke: 0xc7fff4, short: '힐' },
   baduk: { fill: 0x8c6a54, stroke: 0xffd2a8, short: '박' },
   badukFart: { fill: 0xb7d94b, stroke: 0xf4ff91, short: '마법' },
+  dagwasil: { fill: 0x9b6b47, stroke: 0xffd7a8, short: '과' },
+  kkong: { fill: 0xd87a2c, stroke: 0xffd29a, short: '꽁' },
+  cherryTree: { fill: 0xffb7d7, stroke: 0xffedf5, short: '벚' },
   kkongho: { fill: 0xf4df70, stroke: 0xfff8c9, short: '승' },
   yushin: { fill: 0x7f7fd5, stroke: 0xdad8ff, short: '군' },
   jimin: { fill: 0x4f8de8, stroke: 0xd5e9ff, short: '딜' },
@@ -266,7 +286,9 @@ const CARD_THEME = {
   heoseon: { fill: 0x323039, stroke: 0xff5b66, short: '허' },
   taegeonBumperCar: { fill: 0xff9b45, stroke: 0xffdf9f, short: '붕' },
   osj: { fill: 0x4a6f88, stroke: 0xd9eef8, short: 'OSJ' },
-  geunyoungTank: { fill: 0x5d6b73, stroke: 0xcbd3d8, short: '탱' }
+  geunyoungTank: { fill: 0x5d6b73, stroke: 0xcbd3d8, short: '탱' },
+  nerdMale: { fill: 0x7b8170, stroke: 0xd3dac1, short: '남' },
+  nerdFemale: { fill: 0x9a879a, stroke: 0xf0d7ef, short: '녀' }
 };
 
 const CHARACTER_DETAILS = [
@@ -296,15 +318,15 @@ const CHARACTER_DETAILS = [
       ['HP', '410'],
       ['공격력', '없음'],
       ['힐량', '초당 47.25'],
-      ['힐 간격', '0.4초'],
+      ['힐 간격', '0.6초'],
       ['힐 범위', '81'],
       ['자가 피해', '초당 8'],
       ['이동속도', '76'],
       ['공격 주기', '없음']
     ],
-    ability: '주변에 더 좁아진 회복 원을 만들고, 원 안에 있는 모든 여학생 또는 여학생으로 인식되는 아군을 0.4초마다 한 번씩 회복시킨다. 회복 대상이 원 밖에 있으면 가까운 대상 쪽으로 이동한다. 전장에 있는 동안에는 시간이 지날수록 체력이 조금씩 줄어든다.',
+    ability: '주변에 더 좁아진 회복 원을 만들고, 원 안에 있는 모든 여학생 또는 여학생으로 인식되는 아군을 0.6초마다 한 번씩 회복시킨다. 회복 대상이 원 밖에 있으면 가까운 대상 쪽으로 이동한다. 전장에 있는 동안에는 시간이 지날수록 체력이 조금씩 줄어든다.',
     appearance: '키가 작고 마른 남학생. 삭발 머리, 매우 탄 피부, 운동을 잘할 것 같은 체형이다.',
-    trait: '공격하지 못하는 순수 힐러다. 힐량은 낮아졌고 회복이 0.4초 간격으로 들어가지만 여러 아군을 동시에 회복할 수 있다.'
+    trait: '공격하지 못하는 순수 힐러다. 힐량은 낮아졌고 회복이 0.6초 간격으로 들어가지만 여러 아군을 동시에 회복할 수 있다.'
   },
   {
     id: 'baduk',
@@ -341,6 +363,60 @@ const CHARACTER_DETAILS = [
     ability: '플레이어가 전장 위치 하나를 지정하면 그 지점 주변에 고정 크기의 초록/노란 가스 장판이 바로 생긴다. 4초 동안 장판 안에 있는 모든 적 유닛과 적 타워가 초당 80 피해를 받아 총 320 피해를 받을 수 있다. 유닛을 소환하지 않는 순수 마법 카드라 사용 즉시 효과가 발동한다.',
     appearance: '캐릭터가 직접 나오지 않고, 지정한 위치에 초록색과 노란색이 섞인 방구 가스 구름이 정해진 크기로 생긴다.',
     trait: '3 엘릭서로 좁은 지역을 강하게 압박할 수 있다. 적 유닛뿐 아니라 적 타워도 피해를 받지만, 범위가 줄어 정확한 위치 지정이 더 중요해졌다.'
+  },
+  {
+    id: 'dagwasil',
+    name: '다과실',
+    cost: '5',
+    type: '건물 / 소환 건물',
+    cardType: 'building',
+    stats: [
+      ['카드 종류', '건물 카드'],
+      ['건물 HP', '1500'],
+      ['건물 크기', '공주 타워와 동일'],
+      ['지속 시간', '24초 / 체력 서서히 감소'],
+      ['소환 주기', '4초마다 너드남 1명 + 너드녀 1명'],
+      ['너드남', 'HP 200 / 공격력 40 / 빠른 근접 공격'],
+      ['너드녀', 'HP 200 / 공격력 40 / 빠른 원거리 공격']
+    ],
+    ability: '플레이어가 전장 위치 하나를 지정하면 그 위치에 다과실 건물이 배치된다. 건물은 움직이지 않고 적에게 타겟팅되어 파괴될 수 있다. 배치 후 24초 동안 체력이 조금씩 줄어들며, 살아있는 동안 4초마다 너드남과 너드녀를 동시에 소환한다.',
+    appearance: '공주 타워 정도 크기의 건물이며, 전면에 다과실 간판이 붙어 있다. 시간이 지나거나 공격을 받으면 HP 막대로 손상 상태를 확인할 수 있다. 소환되는 너드남과 너드녀는 후줄근하고 냄새나는 학생처럼 보인다.',
+    trait: '5 엘릭서로 지속 병력을 만드는 건물 카드다. 너드남은 가까이 붙어서 빠르게 때리고, 너드녀는 뒤에서 간식과 음료를 던져 원거리 피해를 준다.'
+  },
+  {
+    id: 'kkong',
+    name: '꽁',
+    cost: '5',
+    type: '마법 / 순간 폭격',
+    cardType: 'spell',
+    stats: [
+      ['카드 종류', '마법 카드'],
+      ['피해량', '500'],
+      ['충돌 반지름', '40'],
+      ['효과 대상', '범위 안 적 유닛과 적 타워'],
+      ['소환 유닛', '없음']
+    ],
+    ability: '플레이어가 전장 위치 하나를 지정하면 농구공이 운석처럼 위에서 떨어져 지정 위치에 충돌한다. 충돌 지점 주변 반지름 40 안의 모든 적 유닛과 적 타워가 500 피해를 받는다.',
+    appearance: '하늘에서 농구공이 빠르게 떨어지고, 착지 지점에 큰 충돌 폭발이 생긴다.',
+    trait: '좁은 범위에 큰 피해를 꽂는 5 엘릭서 마법 카드다. 바둑이 방구보다 범위가 작아서 정확도는 더 중요하지만, 한 번에 강한 피해를 넣을 수 있다.'
+  },
+  {
+    id: 'cherryTree',
+    name: '진해 벚꽃나무',
+    cost: '5',
+    type: '건물 / 벚꽃 원거리',
+    cardType: 'building',
+    stats: [
+      ['카드 종류', '건물 카드'],
+      ['건물 HP', '2000'],
+      ['지속 시간', '24초 / 체력 서서히 감소'],
+      ['공격력', '100'],
+      ['공격 주기', '1초'],
+      ['공격 대상', '가장 가까운 적 유닛']
+    ],
+    ability: '플레이어가 전장 위치 하나를 지정하면 벚꽃나무 건물이 배치된다. 건물은 움직이지 않고, 배치 후 24초 동안 체력이 조금씩 줄어든다. 살아있는 동안 1초마다 가장 가까운 적 유닛에게 벚꽃잎을 날려 100 피해를 준다.',
+    appearance: '분홍 벚꽃이 풍성한 나무가 전장에 서 있고, 공격할 때 아름다운 벚꽃잎이 적에게 날아간다.',
+    trait: '24초 동안 유지되는 방어형 건물 카드다. HP가 높지만 시간이 지나면 스스로 무너지며, 적 유닛을 꾸준히 끊어내지만 직접 움직이지 않고 적에게 파괴될 수 있다.'
   },
   {
     id: 'kkongho',
@@ -757,10 +833,13 @@ class BattleScene extends Phaser.Scene {
     if (this.slot === null || this.slot === undefined || this.selectedHandIndex === null || this.state.status !== 'playing') return;
     const player = this.state.players[this.slot];
     const team = player ? player.team : this.slot;
-    if (this.isSelectedSpellCard()) {
-      this.g.fillStyle(0xb7d94b, 0.08);
+    if (this.isSelectedFreeTargetCard()) {
+      const card = this.getSelectedCard();
+      const previewColor = card && card.building ? 0xffd7a8 : 0xb7d94b;
+      const strokeColor = card && card.building ? 0xffd7a8 : 0xf4ff91;
+      this.g.fillStyle(previewColor, 0.08);
       this.g.fillRect(28, 28, ARENA_W - 56, ARENA_H - 56);
-      this.g.lineStyle(2, 0xf4ff91, 0.55);
+      this.g.lineStyle(2, strokeColor, 0.55);
       this.g.strokeRect(28, 28, ARENA_W - 56, ARENA_H - 56);
       return;
     }
@@ -835,7 +914,11 @@ class BattleScene extends Phaser.Scene {
         this.g.strokeCircle(unit.x, unit.y, BBATMAN_HEAL_RANGE);
       }
 
-      this.drawCharacter(unit, theme, radius);
+      if (card.building) {
+        this.drawBuilding(unit, theme, radius);
+      } else {
+        this.drawCharacter(unit, theme, radius);
+      }
 
       this.g.fillStyle(0x111318, 0.92);
       this.g.fillRect(unit.x - 24, unit.y - radius - 13, 48, 6);
@@ -848,6 +931,58 @@ class BattleScene extends Phaser.Scene {
         this.drawCenteredText(unit.action, unit.x, unit.y - radius - 25, 10, '#fff4a7');
       }
     }
+  }
+
+  drawBuilding(unit, theme, radius) {
+    const x = unit.x;
+    const y = unit.y;
+    const outline = unit.owner === 0 ? 0xcbe1ff : 0xffd5d1;
+
+    if (unit.cardId === 'dagwasil') {
+      this.g.fillStyle(0x6e4c35, 1);
+      this.g.lineStyle(4, outline, 0.92);
+      this.g.fillRoundedRect(x - radius, y - radius, radius * 2, radius * 2, 8);
+      this.g.strokeRoundedRect(x - radius, y - radius, radius * 2, radius * 2, 8);
+      this.g.fillStyle(0xb9885a, 1);
+      this.g.fillRoundedRect(x - 26, y - 18, 52, 16, 5);
+      this.g.lineStyle(2, 0xffd7a8, 0.95);
+      this.g.strokeRoundedRect(x - 26, y - 18, 52, 16, 5);
+      this.drawCenteredText('다과실', x, y - 17, 12, '#fff4df');
+      this.g.fillStyle(0x2d2119, 1);
+      this.g.fillRect(x - 20, y + 8, 14, 26);
+      this.g.fillStyle(0xffd7a8, 0.95);
+      this.g.fillCircle(x + 18, y + 12, 7);
+      this.g.fillCircle(x + 5, y + 20, 5);
+      this.g.lineStyle(2, 0xffd7a8, unit.action ? 0.95 : 0.45);
+      this.g.strokeCircle(x, y, radius + 7);
+    } else if (unit.cardId === 'cherryTree') {
+      this.g.fillStyle(0x7d4a2f, 1);
+      this.g.lineStyle(4, outline, 0.9);
+      this.g.fillRoundedRect(x - 9, y - 6, 18, 40, 6);
+      this.g.strokeRoundedRect(x - 9, y - 6, 18, 40, 6);
+      this.g.fillStyle(0xffb7d7, 1);
+      this.g.fillCircle(x, y - 26, 30);
+      this.g.fillCircle(x - 20, y - 15, 21);
+      this.g.fillCircle(x + 22, y - 16, 22);
+      this.g.fillCircle(x + 4, y - 4, 25);
+      this.g.lineStyle(3, 0xffedf5, 0.92);
+      this.g.strokeCircle(x, y - 20, 31);
+      this.g.fillStyle(0xffedf5, 0.92);
+      this.g.fillCircle(x - 10, y - 28, 3);
+      this.g.fillCircle(x + 13, y - 12, 3);
+      this.g.fillCircle(x + 1, y - 3, 3);
+      if (unit.action) {
+        this.g.lineStyle(2, 0xffedf5, 0.75);
+        this.g.strokeCircle(x, y, radius + 10);
+      }
+    } else {
+      this.g.fillStyle(theme.fill, 1);
+      this.g.lineStyle(4, outline, 0.9);
+      this.g.fillRoundedRect(x - radius, y - radius, radius * 2, radius * 2, 8);
+      this.g.strokeRoundedRect(x - radius, y - radius, radius * 2, radius * 2, 8);
+    }
+
+    this.drawCenteredText(theme.short, x, y - 5, 12, '#111318');
   }
 
   drawCharacter(unit, theme, radius) {
@@ -1072,6 +1207,36 @@ class BattleScene extends Phaser.Scene {
       this.g.fillCircle(x + 13, y + 14, 5);
       this.g.lineStyle(2, 0xffdf9f, 0.85);
       this.g.lineBetween(x - dir * 22, y - 2, x - dir * 34, y - 2);
+    } else if (unit.cardId === 'nerdMale') {
+      this.g.fillStyle(theme.fill, 1);
+      this.g.fillRoundedRect(x - 8, y - 8, 16, 24, 5);
+      this.g.strokeRoundedRect(x - 8, y - 8, 16, 24, 5);
+      this.g.fillStyle(0xc49f81, 1);
+      this.g.fillEllipse(x, y - 20, 18, 15);
+      this.g.strokeEllipse(x, y - 20, 18, 15);
+      this.g.fillStyle(0x3b342a, 1);
+      this.g.fillEllipse(x, y - 27, 21, 8);
+      this.g.lineStyle(1, dark, 1);
+      this.g.strokeCircle(x - 4, y - 20, 3);
+      this.g.strokeCircle(x + 4, y - 20, 3);
+      this.g.lineStyle(3, 0xd3dac1, 0.85);
+      this.g.lineBetween(x + dir * 7, y - 2, x + dir * 22, y - 6);
+      this.g.lineBetween(x - dir * 7, y, x - dir * 18, y + 8);
+    } else if (unit.cardId === 'nerdFemale') {
+      this.g.fillStyle(theme.fill, 1);
+      this.g.fillRoundedRect(x - 8, y - 9, 16, 25, 5);
+      this.g.strokeRoundedRect(x - 8, y - 9, 16, 25, 5);
+      this.g.fillStyle(0xf0c0a2, 1);
+      this.g.fillEllipse(x, y - 22, 18, 15);
+      this.g.strokeEllipse(x, y - 22, 18, 15);
+      this.g.fillStyle(0x302322, 1);
+      this.g.fillEllipse(x, y - 27, 22, 10);
+      this.g.fillCircle(x - 10, y - 20, 5);
+      this.g.fillCircle(x + 10, y - 20, 5);
+      this.g.lineStyle(2, 0xf0d7ef, 0.95);
+      this.g.fillStyle(0xffd7a8, 1);
+      this.g.fillCircle(x + dir * 18, y - 7, 5);
+      this.g.lineBetween(x + dir * 7, y - 3, x + dir * 18, y - 7);
     } else if (unit.cardId === 'geunyoungTank') {
       const barrelEnd = x + dir * 25;
       this.g.fillStyle(0x303a3f, 1);
@@ -1244,6 +1409,28 @@ class BattleScene extends Phaser.Scene {
         this.g.lineStyle(4, 0xf4ff91, alpha * 0.7 + 0.18);
         this.g.strokeCircle(effect.x, effect.y, radius);
         this.drawCenteredText('바둑이 방구', effect.x, Math.max(18, effect.y - radius - 26), 14, '#f4ff91');
+      } else if (effect.type === 'meteor') {
+        const radius = effect.radius || 40;
+        const impactT = Phaser.Math.Clamp(t * 1.45, 0, 1);
+        const ballX = effect.x - 120 + 120 * impactT;
+        const ballY = effect.y - 240 + 240 * impactT;
+        this.g.lineStyle(7, 0xffd29a, alpha * 0.8);
+        this.g.lineBetween(effect.x - 130, effect.y - 250, ballX, ballY);
+        this.g.fillStyle(0xd87a2c, 1);
+        this.g.fillCircle(ballX, ballY, 15);
+        this.g.lineStyle(2, 0xfff0d0, 0.95);
+        this.g.strokeCircle(ballX, ballY, 15);
+        this.g.lineBetween(ballX - 12, ballY, ballX + 12, ballY);
+        this.g.lineBetween(ballX, ballY - 12, ballX, ballY + 12);
+        if (t > 0.48) {
+          const boomT = Phaser.Math.Clamp((t - 0.48) / 0.52, 0, 1);
+          const boomAlpha = 1 - boomT;
+          this.g.fillStyle(0xff9b45, boomAlpha * 0.25);
+          this.g.fillCircle(effect.x, effect.y, 18 + boomT * radius * 1.35);
+          this.g.lineStyle(6, 0xffd29a, boomAlpha);
+          this.g.strokeCircle(effect.x, effect.y, 10 + boomT * radius * 1.45);
+          this.drawCenteredText('꽁!', effect.x, Math.max(18, effect.y - radius - 24), 20, '#ffd29a');
+        }
       } else if (effect.type === 'bumper-explosion') {
         const radius = effect.radius || 76;
         this.g.fillStyle(0xff9b45, alpha * 0.26);
@@ -1265,6 +1452,22 @@ class BattleScene extends Phaser.Scene {
         this.g.lineStyle(3, 0xcbd3d8, alpha);
         this.g.strokeCircle(effect.x, effect.y, 12 + t * 30);
         this.drawCenteredText('호위', effect.x, effect.y - 26, 13, '#cbd3d8');
+      } else if (effect.type === 'snack-spawn') {
+        this.g.lineStyle(3, 0xffd7a8, alpha);
+        this.g.strokeCircle(effect.x, effect.y, 12 + t * 34);
+        this.g.fillStyle(0xffd7a8, alpha);
+        this.g.fillCircle(effect.x - 10, effect.y + 2, 5);
+        this.g.fillCircle(effect.x + 12, effect.y - 6, 4);
+        this.drawCenteredText('다과실', effect.x, effect.y - 28, 13, '#ffd7a8');
+      } else if (effect.type === 'cherry-shot') {
+        this.drawAttackTrail(effect, 0xffb7d7, alpha, t, 4);
+        const px = Number.isFinite(effect.fromX) ? Phaser.Math.Linear(effect.fromX, effect.x, t) : effect.x;
+        const py = Number.isFinite(effect.fromY) ? Phaser.Math.Linear(effect.fromY, effect.y, t) : effect.y;
+        this.g.fillStyle(0xffedf5, alpha);
+        this.g.fillEllipse(px - 8, py - 3, 10, 5, Math.PI / 5);
+        this.g.fillEllipse(px + 6, py + 4, 10, 5, -Math.PI / 4);
+        this.g.lineStyle(3, 0xffb7d7, alpha);
+        this.g.strokeCircle(effect.x, effect.y, 10 + t * 20);
       } else if (effect.type === 'king-return') {
         this.drawKingReturnEffect(effect, t, alpha);
       } else if (effect.type === 'leech') {
@@ -1318,6 +1521,16 @@ class BattleScene extends Phaser.Scene {
       this.g.fillCircle(effect.x - 9, effect.y, 6 + t * 5);
       this.g.fillCircle(effect.x + 2, effect.y - 5, 6 + t * 5);
       this.g.fillCircle(effect.x + 10, effect.y + 4, 6 + t * 5);
+    } else if (effect.cardId === 'nerdFemale') {
+      this.g.fillStyle(0xffd7a8, alpha);
+      this.g.fillCircle(effect.x - 7, effect.y - 2, 5 + t * 5);
+      this.g.fillStyle(0xf0d7ef, alpha);
+      this.g.fillRoundedRect(effect.x + 2, effect.y - 8, 12, 15, 4);
+    } else if (effect.cardId === 'nerdMale') {
+      this.g.lineStyle(4, 0xd3dac1, alpha);
+      this.g.lineBetween(effect.x - 18, effect.y + 10, effect.x + 18, effect.y - 10);
+      this.g.fillStyle(0xffffff, alpha);
+      this.g.fillCircle(effect.x, effect.y, 7 + t * 12);
     } else if (effect.cardId === 'mythos') {
       this.g.lineStyle(4, 0xffee64, alpha);
       this.g.lineBetween(effect.x - 24, effect.y + 20, effect.x + 26, effect.y - 24);
@@ -1434,6 +1647,18 @@ class BattleScene extends Phaser.Scene {
       this.g.fillCircle(x - 15, y + 11, 5 + t * 3);
       this.g.fillCircle(x + 15, y + 11, 5 + t * 3);
       this.g.lineBetween(x - 30 - t * 18, y, x - 12, y);
+    } else if (effect.cardId === 'dagwasil') {
+      this.g.fillRoundedRect(x - 28, y - 20, 56, 40, 7);
+      this.g.lineBetween(x - 24, y - 6, x + 24, y - 6);
+      this.drawCenteredText('다과실', x, y - 18, 11, '#ffffff');
+    } else if (effect.cardId === 'cherryTree') {
+      this.g.fillRoundedRect(x - 7, y - 2, 14, 26, 5);
+      this.g.fillCircle(x, y - 22, 28);
+      this.g.fillCircle(x - 18, y - 12, 17);
+      this.g.fillCircle(x + 18, y - 12, 17);
+      this.g.fillStyle(0xffedf5, alpha * 0.85);
+      this.g.fillCircle(x - 9, y - 24, 3);
+      this.g.fillCircle(x + 12, y - 13, 3);
     } else if (effect.cardId === 'peach') {
       this.g.strokeCircle(x - 8, y - 6, 13 + t * 4);
       this.g.lineBetween(x + 3, y + 4, x + 22, y + 23);
@@ -1589,6 +1814,12 @@ class BattleScene extends Phaser.Scene {
       this.g.fillStyle(0x111318, 0.58);
       this.g.fillRoundedRect(x + w - 36, y + 8, 24, 24, 6);
       this.drawCenteredText(String(i + 1), x + w - 24, y + 13, 12, disabled ? '#b9b9b9' : '#f7f2e8');
+      const typeIcon = card.spell ? '✦' : card.building ? '▣' : '';
+      if (typeIcon) {
+        this.g.fillStyle(0x111318, 0.58);
+        this.g.fillCircle(x + w - 54, y + 20, 12);
+        this.drawCenteredText(typeIcon, x + w - 54, y + 12, 12, disabled ? '#b9b9b9' : '#ffffff');
+      }
       this.drawCenteredText(theme.short, x + w / 2, y + 33, 30, disabled ? '#b9b9b9' : '#111318');
       this.drawCenteredText(card.name, x + w / 2, y + 69, 15, '#ffffff');
       this.drawCenteredText(bestFriendCombo ? '절친 출격' : card.role, x + w / 2, y + 91, 10, '#f5ead8');
@@ -1633,7 +1864,11 @@ class BattleScene extends Phaser.Scene {
     this.g.fillRoundedRect(x, y, w, h, 6);
     this.g.strokeRoundedRect(x, y, w, h, 6);
     this.drawCenteredText(card ? theme.short : '-', x + w / 2, y + 8, 11, card ? '#111318' : '#d6d0c6');
-    if (card) this.drawCenteredText(String(card.cost), x + w / 2, y + 27, 10, '#ffffff');
+    if (card) {
+      this.drawCenteredText(String(card.cost), x + w / 2, y + 27, 10, '#ffffff');
+      const typeIcon = card.spell ? '✦' : card.building ? '▣' : '';
+      if (typeIcon) this.drawCenteredText(typeIcon, x + w - 9, y + 28, 9, '#ffffff');
+    }
   }
 
   drawOverlay() {
@@ -1676,18 +1911,23 @@ class BattleScene extends Phaser.Scene {
   }
 
   canPlaySelectedAt(x, y) {
-    if (this.isSelectedSpellCard()) return x >= 28 && x <= ARENA_W - 28 && y >= 28 && y <= ARENA_H - 28;
+    if (this.isSelectedFreeTargetCard()) return x >= 28 && x <= ARENA_W - 28 && y >= 28 && y <= ARENA_H - 28;
     return this.isInOwnSpawnZone(x, y);
   }
 
-  isSelectedSpellCard() {
+  getSelectedCard() {
     const player = this.state && this.slot !== null && this.slot !== undefined ? this.state.players[this.slot] : null;
     const cardId = player && player.hand && player.hand[this.selectedHandIndex];
-    const card = this.cards[cardId];
-    return Boolean(card && card.spell);
+    return this.cards[cardId];
+  }
+
+  isSelectedFreeTargetCard() {
+    const card = this.getSelectedCard();
+    return Boolean(card && (card.spell || card.building));
   }
 
   getVisualRadius(cardId) {
+    if (cardId === 'dagwasil' || cardId === 'cherryTree') return 34;
     if (cardId === 'yushin') return 10;
     if (cardId === 'kimgeunyoung') return 24;
     if (cardId === 'baduk') return 23;
@@ -1698,6 +1938,7 @@ class BattleScene extends Phaser.Scene {
     if (cardId === 'taegeonBumperCar') return 16;
     if (cardId === 'osj') return 22;
     if (cardId === 'geunyoungTank') return 16;
+    if (cardId === 'nerdMale' || cardId === 'nerdFemale') return 15;
     return 18;
   }
 
@@ -1716,6 +1957,8 @@ class BattleScene extends Phaser.Scene {
     if (type === 'best-friend-combo') return 1300;
     if (type === 'deploy') return 1100;
     if (type === 'summon-minion') return 700;
+    if (type === 'snack-spawn') return 720;
+    if (type === 'cherry-shot') return 580;
     if (type === 'king-return') return 1800;
     if (type === 'leech') return 760;
     if (type === 'leech-detach') return 620;
@@ -1723,6 +1966,7 @@ class BattleScene extends Phaser.Scene {
     if (type === 'push') return 760;
     if (type === 'berserk-hit') return 520;
     if (type === 'gas-zone') return 4000;
+    if (type === 'meteor') return 900;
     if (type === 'bumper-explosion') return 850;
     if (type === 'hit') return 520;
     return 700;
@@ -2395,6 +2639,7 @@ function deckPoolCard(card) {
   button.type = 'button';
   button.className = 'deck-pool-card';
   if (card.spell) button.classList.add('deck-pool-card-spell');
+  if (card.building) button.classList.add('deck-pool-card-building');
   if (selected) button.classList.add('deck-pool-card-selected');
   button.disabled = full && !selected;
   button.style.setProperty('--card-accent', `#${theme.fill.toString(16).padStart(6, '0')}`);
@@ -2404,7 +2649,7 @@ function deckPoolCard(card) {
   const name = document.createElement('span');
   name.textContent = card.name;
   const meta = document.createElement('small');
-  meta.textContent = `${card.cost} 엘릭서 · ${card.spell ? '마법' : card.role}`;
+  meta.textContent = `${card.cost} 엘릭서 · ${card.spell ? '마법' : card.building ? '건물' : card.role}`;
   const type = document.createElement('em');
   type.textContent = detail ? detail.type : card.role;
 
@@ -3028,16 +3273,17 @@ function renderCharacterGrid() {
     const article = document.createElement('article');
     article.className = `character-card character-card-${character.id}`;
     if (character.cardType === 'spell') article.classList.add('character-card-spell');
+    if (character.cardType === 'building') article.classList.add('character-card-building');
     article.dataset.theme = theme.short;
 
     const heading = document.createElement('h2');
     heading.textContent = character.name;
     article.appendChild(heading);
 
-    if (character.cardType === 'spell') {
+    if (character.cardType === 'spell' || character.cardType === 'building') {
       const badge = document.createElement('p');
       badge.className = 'card-type-badge';
-      badge.textContent = '마법 카드';
+      badge.textContent = character.cardType === 'building' ? '건물 카드' : '마법 카드';
       article.appendChild(badge);
     }
 
