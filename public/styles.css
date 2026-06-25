@@ -176,6 +176,7 @@ body {
   padding: 6px 12px 6px 8px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 9px;
   color: var(--ink);
   background: var(--panel);
@@ -184,12 +185,17 @@ body {
   box-shadow: var(--shadow);
   font-size: 18px;
   font-weight: 900;
+  cursor: pointer;
 }
 
 .brand-mark img {
   width: 32px;
   height: 32px;
   display: block;
+}
+
+.brand-mark:hover {
+  filter: brightness(1.08);
 }
 
 .auth-intro {

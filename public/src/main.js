@@ -22,6 +22,20 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: '야클 로고 홈 버튼 적용',
+    date: '2026.06.25',
+    items: [
+      '상단 야클 로고를 누르면 메인페이지로 이동',
+      '로그인 전에는 로고 클릭 시 로그인 화면 유지',
+      '로고 버튼 접근성 문구 추가'
+    ],
+    details: [
+      '상단 고정 야클 로고를 단순 표시 영역에서 버튼으로 바꿔, 다른 화면에 있을 때 바로 메인페이지로 돌아갈 수 있게 했다.',
+      '로그인하지 않은 상태에서는 이동할 홈 화면이 없으므로 로그인 화면으로 돌아가도록 처리했다.',
+      '스크린리더에서도 버튼의 목적을 알 수 있게 aria-label을 메인페이지 이동으로 지정했다.'
+    ]
+  },
+  {
     title: '진해 벚꽃나무 수정과 자이언트 현직 추가',
     date: '2026.06.25',
     items: [
@@ -2169,6 +2183,7 @@ function setupShell() {
   const themeButton = document.getElementById('theme-toggle');
   const authScreen = document.getElementById('auth-screen');
   const homeScreen = document.getElementById('home-screen');
+  const brandHomeButton = document.getElementById('brand-home');
   const updateHistoryScreen = document.getElementById('update-history-screen');
   const roomScreen = document.getElementById('room-screen');
   const encyclopediaScreen = document.getElementById('encyclopedia-screen');
@@ -2228,6 +2243,10 @@ function setupShell() {
 
   showLoginButton.addEventListener('click', () => {
     setAuthMode('login');
+  });
+
+  brandHomeButton.addEventListener('click', () => {
+    showScreen(currentUser ? homeScreen : authScreen);
   });
 
   startButton.addEventListener('click', () => {
