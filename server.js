@@ -86,6 +86,7 @@ const CARDS = {
     radius: 15,
     healer: true,
     healPerSecond: 47.25,
+    healIntervalMs: 400,
     healRange: 81,
     followDistance: 72,
     decayPerSecond: 8
@@ -113,8 +114,8 @@ const CARDS = {
     spell: true,
     spellType: 'area-dot',
     durationMs: 4000,
-    damagePerSecond: 100,
-    radius: 118
+    damagePerSecond: 80,
+    radius: 59
   },
   kkongho: {
     id: 'kkongho',
@@ -1235,6 +1236,7 @@ function spawnUnit(room, owner, cardId, x, y, extras = {}) {
     hp: card.maxHp,
     maxHp: card.maxHp,
     nextAttackAt: now + Math.floor(Math.random() * 320),
+    nextHealAt: now,
     nextSkillAt: now + 700,
     nextChaosAt: now + randomBetween(2500, 5600),
     nextSummonAt: now + (card.spawnMinionMs || 1000),
@@ -1564,10 +1566,8 @@ function updateHealer(room, unit, card, deltaSeconds, now) {
   });
 
   if (healTargets.length > 0) {
-    for (const target of healTargets) {
-      target.hp = Math.min(target.maxHp, target.hp + card.healPerSecond * deltaSeconds);
-    }
-    unit.action = '범위 힐';
+    const didHeal = applyHealerPulse(unit, card, healTargets, deltaSeconds, now);
+    unit.action = didHeal ? '범위 힐' : '힐 대기';
     unit.actionUntil = now + 200;
     return;
   }
@@ -1592,9 +1592,30 @@ function updateHealer(room, unit, card, deltaSeconds, now) {
     return;
   }
 
-  target.hp = Math.min(target.maxHp, target.hp + card.healPerSecond * deltaSeconds);
-  unit.action = '범위 힐';
+  const didHeal = applyHealerPulse(unit, card, [target], deltaSeconds, now);
+  unit.action = didHeal ? '범위 힐' : '힐 대기';
   unit.actionUntil = now + 200;
+}
+
+function applyHealerPulse(unit, card, targets, deltaSeconds, now) {
+  if (!targets.length) return false;
+
+  const healIntervalMs = card.healIntervalMs || 0;
+  if (healIntervalMs > 0 && now < (unit.nextHealAt || 0)) return false;
+
+  const healAmount = healIntervalMs > 0
+    ? card.healPerSecond * (healIntervalMs / 1000)
+    : card.healPerSecond * deltaSeconds;
+
+  for (const target of targets) {
+    target.hp = Math.min(target.maxHp, target.hp + healAmount);
+  }
+
+  if (healIntervalMs > 0) {
+    unit.nextHealAt = now + healIntervalMs;
+  }
+
+  return true;
 }
 
 function updateRui(room, unit, card, deltaSeconds, now) {
@@ -1705,6 +1726,7 @@ function resolveWindup(room, unit, card, now) {
   }
 
   applyDamage(room, target, card.damage, unit.owner, now);
+  lockTowerTargetAfterHit(game, unit, target);
   broadcastEffect(room, { type: 'punchline', owner: unit.owner, cardId: unit.cardId, fromX: unit.x, fromY: unit.y, x: target.x, y: target.y });
 }
 
@@ -1730,12 +1752,14 @@ function performAttack(room, unit, card, target, now) {
       applyDamageToUnit(room, enemy, damage, unit.owner, now);
     }
     applyDamage(room, target, damage, unit.owner, now);
+    lockTowerTargetAfterHit(game, unit, target);
     unit.nextSkillAt = now + card.skillCooldownMs;
     unit.action = '음파 폭소';
     unit.actionUntil = now + 500;
     broadcastEffect(room, { type: 'sonic', owner: unit.owner, cardId: unit.cardId, fromX: unit.x, fromY: unit.y, x: target.x, y: target.y });
   } else {
     applyDamage(room, target, damage, unit.owner, now);
+    lockTowerTargetAfterHit(game, unit, target);
     broadcastEffect(room, { type: 'hit', owner: unit.owner, cardId: unit.cardId, fromX: unit.x, fromY: unit.y, x: target.x, y: target.y });
   }
 
@@ -1748,6 +1772,7 @@ function performPushAttack(room, unit, card, target, damage, now) {
 
   if (targets.length === 0) {
     applyDamage(room, target, damage, unit.owner, now);
+    lockTowerTargetAfterHit(game, unit, target);
   } else {
     const pushDir = unit.owner === 0 ? -1 : 1;
     for (const enemy of targets) {
@@ -1796,6 +1821,7 @@ function performBerserkerAttack(room, unit, card, target, damage, now) {
 
   if (target.entity === 'tower') {
     applyDamage(room, target, damage, unit.owner, now);
+    lockTowerTargetAfterHit(game, unit, target);
     hitCount += 1;
   } else if (target.entity === 'unit') {
     hitUnitIds.add(target.id);
@@ -1867,16 +1893,18 @@ function findUnitTarget(game, unit, card) {
   if (nearUnit) return nearUnit;
 
   const towers = getAttackableEnemyTowers(game, unit.owner);
-  const towerTarget = nearest(unit, towers);
-  if (towerTarget) {
-    unit.targetLockId = towerTarget.id;
-  }
-  return towerTarget;
+  return nearest(unit, towers);
 }
 
 function isValidTowerLock(game, unit, target) {
   if (!target || target.entity !== 'tower' || target.owner === unit.owner || target.hp <= 0) return false;
   return getAttackableEnemyTowers(game, unit.owner).some((tower) => tower.id === target.id);
+}
+
+function lockTowerTargetAfterHit(game, unit, target) {
+  if (target && target.entity === 'tower' && isValidTowerLock(game, unit, target)) {
+    unit.targetLockId = target.id;
+  }
 }
 
 function getAttackableEnemyTowers(game, owner) {
