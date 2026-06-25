@@ -22,6 +22,25 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: '꽁 착탄 판정과 밸런스·이름 조정',
+    date: '2026.06.25',
+    items: [
+      '꽁은 농구공이 땅에 꽂힌 순간에만 피해 적용',
+      '대.근.영 HP와 공격력 하향',
+      '광주 탱크 HP와 공격력 10% 하향',
+      '다과실 너드녀 HP 20% 하향',
+      '거대 건물 파괴자 표시 이름을 자이언트 ZICK로 변경'
+    ],
+    details: [
+      '꽁은 사용 즉시 피해가 들어가던 방식에서, 농구공이 운석처럼 날아와 착탄한 뒤 범위 피해가 들어가도록 바꿨다.',
+      '꽁 이펙트도 착탄 전에는 농구공 비행만 보이고, 착탄 시점부터 폭발이 보이도록 조정했다.',
+      '대.근.영 본체 HP는 2500에서 2300으로, 공격력은 89에서 80으로 낮췄다.',
+      '대.근.영이 소환하는 광주 탱크는 HP 211에서 190으로, 공격력 19에서 17로 낮췄다.',
+      '다과실에서 나오는 너드녀 HP는 200에서 160으로 낮췄다.',
+      '건물만 공격하는 거대 유닛의 표시 이름을 자이언트 ZICK로 바꿨다.'
+    ]
+  },
+  {
     title: '야클 로고 홈 버튼 적용',
     date: '2026.06.25',
     items: [
@@ -36,12 +55,12 @@ const PATCH_NOTICES = [
     ]
   },
   {
-    title: '진해 벚꽃나무 수정과 자이언트 현직 추가',
+    title: '진해 벚꽃나무 수정과 자이언트 ZICK 추가',
     date: '2026.06.25',
     items: [
       '벚꽃나무 공격 이펙트가 화면을 멈추게 하던 그래픽 호출 수정',
-      '신규 건물 파괴자 카드 자이언트 현직 추가',
-      '자이언트 현직은 적 캐릭터를 절대 공격하지 않고 건물만 공격',
+      '신규 건물 파괴자 카드 자이언트 ZICK 추가',
+      '자이언트 ZICK는 적 캐릭터를 절대 공격하지 않고 건물만 공격',
       '카드 풀 20장 기준으로 랜덤 덱과 테스트 갱신',
       '벚꽃나무가 실제로 적을 공격하는 스모크 테스트 추가',
       '클라이언트 검사에 잘못된 타원 smoothness 인자 방지 추가'
@@ -49,7 +68,7 @@ const PATCH_NOTICES = [
     details: [
       '진해 벚꽃나무의 벚꽃잎 투사체를 그릴 때 Phaser의 fillEllipse 5번째 인자를 회전값처럼 넘기던 문제가 있었다. 이 인자는 실제로 점 개수 smoothness라서 잘못된 값이 들어가면 그래픽 루프가 불안정해질 수 있다.',
       '벚꽃잎 이펙트는 안전한 smoothness 값으로만 그리도록 바꿔 전투 화면이 멈추지 않게 했다.',
-      '자이언트 현직은 6 엘릭서 캐릭터 카드다. HP 1800, 공격력 120, 공격 주기 1.2초의 거대한 근접 딜러로, 다과실과 진해 벚꽃나무 같은 건물 카드와 적 타워만 부순다.',
+      '자이언트 ZICK는 6 엘릭서 캐릭터 카드다. HP 1800, 공격력 120, 공격 주기 1.2초의 거대한 근접 딜러로, 다과실과 진해 벚꽃나무 같은 건물 카드와 적 타워만 부순다.',
       '적 캐릭터가 바로 옆에 있어도 절대 공격하지 않고 지나가며, 공격 가능한 건물이나 타워가 없으면 유닛을 때리는 대신 새 건물 목표를 기다린다.',
       '스모크 테스트에서 벚꽃나무를 직접 설치하고 적 유닛을 가까이 배치해 cherry-shot 이펙트가 정상 발생하는지 검증하도록 추가했다.'
     ]
@@ -328,7 +347,7 @@ const CARD_THEME = {
   dagwasil: { fill: 0x9b6b47, stroke: 0xffd7a8, short: '과' },
   kkong: { fill: 0xd87a2c, stroke: 0xffd29a, short: '꽁' },
   cherryTree: { fill: 0xffb7d7, stroke: 0xffedf5, short: '벚' },
-  giantHyeonjik: { fill: 0x6f5f86, stroke: 0xe3d7ff, short: '현' },
+  giantHyeonjik: { fill: 0x6f5f86, stroke: 0xe3d7ff, short: 'Z' },
   kkongho: { fill: 0xf4df70, stroke: 0xfff8c9, short: '승' },
   yushin: { fill: 0x7f7fd5, stroke: 0xdad8ff, short: '군' },
   jimin: { fill: 0x4f8de8, stroke: 0xd5e9ff, short: '딜' },
@@ -432,7 +451,7 @@ const CHARACTER_DETAILS = [
       ['지속 시간', '24초 / 체력 서서히 감소'],
       ['소환 주기', '4초마다 너드남 1명 + 너드녀 1명'],
       ['너드남', 'HP 200 / 공격력 40 / 빠른 근접 공격'],
-      ['너드녀', 'HP 200 / 공격력 40 / 빠른 원거리 공격']
+      ['너드녀', 'HP 160 / 공격력 40 / 빠른 원거리 공격']
     ],
     ability: '플레이어가 전장 위치 하나를 지정하면 그 위치에 다과실 건물이 배치된다. 건물은 움직이지 않고 적에게 타겟팅되어 파괴될 수 있다. 배치 후 24초 동안 체력이 조금씩 줄어들며, 살아있는 동안 4초마다 너드남과 너드녀를 동시에 소환한다.',
     appearance: '공주 타워 정도 크기의 건물이며, 전면에 다과실 간판이 붙어 있다. 시간이 지나거나 공격을 받으면 HP 막대로 손상 상태를 확인할 수 있다. 소환되는 너드남과 너드녀는 후줄근하고 냄새나는 학생처럼 보인다.',
@@ -451,7 +470,7 @@ const CHARACTER_DETAILS = [
       ['효과 대상', '범위 안 적 유닛과 적 타워'],
       ['소환 유닛', '없음']
     ],
-    ability: '플레이어가 전장 위치 하나를 지정하면 농구공이 운석처럼 위에서 떨어져 지정 위치에 충돌한다. 충돌 지점 주변 반지름 40 안의 모든 적 유닛과 적 타워가 500 피해를 받는다.',
+    ability: '플레이어가 전장 위치 하나를 지정하면 농구공이 운석처럼 위에서 떨어진다. 피해는 사용 즉시 들어가지 않고, 농구공이 지정 위치에 꽂힌 순간 충돌 지점 주변 반지름 40 안의 모든 적 유닛과 적 타워에 500 피해를 준다.',
     appearance: '하늘에서 농구공이 빠르게 떨어지고, 착지 지점에 큰 충돌 폭발이 생긴다.',
     trait: '좁은 범위에 큰 피해를 꽂는 5 엘릭서 마법 카드다. 바둑이 방구보다 범위가 작아서 정확도는 더 중요하지만, 한 번에 강한 피해를 넣을 수 있다.'
   },
@@ -475,7 +494,7 @@ const CHARACTER_DETAILS = [
   },
   {
     id: 'giantHyeonjik',
-    name: '자이언트 현직',
+    name: '자이언트 ZICK',
     cost: '6',
     type: '건물 특화 근접 딜러',
     stats: [
@@ -617,17 +636,17 @@ const CHARACTER_DETAILS = [
     cost: '10',
     type: '탱커 소환 + 근접 딜러',
     stats: [
-      ['HP', '2500'],
-      ['공격력', '89'],
+      ['HP', '2300'],
+      ['공격력', '80'],
       ['사거리', '43'],
       ['공격 주기', '1.155초'],
       ['이동속도', '41'],
-      ['광주 탱크', '1.5초마다 HP 211 / 공격력 19'],
+      ['광주 탱크', '1.5초마다 HP 190 / 공격력 17'],
       ['출격 효과', '전투 시간 +30초']
     ],
-    ability: '전장에 등장하는 순간 왕의 귀환 임팩트가 깔리며 전투 시간이 30초 추가된다. X2 또는 X3 엘릭서 구간에 등장했다면 추가된 30초 동안 그 배율이 유지된다. 전장에 있는 동안 항상 1.5초마다 HP 211, 공격력 19의 광주 탱크를 하나씩 소환한다. 본체는 HP 2500, 공격력 89의 근접 단일 공격을 한다.',
+    ability: '전장에 등장하는 순간 왕의 귀환 임팩트가 깔리며 전투 시간이 30초 추가된다. X2 또는 X3 엘릭서 구간에 등장했다면 추가된 30초 동안 그 배율이 유지된다. 전장에 있는 동안 항상 1.5초마다 HP 190, 공격력 17의 광주 탱크를 하나씩 소환한다. 본체는 HP 2300, 공격력 80의 근접 단일 공격을 한다.',
     appearance: '잘생긴 남학생이다.',
-    trait: '한 경기에서 한 번만 사용할 수 있다. 본체와 광주 탱크의 공격력은 낮아졌지만, 전투 시간을 늘려 후반 변수를 만드는 카드가 됐다.'
+    trait: '한 경기에서 한 번만 사용할 수 있다. 본체와 광주 탱크가 다시 낮아졌지만, 전투 시간을 늘려 후반 변수를 만드는 카드다.'
   },
   {
     id: 'kimrui',
@@ -1505,7 +1524,8 @@ class BattleScene extends Phaser.Scene {
         this.drawCenteredText('바둑이 방구', effect.x, Math.max(18, effect.y - radius - 26), 14, '#f4ff91');
       } else if (effect.type === 'meteor') {
         const radius = effect.radius || 40;
-        const impactT = Phaser.Math.Clamp(t * 1.45, 0, 1);
+        const impactDelayMs = effect.impactDelayMs || 620;
+        const impactT = Phaser.Math.Clamp(age / impactDelayMs, 0, 1);
         const ballX = effect.x - 120 + 120 * impactT;
         const ballY = effect.y - 240 + 240 * impactT;
         this.g.lineStyle(7, 0xffd29a, alpha * 0.8);
@@ -1516,8 +1536,8 @@ class BattleScene extends Phaser.Scene {
         this.g.strokeCircle(ballX, ballY, 15);
         this.g.lineBetween(ballX - 12, ballY, ballX + 12, ballY);
         this.g.lineBetween(ballX, ballY - 12, ballX, ballY + 12);
-        if (t > 0.48) {
-          const boomT = Phaser.Math.Clamp((t - 0.48) / 0.52, 0, 1);
+        if (age >= impactDelayMs) {
+          const boomT = Phaser.Math.Clamp((age - impactDelayMs) / Math.max(180, duration - impactDelayMs), 0, 1);
           const boomAlpha = 1 - boomT;
           this.g.fillStyle(0xff9b45, boomAlpha * 0.25);
           this.g.fillCircle(effect.x, effect.y, 18 + boomT * radius * 1.35);

@@ -152,7 +152,8 @@ const CARDS = {
     spell: true,
     spellType: 'meteor',
     damage: 500,
-    radius: 40
+    radius: 40,
+    impactDelayMs: 620
   },
   cherryTree: {
     id: 'cherryTree',
@@ -171,7 +172,7 @@ const CARDS = {
   },
   giantHyeonjik: {
     id: 'giantHyeonjik',
-    name: '자이언트 현직',
+    name: '자이언트 ZICK',
     cost: 6,
     role: '건물 파괴',
     maxHp: 1800,
@@ -276,8 +277,8 @@ const CARDS = {
     name: '대.근.영',
     cost: 10,
     role: '탱커 소환',
-    maxHp: 2500,
-    damage: 89,
+    maxHp: 2300,
+    damage: 80,
     range: 43,
     speed: 41,
     attackMs: 1155,
@@ -360,8 +361,8 @@ const CARDS = {
     cost: 0,
     role: '소환 탱커',
     playable: false,
-    maxHp: 211,
-    damage: 19,
+    maxHp: 190,
+    damage: 17,
     range: 32,
     speed: 37,
     attackMs: 1155,
@@ -386,7 +387,7 @@ const CARDS = {
     cost: 0,
     role: '다과실 소환수',
     playable: false,
-    maxHp: 200,
+    maxHp: 160,
     damage: 40,
     range: 142,
     speed: 42,
@@ -1124,6 +1125,7 @@ function createGameState(mode = '1v1') {
     units: [],
     spellZones: [],
     pendingSpawns: [],
+    pendingImpacts: [],
     chatMessages: [],
     nextUnitId: 1,
     nextSpellId: 1,
@@ -1257,6 +1259,7 @@ function startMatch(room) {
   game.units = [];
   game.spellZones = [];
   game.pendingSpawns = [];
+  game.pendingImpacts = [];
   game.chatMessages = [];
   game.nextUnitId = 1;
   game.nextSpellId = 1;
@@ -1515,15 +1518,17 @@ function castSpellCard(room, owner, card, x, y) {
   const game = room.game;
   const now = Date.now();
   if (card.spellType === 'meteor') {
+    const impactDelayMs = card.impactDelayMs || 620;
     const impact = {
       owner,
       cardId: card.id,
       x: clamp(x, 28, ARENA.width - 28),
       y: clamp(y, 28, ARENA.height - 28),
       radius: card.radius,
-      damage: card.damage
+      damage: card.damage,
+      readyAt: now + impactDelayMs
     };
-    applyAreaDamage(room, impact, card.damage, card.radius, owner, now);
+    game.pendingImpacts.push(impact);
     broadcastEffect(room, {
       type: 'meteor',
       owner,
@@ -1531,7 +1536,8 @@ function castSpellCard(room, owner, card, x, y) {
       x: impact.x,
       y: impact.y,
       radius: impact.radius,
-      damage: impact.damage
+      damage: impact.damage,
+      impactDelayMs
     });
     return;
   }
@@ -1588,6 +1594,30 @@ function processPendingSpawns(room, now) {
     spawnCard(room, pending.owner, pending.cardId, pending.x, pending.y, pending.extras);
   }
   game.pendingSpawns = remaining;
+}
+
+function processPendingImpacts(room, now) {
+  const game = room.game;
+  if (!Array.isArray(game.pendingImpacts) || game.pendingImpacts.length === 0) return;
+
+  const remaining = [];
+  for (const impact of game.pendingImpacts) {
+    if (impact.readyAt > now) {
+      remaining.push(impact);
+      continue;
+    }
+    applyAreaDamage(room, impact, impact.damage, impact.radius, impact.owner, now);
+    broadcastEffect(room, {
+      type: 'meteor-impact',
+      owner: impact.owner,
+      cardId: impact.cardId,
+      x: impact.x,
+      y: impact.y,
+      radius: impact.radius,
+      damage: impact.damage
+    });
+  }
+  game.pendingImpacts = remaining;
 }
 
 function getDeployDelayMs(cardId) {
@@ -1661,6 +1691,7 @@ function tickGame(room, now, deltaSeconds) {
     }
     game.units = [];
     game.pendingSpawns = [];
+    game.pendingImpacts = [];
     game.pendingAscensionAt = 0;
     broadcastEffect(room, { type: 'ascension-end' });
   }
@@ -1670,6 +1701,7 @@ function tickGame(room, now, deltaSeconds) {
   }
 
   processPendingSpawns(room, now);
+  processPendingImpacts(room, now);
 
   const elixirMultiplier = getElixirMultiplier(game, now);
   for (const player of game.players) {

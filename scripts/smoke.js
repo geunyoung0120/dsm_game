@@ -14,6 +14,7 @@ const bestFriendComboCost = 8;
 const smokeDeck = ['osj', 'heoseon', 'johyunwoo', 'seongjoo', 'peach', 'bbatman', 'jimin', 'yushin'];
 const cherryTreeDeck = ['cherryTree', 'seongjoo', 'peach', 'jimin', 'bbatman', 'yushin', 'mythos', 'johyunwoo'];
 const giantHyeonjikDeck = ['giantHyeonjik', 'seongjoo', 'peach', 'jimin', 'bbatman', 'yushin', 'mythos', 'johyunwoo'];
+const kkongMeteorDeck = ['kkong', 'seongjoo', 'peach', 'jimin', 'bbatman', 'yushin', 'mythos', 'johyunwoo'];
 const targetDummyDeck = ['peach', 'seongjoo', 'jimin', 'bbatman', 'yushin', 'mythos', 'johyunwoo', 'osj'];
 
 let serverProcess = null;
@@ -56,6 +57,7 @@ async function main() {
   const result = await runClientSmoke(accounts);
   const cherryTree = await expectCherryTreeAttackFlow(accounts);
   const giantHyeonjik = await expectGiantHyeonjikIgnoresUnits(accounts);
+  const kkongMeteor = await expectKkongMeteorDamageDelayed(accounts);
   const twoVersusTwoAccounts = await Promise.all([
     signup(`연습유저${Date.now()}C`),
     signup(`연습유저${Date.now()}D`),
@@ -71,7 +73,7 @@ async function main() {
   if (actualOpeningHand !== expectedOpeningHand) {
     throw new Error(`Saved deck was not used for player 1. Expected ${expectedOpeningHand}, got ${actualOpeningHand}.`);
   }
-  console.log(JSON.stringify({ ...result, cherryTree, giantHyeonjik, twoVersusTwo }));
+  console.log(JSON.stringify({ ...result, cherryTree, giantHyeonjik, kkongMeteor, twoVersusTwo }));
   cleanup();
 }
 
@@ -356,7 +358,7 @@ async function expectGiantHyeonjikIgnoresUnits(accounts) {
   }));
 
   await Promise.all(clients.map((client) => once(client, 'welcome')));
-  clients[0].emit('create-room', { name: '자이언트 현직 스모크 테스트 방', password: '' });
+  clients[0].emit('create-room', { name: '자이언트 ZICK 스모크 테스트 방', password: '' });
   const joined = await once(clients[0], 'room-joined', 'giant host room-joined');
   clients[1].emit('join-room', { roomId: joined.room.id, password: '' });
   await once(clients[1], 'room-joined', 'giant guest room-joined');
@@ -375,11 +377,55 @@ async function expectGiantHyeonjikIgnoresUnits(accounts) {
   }, 'deployed giant and target unit');
   const noUnitHitPromise = expectNoEffect(clients[0], (effect) => {
     return effect.type === 'hit' && effect.cardId === 'giantHyeonjik' && Math.abs(effect.x - 450) <= 45 && Math.abs(effect.y - 282) <= 45;
-  }, 'giant Hyeonjik unit hit', 1700);
+  }, 'giant ZICK unit hit', 1700);
   clients[0].emit('play-card', { handIndex: 0, x: 450, y: 338 });
   clients[1].emit('play-card', { handIndex: 0, x: 450, y: 282 });
   await deployedPromise;
   await noUnitHitPromise;
+
+  for (const client of clients) client.disconnect();
+  return true;
+}
+
+async function expectKkongMeteorDamageDelayed(accounts) {
+  await expectDeckSave(accounts[0], kkongMeteorDeck);
+  await expectDeckSave(accounts[1], targetDummyDeck);
+
+  clients = accounts.map((account) => io(url, {
+    transports: ['websocket'],
+    extraHeaders: { Cookie: account.cookie }
+  }));
+
+  await Promise.all(clients.map((client) => once(client, 'welcome')));
+  clients[0].emit('create-room', { name: '꽁 지연 데미지 스모크 테스트 방', password: '' });
+  const joined = await once(clients[0], 'room-joined', 'kkong host room-joined');
+  clients[1].emit('join-room', { roomId: joined.room.id, password: '' });
+  await once(clients[1], 'room-joined', 'kkong guest room-joined');
+  const readyState = await waitForState(clients[0], (payload) => {
+    return payload.status === 'playing' && payload.players[0] && Array.isArray(payload.players[0].hand) && payload.players[0].hand[0] === 'kkong' && payload.players[0].elixir >= 5;
+  }, 'kkong host playing state');
+  const initialHp = enemyLeftPrincessHp(readyState);
+  if (initialHp !== 5400) {
+    throw new Error(`Unexpected initial enemy princess tower HP for Kkong test: ${initialHp}.`);
+  }
+  await delay(150);
+
+  const meteorEffectPromise = onceEffect(clients[0], (effect) => effect.type === 'meteor' && effect.cardId === 'kkong' && effect.impactDelayMs >= 600, 'kkong meteor travel effect');
+  clients[0].emit('play-card', { handIndex: 0, x: 255, y: 128 });
+  await meteorEffectPromise;
+
+  await delay(180);
+  const beforeImpactState = await waitForState(clients[0], (payload) => payload.status === 'playing', 'kkong pre-impact tower state');
+  const beforeImpactHp = enemyLeftPrincessHp(beforeImpactState);
+  if (beforeImpactHp !== initialHp) {
+    throw new Error(`Kkong damaged before impact. Expected ${initialHp}, got ${beforeImpactHp}.`);
+  }
+
+  const afterImpactState = await waitForState(clients[0], (payload) => enemyLeftPrincessHp(payload) === initialHp - 500, 'kkong post-impact tower damage');
+  const afterImpactHp = enemyLeftPrincessHp(afterImpactState);
+  if (afterImpactHp !== 4900) {
+    throw new Error(`Kkong impact damage expected 4900 tower HP, got ${afterImpactHp}.`);
+  }
 
   for (const client of clients) client.disconnect();
   return true;
@@ -564,17 +610,17 @@ function expectHeoseonNerf(cards) {
   if (!cards.nerdMale || cards.nerdMale.playable !== false || cards.nerdMale.maxHp !== 200 || cards.nerdMale.damage !== 40 || cards.nerdMale.attackMs !== 717) {
     throw new Error('Nerd male minion did not expose the expected fields.');
   }
-  if (!cards.nerdFemale || cards.nerdFemale.playable !== false || cards.nerdFemale.maxHp !== 200 || cards.nerdFemale.damage !== 40 || cards.nerdFemale.range !== 142 || cards.nerdFemale.attackMs !== 717) {
+  if (!cards.nerdFemale || cards.nerdFemale.playable !== false || cards.nerdFemale.maxHp !== 160 || cards.nerdFemale.damage !== 40 || cards.nerdFemale.range !== 142 || cards.nerdFemale.attackMs !== 717) {
     throw new Error('Nerd female minion did not expose the expected fields.');
   }
-  if (!cards.kkong || !cards.kkong.spell || cards.kkong.spellType !== 'meteor' || cards.kkong.cost !== 5 || cards.kkong.damage !== 500 || cards.kkong.radius !== 40) {
+  if (!cards.kkong || !cards.kkong.spell || cards.kkong.spellType !== 'meteor' || cards.kkong.cost !== 5 || cards.kkong.damage !== 500 || cards.kkong.radius !== 40 || cards.kkong.impactDelayMs !== 620) {
     throw new Error('Kkong meteor spell card did not expose the expected fields.');
   }
   if (!cards.cherryTree || !cards.cherryTree.building || cards.cherryTree.cost !== 5 || cards.cherryTree.maxHp !== 2000 || cards.cherryTree.damage !== 100 || cards.cherryTree.attackMs !== 1000 || cards.cherryTree.buildingDurationMs !== 24000 || !cards.cherryTree.cherryAttack) {
     throw new Error('Cherry tree building card did not expose the expected fields.');
   }
   if (!cards.giantHyeonjik || cards.giantHyeonjik.cost !== 6 || cards.giantHyeonjik.maxHp !== 1800 || cards.giantHyeonjik.damage !== 120 || cards.giantHyeonjik.attackMs !== 1200 || cards.giantHyeonjik.radius !== 31 || !cards.giantHyeonjik.buildingDestroyer) {
-    throw new Error('Giant Hyeonjik card did not expose the expected building destroyer fields.');
+    throw new Error('Giant ZICK card did not expose the expected building destroyer fields.');
   }
   if (!cards.taegeonBumperCar || cards.taegeonBumperCar.cost !== 1 || cards.taegeonBumperCar.speed !== 95 || cards.taegeonBumperCar.maxHp !== 120 || cards.taegeonBumperCar.damage !== 200 || cards.taegeonBumperCar.explosionDamage !== 200 || !cards.taegeonBumperCar.suicideRusher) {
     throw new Error('Taegeon bumper car did not expose the expected suicide rusher fields.');
@@ -582,12 +628,18 @@ function expectHeoseonNerf(cards) {
   if (!cards.seongjoo || cards.seongjoo.attackMs !== 686) {
     throw new Error('Seongjoo attack speed nerf was not present.');
   }
-  if (!cards.kimgeunyoung || cards.kimgeunyoung.maxHp !== 2500 || cards.kimgeunyoung.damage !== 89 || cards.kimgeunyoung.timeExtensionMs !== 30000) {
+  if (!cards.kimgeunyoung || cards.kimgeunyoung.maxHp !== 2300 || cards.kimgeunyoung.damage !== 80 || cards.kimgeunyoung.timeExtensionMs !== 30000) {
     throw new Error('Kim Geunyoung return tuning was not present.');
   }
-  if (!cards.geunyoungTank || cards.geunyoungTank.damage !== 19) {
+  if (!cards.geunyoungTank || cards.geunyoungTank.maxHp !== 190 || cards.geunyoungTank.damage !== 17) {
     throw new Error('Geunyoung tank damage tuning was not present.');
   }
+}
+
+function enemyLeftPrincessHp(state) {
+  if (!state || !Array.isArray(state.towers)) return null;
+  const tower = state.towers.find((candidate) => candidate.owner === 1 && candidate.type === 'princess-left');
+  return tower ? tower.hp : null;
 }
 
 function once(client, eventName, label = eventName) {
