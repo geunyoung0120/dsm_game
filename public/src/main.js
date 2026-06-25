@@ -2070,8 +2070,8 @@ function renderPatchNotices() {
   if (!list) return;
   list.replaceChildren();
 
-  if (PATCH_NOTICES.length > 0) {
-    list.appendChild(patchNoticeArticle(PATCH_NOTICES[0]));
+  for (const notice of PATCH_NOTICES.slice(0, 3)) {
+    list.appendChild(patchNoticeArticle(notice, { compact: true, showDetails: false }));
   }
 }
 
@@ -2081,13 +2081,16 @@ function renderUpdateHistory() {
   list.replaceChildren();
 
   for (const notice of PATCH_NOTICES) {
-    list.appendChild(patchNoticeArticle(notice));
+    list.appendChild(patchNoticeArticle(notice, { showDetails: true }));
   }
 }
 
-function patchNoticeArticle(notice) {
+function patchNoticeArticle(notice, options = {}) {
+  const compact = Boolean(options.compact);
+  const showDetails = options.showDetails !== false;
   const article = document.createElement('article');
   article.className = 'patch-notice';
+  if (compact) article.classList.add('patch-notice-compact');
 
   const header = document.createElement('div');
   header.className = 'patch-notice-header';
@@ -2108,7 +2111,7 @@ function patchNoticeArticle(notice) {
 
   article.append(header, items);
 
-  if (Array.isArray(notice.details) && notice.details.length > 0) {
+  if (showDetails && Array.isArray(notice.details) && notice.details.length > 0) {
     const detailButton = document.createElement('button');
     detailButton.type = 'button';
     detailButton.className = 'patch-detail-toggle secondary';
