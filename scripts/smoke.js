@@ -873,7 +873,7 @@ function expectHeoseonNerf(cards) {
   if (!cards.mythos || cards.mythos.damage !== 63 || cards.mythos.awakenedDamage !== 108) {
     throw new Error('Mythos damage tuning was not present.');
   }
-  if (!cards.changGpt || cards.changGpt.cost !== 7 || cards.changGpt.maxHp !== 1000 || cards.changGpt.damage !== 200 || cards.changGpt.attackMs !== 1000 || cards.changGpt.backfireChance !== 0.2 || cards.changGpt.bbatmanHealingMultiplier !== 0.5) {
+  if (!cards.changGpt || cards.changGpt.cost !== 7 || cards.changGpt.maxHp !== 1000 || cards.changGpt.damage !== 200 || cards.changGpt.range !== 120 || cards.changGpt.streamWidth !== 260 || cards.changGpt.attackMs !== 1000 || cards.changGpt.backfireChance !== 0.2 || cards.changGpt.bbatmanHealingMultiplier !== 0.5) {
     throw new Error('ChangGPT card did not expose the expected high-risk ranged fields.');
   }
   if (!cards.haikuGeonhwi || cards.haikuGeonhwi.cost !== 2 || cards.haikuGeonhwi.maxHp !== 400 || cards.haikuGeonhwi.damage !== 15 || cards.haikuGeonhwi.attackMs !== 100 || cards.haikuGeonhwi.tokenLimitAfter !== 3 || cards.haikuGeonhwi.tokenLimitMs !== 1000) {
@@ -883,7 +883,7 @@ function expectHeoseonNerf(cards) {
   if (!cards.badukFart || !cards.badukFart.spell || cards.badukFart.damagePerSecond !== 60 || cards.badukFart.radius !== 59 || cards.badukFart.durationMs !== 4000) {
     throw new Error('Baduk fart spell card did not expose the expected spell fields.');
   }
-  if (!cards.bbatman || cards.bbatman.healPerSecond !== 40.1625 || cards.bbatman.healIntervalMs !== 600) {
+  if (!cards.bbatman || cards.bbatman.maxHp !== 350 || cards.bbatman.healPerSecond !== 40.1625 || cards.bbatman.healIntervalMs !== 600) {
     throw new Error('Bbatman heal interval was not present.');
   }
   const playableCount = Object.values(cards).filter((card) => card && card.playable !== false).length;
@@ -902,10 +902,10 @@ function expectHeoseonNerf(cards) {
   if (!cards.kkong || !cards.kkong.spell || cards.kkong.spellType !== 'meteor' || cards.kkong.cost !== 4 || cards.kkong.damage !== 500 || cards.kkong.radius !== 40 || cards.kkong.impactDelayMs !== 620) {
     throw new Error('Kkong meteor spell card did not expose the expected fields.');
   }
-  if (!cards.cherryTree || !cards.cherryTree.building || cards.cherryTree.cost !== 5 || cards.cherryTree.maxHp !== 1700 || cards.cherryTree.damage !== 100 || cards.cherryTree.range !== 175 || cards.cherryTree.attackMs !== 1000 || cards.cherryTree.buildingDurationMs !== 20000 || !cards.cherryTree.cherryAttack) {
+  if (!cards.cherryTree || !cards.cherryTree.building || cards.cherryTree.cost !== 5 || cards.cherryTree.maxHp !== 1700 || cards.cherryTree.damage !== 100 || cards.cherryTree.range !== 130 || cards.cherryTree.attackMs !== 1000 || cards.cherryTree.buildingDurationMs !== 20000 || !cards.cherryTree.cherryAttack) {
     throw new Error('Cherry tree building card did not expose the expected fields.');
   }
-  if (!cards.giantHyeonjik || cards.giantHyeonjik.cost !== 7 || cards.giantHyeonjik.maxHp !== 2200 || cards.giantHyeonjik.damage !== 150 || cards.giantHyeonjik.attackMs !== 1200 || cards.giantHyeonjik.radius !== 31 || !cards.giantHyeonjik.buildingDestroyer) {
+  if (!cards.giantHyeonjik || cards.giantHyeonjik.cost !== 7 || cards.giantHyeonjik.maxHp !== 2200 || cards.giantHyeonjik.damage !== 150 || cards.giantHyeonjik.speed !== 21.6 || cards.giantHyeonjik.attackMs !== 1200 || cards.giantHyeonjik.radius !== 31 || !cards.giantHyeonjik.buildingDestroyer) {
     throw new Error('Giant ZICK card did not expose the expected building destroyer fields.');
   }
   if (!cards.taegeonBumperCar || cards.taegeonBumperCar.cost !== 1 || cards.taegeonBumperCar.speed !== 95 || cards.taegeonBumperCar.maxHp !== 120 || cards.taegeonBumperCar.damage !== 200 || cards.taegeonBumperCar.explosionDamage !== 200 || !cards.taegeonBumperCar.suicideRusher) {
@@ -914,7 +914,7 @@ function expectHeoseonNerf(cards) {
   if (!cards.seongjoo || cards.seongjoo.attackMs !== 686) {
     throw new Error('Seongjoo attack speed nerf was not present.');
   }
-  if (!cards.osj || cards.osj.cost !== 6 || cards.osj.maxHp !== 1200 || cards.osj.damage !== 20) {
+  if (!cards.osj || cards.osj.cost !== 6 || cards.osj.maxHp !== 1200 || cards.osj.damage !== 20 || cards.osj.speed !== 19) {
     throw new Error('OSJ latest tuning was not present.');
   }
   if (!cards.kimgeunyoung || cards.kimgeunyoung.maxHp !== 2300 || cards.kimgeunyoung.damage !== 80 || cards.kimgeunyoung.timeExtensionMs !== 30000) {
