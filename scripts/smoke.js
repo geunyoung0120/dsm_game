@@ -11,7 +11,7 @@ const url = `http://localhost:${port}`;
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsm-game-smoke-'));
 const smokePassword = 'test-password';
 const bestFriendPair = ['baduk', 'johyunwoo'];
-const bestFriendComboCost = 8;
+const bestFriendComboCost = 7;
 const smokeDeck = ['osj', 'heoseon', 'johyunwoo', 'seongjoo', 'peach', 'bbatman', 'jimin', 'yushin'];
 const dagwasilDeck = ['dagwasil', 'seongjoo', 'peach', 'jimin', 'bbatman', 'yushin', 'mythos', 'johyunwoo'];
 const cherryTreeDeck = ['cherryTree', 'seongjoo', 'peach', 'jimin', 'bbatman', 'yushin', 'mythos', 'johyunwoo'];
@@ -982,7 +982,7 @@ function expectHeoseonNerf(cards) {
     }
   }
 
-  if (!cards.baduk || cards.baduk.damage !== 100 || cards.baduk.chaosEnemyDamage !== 100 || cards.baduk.chaosFriendlyDamage !== 29) {
+  if (!cards.baduk || cards.baduk.cost !== 7 || cards.baduk.damage !== 100 || cards.baduk.chaosEnemyDamage !== 100 || cards.baduk.chaosFriendlyDamage !== 29) {
     throw new Error('Baduk damage tuning was not present.');
   }
   if (!cards.zzangga || cards.zzangga.cost !== 5 || cards.zzangga.maxHp !== 646 || cards.zzangga.damage !== 83) {
@@ -994,7 +994,7 @@ function expectHeoseonNerf(cards) {
   if (!cards.changGpt || cards.changGpt.cost !== 7 || cards.changGpt.maxHp !== 1000 || cards.changGpt.damage !== 200 || cards.changGpt.range !== 120 || cards.changGpt.streamWidth !== 260 || cards.changGpt.attackMs !== 1000 || cards.changGpt.backfireChance !== 0.2 || cards.changGpt.bbatmanHealingMultiplier !== 0.5) {
     throw new Error('ChangGPT card did not expose the expected high-risk ranged fields.');
   }
-  if (!cards.haikuGeonhwi || cards.haikuGeonhwi.cost !== 2 || cards.haikuGeonhwi.maxHp !== 400 || cards.haikuGeonhwi.damage !== 15 || cards.haikuGeonhwi.attackMs !== 100 || cards.haikuGeonhwi.tokenLimitAfter !== 3 || cards.haikuGeonhwi.tokenLimitMs !== 1000) {
+  if (!cards.haikuGeonhwi || cards.haikuGeonhwi.cost !== 2 || cards.haikuGeonhwi.maxHp !== 330 || cards.haikuGeonhwi.damage !== 15 || cards.haikuGeonhwi.attackMs !== 100 || cards.haikuGeonhwi.tokenLimitAfter !== 3 || cards.haikuGeonhwi.tokenLimitMs !== 1000) {
     throw new Error('Haiku Geonhwi card did not expose the expected token limit fields.');
   }
 
@@ -1014,7 +1014,7 @@ function expectHeoseonNerf(cards) {
   if (!cards.nerdMale || cards.nerdMale.playable !== false || cards.nerdMale.maxHp !== 180 || cards.nerdMale.damage !== 32 || cards.nerdMale.attackMs !== 717) {
     throw new Error('Nerd male minion did not expose the expected fields.');
   }
-  if (!cards.nerdFemale || cards.nerdFemale.playable !== false || cards.nerdFemale.maxHp !== 140 || cards.nerdFemale.damage !== 32 || cards.nerdFemale.range !== 142 || cards.nerdFemale.attackMs !== 717) {
+  if (!cards.nerdFemale || cards.nerdFemale.playable !== false || cards.nerdFemale.maxHp !== 140 || cards.nerdFemale.damage !== 32 || cards.nerdFemale.range !== 113.6 || cards.nerdFemale.attackMs !== 717) {
     throw new Error('Nerd female minion did not expose the expected fields.');
   }
   if (!cards.kkong || !cards.kkong.spell || cards.kkong.spellType !== 'meteor' || cards.kkong.cost !== 4 || cards.kkong.damage !== 500 || cards.kkong.radius !== 40 || cards.kkong.impactDelayMs !== 620) {

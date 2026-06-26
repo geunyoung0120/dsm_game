@@ -57,7 +57,7 @@ const TOWER_HP = {
   princess: 5400
 };
 const BEST_FRIEND_PAIR = ['baduk', 'johyunwoo'];
-const BEST_FRIEND_COMBO_COST = 8;
+const BEST_FRIEND_COMBO_COST = 7;
 const KKONGHO_MAX_ELIXIR_BONUS = 2;
 const DEFAULT_DEPLOY_DELAY_MS = 650;
 const ROOM_MODES = {
@@ -135,7 +135,7 @@ const CARDS = {
   baduk: {
     id: 'baduk',
     name: '박바둑',
-    cost: 8,
+    cost: 7,
     role: '카오스 딜러',
     maxHp: 1300,
     damage: 100,
@@ -268,7 +268,7 @@ const CARDS = {
     name: '하이쿠 건휘',
     cost: 2,
     role: '초고속 원거리',
-    maxHp: 400,
+    maxHp: 330,
     damage: 15,
     range: 165,
     speed: 43,
@@ -435,7 +435,7 @@ const CARDS = {
     playable: false,
     maxHp: 140,
     damage: 32,
-    range: 142,
+    range: 113.6,
     speed: 42,
     attackMs: 717,
     radius: 15,
