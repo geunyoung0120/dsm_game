@@ -25,6 +25,24 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: '토너먼트 보상과 카드 픽률 업데이트',
+    date: '2026.06.26',
+    items: [
+      '토너먼트 참가비 1 트로피 고정',
+      '참가자 수 기준 우승/준우승 상금 적용',
+      '하루 1회 토너먼트 제한과 최대 32명 고정',
+      '티어 승급 기준 1.5배 상향',
+      '덱 정렬과 카드 픽률 화면 추가'
+    ],
+    details: [
+      '토너먼트 참가비는 1 트로피로 고정하고, 참가자 1~5명은 우승 5개/준우승 3개, 6~10명은 우승 10개/준우승 4개처럼 5명 단위로 상금이 오른다.',
+      '32명이 참가한 토너먼트는 우승 상금이 100개로 올라간다.',
+      '토너먼트 대회는 하루에 한 번만 열 수 있고, 시작 전에 취소되면 그날 사용한 것으로 치지 않는다.',
+      '마이어스~챔피언 티어 기준을 전보다 약 1.5배 높여 트로피 상승 속도에 맞췄다.',
+      '덱짜기에서 엘릭서 낮은 순/높은 순, 데미지 높은 순, HP 높은 순 정렬을 지원하고, 메인 하단에서 카드 픽률 TOP 5와 전체 픽률을 확인할 수 있다.'
+    ]
+  },
+  {
     title: '이동속도와 사거리 밸런스 조정',
     date: '2026.06.26',
     items: [
@@ -1014,13 +1032,18 @@ let ascensionAudioUntil = 0;
 let latestRankings = [];
 let latestTiers = [];
 let latestAdminUsers = [];
+let adminUserSearchQuery = '';
 let latestSpectatorRooms = [];
 let latestTournamentWinner = null;
 let latestTournamentHistory = [];
 let currentTournamentDetail = null;
+let latestPickRates = [];
+let totalPickRateDecks = 0;
+let pickRateSortMode = 'desc';
 let deckCards = {};
 let selectedDeck = [];
 let activeDeckSize = DECK_SIZE;
+let deckSortMode = 'cost-asc';
 let returnToGameAfterDeck = false;
 let showingSpectatorRooms = false;
 let battleChatMessages = [];
@@ -2440,7 +2463,8 @@ class BattleScene extends Phaser.Scene {
       this.drawCenteredText(tournament ? '토너먼트 대기실' : '플레이어 대기 중', FIELD_CENTER_X, 286, 30, '#f7f2e8');
       this.drawCenteredText(this.state.message || '필요 인원이 모두 들어오면 자동으로 시작됩니다.', FIELD_CENTER_X, 326, 16, '#d6d0c6');
       if (tournament) {
-        this.drawCenteredText(`참가비 ${tournament.stake || 0} 트로피 · 상금 풀 ${tournament.pool || 0} 트로피`, FIELD_CENTER_X, 356, 15, '#fff4a7');
+        const prizes = tournament.prizes || {};
+        this.drawCenteredText(`참가비 ${tournament.stake || 0} 트로피 · 우승 ${prizes.winnerPrize || 0}개 · 준우승 ${prizes.runnerUpPrize || 0}개`, FIELD_CENTER_X, 356, 15, '#fff4a7');
       }
     }
 
@@ -2763,6 +2787,7 @@ function setupShell() {
   const updateHistoryScreen = document.getElementById('update-history-screen');
   const tournamentHistoryScreen = document.getElementById('tournament-history-screen');
   const tournamentDetailScreen = document.getElementById('tournament-detail-screen');
+  const pickrateScreen = document.getElementById('pickrate-screen');
   const roomScreen = document.getElementById('room-screen');
   const encyclopediaScreen = document.getElementById('encyclopedia-screen');
   const rankingScreen = document.getElementById('ranking-screen');
@@ -2773,6 +2798,7 @@ function setupShell() {
   const deckButton = document.getElementById('open-deck-builder');
   const encyclopediaButton = document.getElementById('open-encyclopedia');
   const rankingButton = document.getElementById('open-ranking');
+  const pickrateButton = document.getElementById('open-pickrates');
   const mypageButton = document.getElementById('open-mypage');
   const updateHistoryButton = document.getElementById('open-update-history');
   const tournamentHistoryButton = document.getElementById('open-tournament-history');
@@ -2781,6 +2807,7 @@ function setupShell() {
   const backMypageButton = document.getElementById('back-mypage');
   const backTournamentHistoryButton = document.getElementById('back-tournament-history');
   const backTournamentDetailButton = document.getElementById('back-tournament-detail');
+  const backPickratesButton = document.getElementById('back-pickrates');
   const backRankingButton = document.getElementById('back-ranking');
   const backTierButton = document.getElementById('back-tier');
   const backDeckButton = document.getElementById('back-deck');
@@ -2805,7 +2832,10 @@ function setupShell() {
   const tournamentPrevButton = document.getElementById('tournament-prev-match');
   const tournamentNextButton = document.getElementById('tournament-next-match');
   const adminUserList = document.getElementById('admin-user-list');
+  const adminUserSearch = document.getElementById('admin-user-search');
   const refreshAdminUsersButton = document.getElementById('refresh-admin-users');
+  const deckSortSelect = document.getElementById('deck-sort');
+  const pickrateSortSelect = document.getElementById('pickrate-sort');
 
   initializeTheme(themeButton);
   renderCharacterGrid();
@@ -2863,6 +2893,13 @@ function setupShell() {
     await loadRankings();
   });
 
+  if (pickrateButton) {
+    pickrateButton.addEventListener('click', async () => {
+      showScreen(pickrateScreen);
+      await loadCardPickRates();
+    });
+  }
+
   mypageButton.addEventListener('click', async () => {
     renderProfile();
     showScreen(mypageScreen);
@@ -2906,6 +2943,12 @@ function setupShell() {
     });
   }
 
+  if (backPickratesButton) {
+    backPickratesButton.addEventListener('click', () => {
+      showScreen(homeScreen);
+    });
+  }
+
   backRankingButton.addEventListener('click', () => {
     showScreen(homeScreen);
   });
@@ -2942,10 +2985,15 @@ function setupShell() {
     currentSlot = null;
     latestState = null;
     latestAdminUsers = [];
+    adminUserSearchQuery = '';
     latestTournamentWinner = null;
     latestTournamentHistory = [];
     currentTournamentDetail = null;
+    latestPickRates = [];
+    totalPickRateDecks = 0;
     renderTournamentWinnerBanner();
+    renderPickRatePreview();
+    renderPickRateList();
     renderTournamentPanel();
     resetAuthForms();
     setAuthMode('login');
@@ -2959,9 +3007,7 @@ function setupShell() {
     const mode = document.getElementById('room-mode').value;
     const team = document.getElementById('room-team').value;
     const participantCount = document.getElementById('tournament-participants').value;
-    const stake = document.getElementById('tournament-stake').value;
-    const allowDebt = mode === 'tournament' ? confirmTournamentDebt(stake) : false;
-    if (allowDebt === null) return;
+    const stake = document.getElementById('tournament-stake').value || '1';
     connectSocket();
     getSocket().emit('create-room', {
       name,
@@ -2969,8 +3015,7 @@ function setupShell() {
       mode,
       team: mode === '2v2' ? team : null,
       participantCount: mode === 'tournament' ? participantCount : null,
-      stake: mode === 'tournament' ? stake : null,
-      allowDebt: Boolean(allowDebt)
+      stake: mode === 'tournament' ? stake : null
     });
   });
 
@@ -3023,10 +3068,28 @@ function setupShell() {
 
   saveDeckButton.addEventListener('click', saveDeck);
   if (adminUserList) adminUserList.addEventListener('click', handleAdminUserAction);
+  if (adminUserSearch) {
+    adminUserSearch.addEventListener('input', () => {
+      adminUserSearchQuery = adminUserSearch.value.trim().toLowerCase();
+      renderAdminPanel();
+    });
+  }
   if (refreshAdminUsersButton) refreshAdminUsersButton.addEventListener('click', loadAdminUsers);
+  if (deckSortSelect) {
+    deckSortSelect.addEventListener('change', () => {
+      deckSortMode = deckSortSelect.value || 'cost-asc';
+      renderDeckCardGrid();
+    });
+  }
+  if (pickrateSortSelect) {
+    pickrateSortSelect.addEventListener('change', () => {
+      pickRateSortMode = pickrateSortSelect.value === 'asc' ? 'asc' : 'desc';
+      renderPickRateList();
+    });
+  }
 
   function showScreen(target) {
-    for (const screen of [authScreen, homeScreen, mypageScreen, updateHistoryScreen, tournamentHistoryScreen, tournamentDetailScreen, roomScreen, encyclopediaScreen, rankingScreen, tierScreen, deckScreen, gameScreen]) {
+    for (const screen of [authScreen, homeScreen, mypageScreen, updateHistoryScreen, tournamentHistoryScreen, tournamentDetailScreen, pickrateScreen, roomScreen, encyclopediaScreen, rankingScreen, tierScreen, deckScreen, gameScreen]) {
       screen.classList.toggle('hidden', screen !== target);
     }
   }
@@ -3124,6 +3187,7 @@ async function loadSession() {
     renderProfile();
     await loadTournamentWinner();
     await loadRankings();
+    await loadCardPickRates();
     connectSocket();
     window.showHomeScreen();
   } catch {
@@ -3160,6 +3224,7 @@ function finishAuth(user) {
   renderProfile();
   loadTournamentWinner();
   loadRankings();
+  loadCardPickRates();
   window.showHomeScreen();
   resetAuthForms();
   connectSocket();
@@ -3326,6 +3391,22 @@ async function loadRankings() {
   } catch (error) {
     renderTopRankings(error.message || '랭킹을 가져오지 못했습니다.');
     renderRankingList(error.message || '랭킹을 가져오지 못했습니다.');
+  }
+}
+
+async function loadCardPickRates() {
+  if (!currentUser) return;
+  try {
+    const data = await apiRequest('/api/card-pick-rates');
+    latestPickRates = Array.isArray(data.cards) ? data.cards : [];
+    totalPickRateDecks = Math.max(0, Number(data.totalDecks) || 0);
+    renderPickRatePreview();
+    renderPickRateList();
+  } catch (error) {
+    latestPickRates = [];
+    totalPickRateDecks = 0;
+    renderPickRatePreview(error.message || '픽률을 가져오지 못했습니다.');
+    renderPickRateList(error.message || '픽률을 가져오지 못했습니다.');
   }
 }
 
@@ -3588,6 +3669,7 @@ function renderDeckCardGrid() {
   grid.replaceChildren();
 
   const cards = Object.values(deckCards).filter((card) => card && card.id);
+  cards.sort(compareDeckCards);
   if (cards.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'empty-list';
@@ -3641,6 +3723,25 @@ function deckPoolCard(card) {
   return button;
 }
 
+function compareDeckCards(a, b) {
+  const mode = deckSortMode || 'cost-asc';
+  if (mode === 'cost-desc') {
+    return numericCardValue(b, 'cost') - numericCardValue(a, 'cost') || a.name.localeCompare(b.name, 'ko');
+  }
+  if (mode === 'damage-desc') {
+    return numericCardValue(b, 'damage') - numericCardValue(a, 'damage') || numericCardValue(a, 'cost') - numericCardValue(b, 'cost') || a.name.localeCompare(b.name, 'ko');
+  }
+  if (mode === 'hp-desc') {
+    return numericCardValue(b, 'maxHp') - numericCardValue(a, 'maxHp') || numericCardValue(a, 'cost') - numericCardValue(b, 'cost') || a.name.localeCompare(b.name, 'ko');
+  }
+  return numericCardValue(a, 'cost') - numericCardValue(b, 'cost') || a.name.localeCompare(b.name, 'ko');
+}
+
+function numericCardValue(card, key) {
+  const value = Number(card && card[key]);
+  return Number.isFinite(value) ? value : 0;
+}
+
 function renderProfile() {
   const summary = document.getElementById('profile-summary');
   if (!summary || !currentUser) return;
@@ -3680,18 +3781,32 @@ function renderAdminPanel() {
     return;
   }
 
+  const visibleUsers = filterAdminUsers(latestAdminUsers);
   list.replaceChildren();
-  if (latestAdminUsers.length === 0) {
+  if (visibleUsers.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'empty-list';
-    empty.textContent = '표시할 유저가 없습니다.';
+    empty.textContent = adminUserSearchQuery ? '검색 결과가 없습니다.' : '표시할 유저가 없습니다.';
     list.appendChild(empty);
     return;
   }
 
-  for (const user of latestAdminUsers) {
+  for (const user of visibleUsers) {
     list.appendChild(adminUserRow(user));
   }
+}
+
+function filterAdminUsers(users) {
+  if (!adminUserSearchQuery) return users;
+  return users.filter((user) => {
+    const haystack = [
+      user.username,
+      user.signupIp,
+      user.lastIp,
+      user.tier
+    ].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(adminUserSearchQuery);
+  });
 }
 
 function adminUserRow(user) {
@@ -3823,8 +3938,8 @@ function renderTournamentPanel() {
   if (meta) {
     const count = `${tournament.participantCount || 0}/${tournament.participantTarget || 0} 명 참가중`;
     const prizes = tournament.prizes || {};
-    const winnerPrize = prizes.winnerPrize || Math.round((tournament.pool || 0) * 0.7);
-    const runnerUpPrize = prizes.runnerUpPrize || Math.max(0, (tournament.pool || 0) - winnerPrize);
+    const winnerPrize = prizes.winnerPrize || 0;
+    const runnerUpPrize = prizes.runnerUpPrize || 0;
     const pool = `상금 1등 ${winnerPrize} / 2등 ${runnerUpPrize} 트로피`;
     const stake = `참가비 ${tournament.stake || 0} 트로피`;
     const breakText = tournament.break && tournament.break.active
@@ -4064,6 +4179,106 @@ function renderTopRankings(errorMessage = '') {
   for (const entry of topThree) {
     list.appendChild(rankingPodiumItem(entry));
   }
+}
+
+function renderPickRatePreview(errorMessage = '') {
+  const list = document.getElementById('top-pickrate-list');
+  if (!list) return;
+  list.replaceChildren();
+
+  if (errorMessage) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = errorMessage;
+    list.appendChild(empty);
+    return;
+  }
+
+  if (totalPickRateDecks <= 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = '아직 픽률 데이터가 없습니다.';
+    list.appendChild(empty);
+    return;
+  }
+
+  latestPickRates.slice(0, 5).forEach((entry, index) => {
+    list.appendChild(pickRateRow(entry, index + 1));
+  });
+}
+
+function renderPickRateList(errorMessage = '') {
+  const summary = document.getElementById('pickrate-summary');
+  const list = document.getElementById('pickrate-list');
+  if (!summary || !list) return;
+
+  summary.replaceChildren();
+  list.replaceChildren();
+
+  if (errorMessage) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = errorMessage;
+    list.appendChild(empty);
+    return;
+  }
+
+  summary.textContent = totalPickRateDecks > 0
+    ? `총 ${totalPickRateDecks}개 덱 사용 기록 기준`
+    : '아직 픽률 데이터가 없습니다.';
+
+  if (latestPickRates.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = '표시할 카드가 없습니다.';
+    list.appendChild(empty);
+    return;
+  }
+
+  sortedPickRates().forEach((entry, index) => {
+    list.appendChild(pickRateRow(entry, index + 1));
+  });
+}
+
+function sortedPickRates() {
+  const direction = pickRateSortMode === 'asc' ? 1 : -1;
+  return [...latestPickRates].sort((a, b) => {
+    const rateDelta = (Number(a.pickRate) || 0) - (Number(b.pickRate) || 0);
+    if (rateDelta !== 0) return rateDelta * direction;
+    const countDelta = (Number(a.pickCount) || 0) - (Number(b.pickCount) || 0);
+    if (countDelta !== 0) return countDelta * direction;
+    return String(a.name || '').localeCompare(String(b.name || ''), 'ko');
+  });
+}
+
+function pickRateRow(entry, rank) {
+  const row = document.createElement('article');
+  row.className = 'pickrate-row';
+
+  const rankBadge = document.createElement('b');
+  rankBadge.textContent = `${rank}`;
+
+  const info = document.createElement('div');
+  const name = document.createElement('strong');
+  name.textContent = entry.name || entry.id || '카드';
+  const meta = document.createElement('small');
+  const damage = Math.max(0, Number(entry.damage) || 0);
+  const hp = Math.max(0, Number(entry.maxHp) || 0);
+  meta.textContent = `${entry.cost || 0} 엘릭서 · 데미지 ${damage} · HP ${hp} · ${entry.pickCount || 0}회`;
+  info.append(name, meta);
+
+  const rate = document.createElement('span');
+  rate.textContent = `${formatPercent(entry.pickRate)}%`;
+
+  row.append(rankBadge, info, rate);
+  return row;
+}
+
+function formatPercent(value) {
+  const percent = (Number(value) || 0) * 100;
+  if (percent >= 10) return percent.toFixed(1);
+  if (percent > 0) return percent.toFixed(2);
+  return '0';
 }
 
 function renderPatchNotices() {
@@ -4354,7 +4569,8 @@ function renderRoomList(rooms) {
     meta.className = 'room-meta';
     const teamSummary = room.mode === '2v2' ? ` · ${roomTeamSummary(room)}` : '';
     if (room.mode === 'tournament') {
-      meta.textContent = `${room.modeLabel || '토너먼트 모드'} · ${room.playerCount}/${room.maxPlayers} 명 참가중 · 참가비 ${room.stake || 0} 트로피`;
+      const prizes = room.tournament && room.tournament.prizes ? room.tournament.prizes : {};
+      meta.textContent = `${room.modeLabel || '토너먼트 모드'} · ${room.playerCount}/${room.maxPlayers} 명 참가중 · 참가비 ${room.stake || 0} 트로피 · 우승 ${prizes.winnerPrize || 0} / 준우승 ${prizes.runnerUpPrize || 0}`;
     } else {
       meta.textContent = `${room.modeLabel || '1대1'} · ${room.playerCount}/${room.maxPlayers}명 대기${teamSummary}`;
     }
@@ -4437,26 +4653,13 @@ function renderSpectatorRoomList(rooms) {
 }
 
 function joinRoom(room, password, team = null) {
-  const allowDebt = room.mode === 'tournament' ? confirmTournamentDebt(room.stake || 0) : false;
-  if (allowDebt === null) return;
   connectSocket();
   const payload = {
     roomId: room.id,
     password
   };
   if (team !== null && team !== undefined) payload.team = String(team);
-  if (allowDebt) payload.allowDebt = true;
   getSocket().emit('join-room', payload);
-}
-
-function confirmTournamentDebt(stakeValue) {
-  const stake = Math.max(0, Number(stakeValue) || 0);
-  const trophies = Number(currentUser && currentUser.trophies) || 0;
-  if (stake <= 0) return false;
-  if (stake <= trophies) return false;
-  const debt = stake - trophies;
-  const ok = window.confirm(`참가비 ${stake} 트로피가 부족합니다. ${debt} 트로피만큼 빚을 지고 토너먼트에 참가할까요?`);
-  return ok ? true : null;
 }
 
 function watchRoom(room) {

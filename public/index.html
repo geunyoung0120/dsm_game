@@ -162,6 +162,17 @@
                 <div><strong>+2</strong><span>킹타워 파괴</span></div>
               </div>
             </section>
+
+            <section class="pickrate-preview" aria-label="카드 픽률">
+              <div class="section-title pickrate-preview-title">
+                <div>
+                  <p class="eyebrow">카드 픽률</p>
+                  <h2>TOP 5</h2>
+                </div>
+                <button id="open-pickrates" type="button" class="secondary">픽률 더 보기</button>
+              </div>
+              <div id="top-pickrate-list" class="pickrate-list"></div>
+            </section>
           </div>
         </div>
       </section>
@@ -191,6 +202,10 @@
             </div>
             <button id="refresh-admin-users" type="button" class="secondary">새로고침</button>
           </div>
+          <label class="admin-search-field">
+            <span>유저 검색</span>
+            <input id="admin-user-search" maxlength="32" autocomplete="off" placeholder="이름 또는 IP" />
+          </label>
           <p id="admin-message" class="form-message" aria-live="polite"></p>
           <div id="admin-user-list" class="admin-user-list"></div>
         </section>
@@ -240,6 +255,24 @@
         <div id="ranking-list" class="ranking-list"></div>
       </section>
 
+      <section id="pickrate-screen" class="pickrate-screen hidden">
+        <header class="pickrate-header">
+          <div>
+            <p class="eyebrow">카드 픽률</p>
+            <h1>전체 픽률</h1>
+          </div>
+          <div class="screen-header-actions">
+            <select id="pickrate-sort" aria-label="픽률 정렬">
+              <option value="desc">픽률 높은 순</option>
+              <option value="asc">픽률 낮은 순</option>
+            </select>
+            <button id="back-pickrates" type="button" class="secondary">뒤로가기</button>
+          </div>
+        </header>
+        <div id="pickrate-summary" class="pickrate-summary"></div>
+        <div id="pickrate-list" class="pickrate-list pickrate-list-full"></div>
+      </section>
+
       <section id="tier-screen" class="tier-screen hidden">
         <header class="tier-header">
           <div>
@@ -278,6 +311,12 @@
                 <p class="eyebrow">카드 풀</p>
                 <h2>아래 카드에서 선택</h2>
               </div>
+              <select id="deck-sort" aria-label="카드 정렬">
+                <option value="cost-asc">엘릭서 적은 순</option>
+                <option value="cost-desc">엘릭서 높은 순</option>
+                <option value="damage-desc">데미지 높은 순</option>
+                <option value="hp-desc">HP 높은 순</option>
+              </select>
             </div>
             <div id="deck-card-grid" class="deck-card-grid"></div>
           </section>
@@ -310,11 +349,11 @@
               </label>
               <label id="tournament-participants-field" class="hidden">
                 <span>참가 인원</span>
-                <input id="tournament-participants" name="tournamentParticipants" type="number" min="3" step="1" value="8" />
+                <input id="tournament-participants" name="tournamentParticipants" type="number" min="3" max="32" step="1" value="8" />
               </label>
               <label id="tournament-stake-field" class="hidden">
                 <span>트로피 참가비</span>
-                <input id="tournament-stake" name="tournamentStake" type="number" min="0" step="1" value="5" />
+                <input id="tournament-stake" name="tournamentStake" type="number" min="1" max="1" step="1" value="1" readonly />
               </label>
               <label id="create-team-field" class="hidden">
                 <span>내 팀</span>

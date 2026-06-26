@@ -66,17 +66,20 @@ const ROOM_MODES = {
   tournament: { key: 'tournament', label: '토너먼트 모드', maxPlayers: 0 }
 };
 const TOURNAMENT_MIN_PARTICIPANTS = 3;
+const TOURNAMENT_MAX_PARTICIPANTS = 32;
+const TOURNAMENT_FIXED_STAKE = 1;
+const TOURNAMENT_DAY_TIME_ZONE = process.env.TOURNAMENT_DAY_TIME_ZONE || 'Asia/Seoul';
 const TOURNAMENT_BREAK_MS = Number(process.env.TOURNAMENT_BREAK_MS || 60000);
 const TOURNAMENT_FINAL_BREAK_MS = Number(process.env.TOURNAMENT_FINAL_BREAK_MS || 120000);
 
 const TIER_DEFINITIONS = [
-  { key: 'mayers', name: '마이어스', icon: '🪨', min: 0, max: 9 },
-  { key: 'bronze', name: '브론즈', icon: '🥉', min: 10, max: 29 },
-  { key: 'silver', name: '실버', icon: '🥈', min: 30, max: 59 },
-  { key: 'gold', name: '골드', icon: '🥇', min: 60, max: 99 },
-  { key: 'diamond', name: '다이아몬드', icon: '💎', min: 100, max: 149 },
-  { key: 'master', name: '마스터', icon: '👑', min: 150, max: 199 },
-  { key: 'champion', name: '챔피언', icon: '🏆', min: 200, max: Infinity }
+  { key: 'mayers', name: '마이어스', icon: '🪨', min: 0, max: 14 },
+  { key: 'bronze', name: '브론즈', icon: '🥉', min: 15, max: 44 },
+  { key: 'silver', name: '실버', icon: '🥈', min: 45, max: 89 },
+  { key: 'gold', name: '골드', icon: '🥇', min: 90, max: 149 },
+  { key: 'diamond', name: '다이아몬드', icon: '💎', min: 150, max: 224 },
+  { key: 'master', name: '마스터', icon: '👑', min: 225, max: 299 },
+  { key: 'champion', name: '챔피언', icon: '🏆', min: 300, max: Infinity }
 ];
 
 const CARDS = {
@@ -511,6 +514,22 @@ db.exec(`
     FOREIGN KEY (winner_user_id) REFERENCES users(id)
   );
 
+  CREATE TABLE IF NOT EXISTS deck_pick_samples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    mode TEXT NOT NULL,
+    deck_size INTEGER NOT NULL,
+    cards TEXT NOT NULL,
+    recorded_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS card_pick_stats (
+    card_id TEXT PRIMARY KEY,
+    pick_count INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS banned_ips (
     ip TEXT PRIMARY KEY,
     reason TEXT NOT NULL DEFAULT '',
@@ -525,6 +544,7 @@ ensureUserColumn('signup_ip', "TEXT NOT NULL DEFAULT ''");
 ensureUserColumn('last_ip', "TEXT NOT NULL DEFAULT ''");
 ensureUserColumn('deleted_at', 'TEXT');
 ensureUserColumn('deleted_by_admin_id', 'INTEGER');
+ensureTableColumn('tournaments', 'daily_key', "TEXT NOT NULL DEFAULT ''");
 
 const statements = {
   createUser: db.prepare(`
@@ -549,15 +569,25 @@ const statements = {
   createTournament: db.prepare(`
     INSERT INTO tournaments (
       id, name, status, creator_user_id, participant_target, stake, pool,
-      state_json, bracket_json, created_at, updated_at
+      state_json, bracket_json, daily_key, created_at, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `),
   updateTournamentState: db.prepare(`
     UPDATE tournaments
     SET status = ?, pool = ?, state_json = ?, bracket_json = ?, winner_user_id = ?,
-      winner_username = ?, winner_won_at = ?, updated_at = ?, started_at = ?, ended_at = ?
+      winner_username = ?, winner_won_at = ?, daily_key = ?, updated_at = ?, started_at = ?, ended_at = ?
     WHERE id = ?
+  `),
+  countStartedTournamentsByDay: db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM tournaments
+    WHERE daily_key = ? AND started_at IS NOT NULL AND status != 'cancelled'
+  `),
+  listStartedTournaments: db.prepare(`
+    SELECT daily_key, started_at
+    FROM tournaments
+    WHERE started_at IS NOT NULL AND status != 'cancelled'
   `),
   latestTournamentWinner: db.prepare(`
     SELECT winner_user_id, winner_username, winner_won_at
@@ -591,6 +621,19 @@ const statements = {
     VALUES (?, ?, ?)
     ON CONFLICT(user_id) DO UPDATE SET cards = excluded.cards, updated_at = excluded.updated_at
   `),
+  insertDeckPickSample: db.prepare(`
+    INSERT INTO deck_pick_samples (user_id, mode, deck_size, cards, recorded_at)
+    VALUES (?, ?, ?, ?, ?)
+  `),
+  incrementCardPick: db.prepare(`
+    INSERT INTO card_pick_stats (card_id, pick_count, updated_at)
+    VALUES (?, 1, ?)
+    ON CONFLICT(card_id) DO UPDATE SET
+      pick_count = pick_count + 1,
+      updated_at = excluded.updated_at
+  `),
+  listCardPickStats: db.prepare('SELECT card_id, pick_count FROM card_pick_stats'),
+  countDeckPickSamples: db.prepare('SELECT COUNT(*) AS count FROM deck_pick_samples'),
   updateUserStats: db.prepare(`
     UPDATE users
     SET trophies = ?, tier = ?, loss_counter = ?, updated_at = ?
@@ -817,6 +860,10 @@ app.get('/api/tournaments/:id', requireAuthApi, (req, res) => {
 
 app.get('/api/tiers', requireAuthApi, (req, res) => {
   res.json({ tiers: publicTiers(), user: publicUser(req.user) });
+});
+
+app.get('/api/card-pick-rates', requireAuthApi, (req, res) => {
+  res.json(publicCardPickRates());
 });
 
 app.get('/api/deck', requireAuthApi, (req, res) => {
@@ -1092,20 +1139,28 @@ function createTournamentRoomForSocket(socket, payload, normalized) {
     socket.emit('room-error', '계정을 찾을 수 없습니다.');
     return;
   }
+  if (!isAdminUser(creator)) {
+    socket.emit('room-error', '토너먼트 대회는 관리자 계정만 열 수 있습니다.');
+    return;
+  }
+  if (hasActiveTournamentLobby()) {
+    socket.emit('room-error', '이미 대기 중인 토너먼트 대회가 있습니다.');
+    return;
+  }
+  if (hasStartedTournamentToday()) {
+    socket.emit('room-error', '토너먼트 대회는 하루에 한 번만 열 수 있습니다.');
+    return;
+  }
 
   const participantTarget = normalizeTournamentParticipantCount(payload.participantCount);
   if (!participantTarget) {
-    socket.emit('room-error', '토너먼트 참가 인원은 3명 이상이어야 합니다.');
+    socket.emit('room-error', `토너먼트 참가 인원은 ${TOURNAMENT_MIN_PARTICIPANTS}~${TOURNAMENT_MAX_PARTICIPANTS}명이어야 합니다.`);
     return;
   }
 
-  const stake = normalizeTournamentStake(payload.stake);
-  if (stake === null) {
-    socket.emit('room-error', '트로피 참가비는 0개 이상 정수로 입력하세요.');
-    return;
-  }
-  if (stake > 0 && (Number(creator.trophies) || 0) < stake && !payload.allowDebt) {
-    socket.emit('room-error', '참가비가 부족합니다. 빚을 지고 참가하려면 다시 확인해주세요.');
+  const stake = TOURNAMENT_FIXED_STAKE;
+  if ((Number(creator.trophies) || 0) < stake) {
+    socket.emit('room-error', `토너먼트 참가비 ${stake} 트로피가 필요합니다.`);
     return;
   }
 
@@ -1145,6 +1200,7 @@ function createTournamentRoomForSocket(socket, payload, normalized) {
       tournament.pool,
       JSON.stringify(persistableTournamentState(tournament)),
       JSON.stringify(tournament.rounds),
+      tournament.dailyKey || '',
       now,
       now
     );
@@ -1154,7 +1210,7 @@ function createTournamentRoomForSocket(socket, payload, normalized) {
   }
 
   rooms.set(room.id, room);
-  const joinResult = assignSocketToTournamentRoom(socket, room, { allowDebt: Boolean(payload.allowDebt) });
+  const joinResult = assignSocketToTournamentRoom(socket, room);
   if (!joinResult.ok) {
     rooms.delete(room.id);
     tournament.status = 'cancelled';
@@ -1206,7 +1262,7 @@ function joinRoomForSocket(socket, payload) {
 
   if (room.mode === 'tournament') {
     leaveCurrentRoom(socket, { disconnecting: false, silent: true });
-    const joinResult = assignSocketToTournamentRoom(socket, room, { allowDebt: Boolean(payload.allowDebt) });
+    const joinResult = assignSocketToTournamentRoom(socket, room);
     if (!joinResult.ok) {
       socket.emit('room-error', joinResult.error || '토너먼트 방에 참가할 수 없습니다.');
       emitRooms();
@@ -1629,6 +1685,7 @@ function resetPlayerForMatch(player, rules = defaultGameRules()) {
   player.cycle = deck.slice(rules.handSize || HAND_SIZE);
   player.usedOneTimeCards = {};
   player.rematchAccepted = false;
+  return deck;
 }
 
 function deckForPlayer(userId, rules = defaultGameRules()) {
@@ -1655,6 +1712,28 @@ function shuffledDeck(deckSize = DECK_SIZE) {
   }
 
   throw new Error(`카드 ${deckSize}장의 덱을 만들 수 없습니다.`);
+}
+
+function recordDeckPickSample(player, deck, room) {
+  if (!player || !Array.isArray(deck) || deck.length === 0) return;
+  const cardIds = [...new Set(deck.filter((cardId) => CARD_IDS.includes(cardId)))];
+  if (cardIds.length === 0) return;
+
+  const mode = room && room.tournament ? 'tournament' : room && room.mode ? room.mode : 'unknown';
+  const now = new Date().toISOString();
+  const transaction = db.transaction(() => {
+    statements.insertDeckPickSample.run(
+      player.userId || null,
+      mode,
+      cardIds.length,
+      JSON.stringify(cardIds),
+      now
+    );
+    for (const cardId of cardIds) {
+      statements.incrementCardPick.run(cardId, now);
+    }
+  });
+  transaction();
 }
 
 function shuffle(items) {
@@ -1710,7 +1789,8 @@ function startMatch(room) {
   const rules = gameRulesForRoom(room);
   for (const player of game.players) {
     refreshPlayerProfile(player);
-    resetPlayerForMatch(player, rules);
+    const deck = resetPlayerForMatch(player, rules);
+    recordDeckPickSample(player, deck, room);
   }
 
   const now = Date.now();
@@ -3732,10 +3812,54 @@ function publicPlayableCards() {
       cost: card.cost,
       role: card.role,
       spell: Boolean(card.spell),
-      building: Boolean(card.building)
+      building: Boolean(card.building),
+      damage: cardDamageValue(card),
+      maxHp: cardMaxHpValue(card)
     };
   }
   return cards;
+}
+
+function publicCardPickRates() {
+  const totalDecks = Math.max(0, Number((statements.countDeckPickSamples.get() || {}).count) || 0);
+  const stats = new Map(statements.listCardPickStats.all().map((row) => [row.card_id, Math.max(0, Number(row.pick_count) || 0)]));
+  const cards = CARD_IDS.map((id) => {
+    const card = CARDS[id];
+    const pickCount = stats.get(id) || 0;
+    return {
+      id,
+      name: card.name,
+      cost: card.cost,
+      role: card.role,
+      spell: Boolean(card.spell),
+      building: Boolean(card.building),
+      damage: cardDamageValue(card),
+      maxHp: cardMaxHpValue(card),
+      pickCount,
+      pickRate: totalDecks > 0 ? pickCount / totalDecks : 0
+    };
+  }).sort((a, b) => b.pickRate - a.pickRate || b.pickCount - a.pickCount || a.name.localeCompare(b.name, 'ko'));
+
+  return { totalDecks, cards };
+}
+
+function cardDamageValue(card) {
+  if (!card) return 0;
+  const values = [
+    card.damage,
+    card.awakenedDamage,
+    card.berserkerDamage,
+    card.explosionDamage,
+    card.damagePerSecond,
+    card.chaosEnemyDamage
+  ].map((value) => Number(value)).filter(Number.isFinite);
+  return values.length > 0 ? Math.max(0, Math.round(Math.max(...values))) : 0;
+}
+
+function cardMaxHpValue(card) {
+  if (!card) return 0;
+  const values = [card.maxHp, card.berserkerMaxHp].map((value) => Number(value)).filter(Number.isFinite);
+  return values.length > 0 ? Math.max(0, Math.round(Math.max(...values))) : 0;
 }
 
 function getSavedDeck(userId, deckSize = DECK_SIZE) {
@@ -4125,7 +4249,10 @@ function createTournamentRecord(room, options) {
     activeMatchIds: [],
     break: null,
     winner: null,
+    runnerUp: null,
+    prizes: tournamentPrizeSplit(0),
     winnerWonAt: null,
+    dailyKey: '',
     createdAt: options.now,
     updatedAt: options.now,
     startedAt: null,
@@ -4148,9 +4275,9 @@ function assignSocketToTournamentRoom(socket, room, options = {}) {
     return { ok: false, error: '이미 가득 찬 토너먼트입니다.' };
   }
 
-  const profile = deductTournamentStake(user.id, tournament.stake, { allowDebt: Boolean(options.allowDebt) });
+  const profile = deductTournamentStake(user.id, tournament.stake);
   if (!profile) {
-    return { ok: false, error: '참가비가 부족합니다. 빚을 지고 참가하려면 다시 확인해주세요.' };
+    return { ok: false, error: `토너먼트 참가비 ${tournament.stake} 트로피가 필요합니다.` };
   }
 
   let slot = room.game.players.findIndex((player) => !player.userId);
@@ -4181,7 +4308,7 @@ function assignSocketToTournamentRoom(socket, room, options = {}) {
     currentMatchId: null
   };
   tournament.participants.push(participant);
-  tournament.pool = tournament.participants.filter((candidate) => candidate.stakePaid).length * tournament.stake;
+  updateTournamentPrizePreview(tournament);
   tournament.updatedAt = new Date().toISOString();
 
   socket.data.user = profile;
@@ -4210,7 +4337,7 @@ function removeTournamentWaitingParticipant(socket, room, player, options = {}) 
   participant.socketId = null;
   participant.stakePaid = false;
   tournament.participants = tournament.participants.filter((candidate) => candidate.userId !== participant.userId);
-  tournament.pool = tournament.participants.filter((candidate) => candidate.stakePaid).length * tournament.stake;
+  updateTournamentPrizePreview(tournament);
   tournament.updatedAt = new Date().toISOString();
   clearRoomPlayer(player);
   room.game.message = waitingRoomMessage(room);
@@ -4243,6 +4370,7 @@ function cancelTournamentBeforeStart(room, reason) {
   }
 
   tournament.pool = 0;
+  tournament.prizes = tournamentPrizeSplit(0);
   rooms.delete(room.id);
   persistTournamentState(tournament);
 }
@@ -4257,7 +4385,9 @@ function startTournament(room) {
   tournament.status = 'playing';
   tournament.startedAt = now;
   tournament.updatedAt = now;
-  tournament.pool = readyParticipants.length * tournament.stake;
+  tournament.dailyKey = tournamentDayKey(now);
+  tournament.prizes = tournamentPrizeSplit(readyParticipants.length);
+  tournament.pool = tournament.prizes.pool;
   room.game.status = 'tournament';
   room.game.message = '토너먼트 진행 중';
   rooms.delete(room.id);
@@ -4512,16 +4642,55 @@ function tournamentMatchRules(phase) {
   return phase === 'final' ? publicGameRules(finalGameRules()) : null;
 }
 
-function tournamentPrizeSplit(pool) {
-  const total = Math.max(0, Number(pool) || 0);
-  const winnerPrize = Math.min(total, Math.max(0, Math.round(total * 0.7)));
+function tournamentPrizeSplit(participantCount) {
+  const count = Math.max(0, Math.min(TOURNAMENT_MAX_PARTICIPANTS, Math.floor(Number(participantCount) || 0)));
+  const prizeBand = Math.max(1, Math.ceil(count / 5));
+  const winnerPrize = count === TOURNAMENT_MAX_PARTICIPANTS ? 100 : prizeBand * 5;
+  const runnerUpPrize = 2 + prizeBand;
   return {
-    pool: total,
+    pool: winnerPrize + runnerUpPrize,
     winnerPrize,
-    runnerUpPrize: Math.max(0, total - winnerPrize),
-    winnerPercent: 70,
-    runnerUpPercent: 30
+    runnerUpPrize,
+    winnerPercent: null,
+    runnerUpPercent: null,
+    participantCount: count
   };
+}
+
+function updateTournamentPrizePreview(tournament) {
+  if (!tournament) return;
+  const count = tournament.participants.filter((participant) => participant.stakePaid).length;
+  tournament.prizes = tournamentPrizeSplit(count);
+  tournament.pool = tournament.prizes.pool;
+}
+
+function tournamentDayKey(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: TOURNAMENT_DAY_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(date);
+}
+
+function hasActiveTournamentLobby() {
+  return [...tournaments.values()].some((tournament) => tournament && tournament.status === 'waiting');
+}
+
+function hasStartedTournamentToday(dayKey = tournamentDayKey()) {
+  const inMemory = [...tournaments.values()].some((tournament) => {
+    return tournament
+      && tournament.startedAt
+      && tournament.status !== 'cancelled'
+      && (tournament.dailyKey || tournamentDayKey(tournament.startedAt)) === dayKey;
+  });
+  if (inMemory) return true;
+  const row = statements.countStartedTournamentsByDay.get(dayKey);
+  if (Math.max(0, Number(row && row.count) || 0) > 0) return true;
+  return statements.listStartedTournaments.all().some((tournament) => {
+    return (tournament.daily_key || tournamentDayKey(tournament.started_at)) === dayKey;
+  });
 }
 
 function tournamentRunnerUp(tournament, winnerUserId) {
@@ -4547,7 +4716,7 @@ function finishTournament(tournament, winnerUserId) {
   if (!tournament || tournament.status === 'completed') return;
   const winner = tournament.participants.find((participant) => participant.userId === winnerUserId);
   const runnerUp = tournamentRunnerUp(tournament, winnerUserId);
-  const prizeSplit = tournamentPrizeSplit(tournament.pool);
+  const prizeSplit = tournamentPrizeSplit(tournament.participants.filter((participant) => participant.stakePaid).length);
   const now = new Date().toISOString();
   if (tournamentBreakTimers.has(tournament.id)) {
     clearTimeout(tournamentBreakTimers.get(tournament.id));
@@ -4782,8 +4951,9 @@ function publicTournamentState(tournament, viewingMatchId = null) {
     break: publicTournamentBreak(tournament.break),
     winner: tournament.winner,
     runnerUp: tournament.runnerUp || null,
-    prizes: tournament.prizes || tournamentPrizeSplit(tournament.pool),
+    prizes: tournament.prizes || tournamentPrizeSplit(tournament.participants.filter((participant) => participant.stakePaid).length),
     winnerWonAt: tournament.winnerWonAt,
+    dailyKey: tournament.dailyKey || '',
     participants: tournament.participants.map((participant) => ({
       userId: participant.userId,
       username: participant.username,
@@ -4881,6 +5051,7 @@ function persistableTournamentState(tournament) {
     runnerUp: tournament.runnerUp || null,
     prizes: tournament.prizes || null,
     winnerWonAt: tournament.winnerWonAt,
+    dailyKey: tournament.dailyKey || '',
     createdAt: tournament.createdAt,
     updatedAt: tournament.updatedAt,
     startedAt: tournament.startedAt,
@@ -4900,6 +5071,7 @@ function persistTournamentState(tournament) {
     tournament.winner ? tournament.winner.userId : null,
     tournament.winner ? tournament.winner.username : null,
     tournament.winnerWonAt,
+    tournament.dailyKey || '',
     tournament.updatedAt,
     tournament.startedAt,
     tournament.endedAt,
@@ -4923,8 +5095,8 @@ function isSocketPlayingActiveTournamentMatch(socket, tournament) {
 function deductTournamentStake(userId, stake, options = {}) {
   const amount = Math.max(0, Number(stake) || 0);
   return adjustTournamentTrophies(userId, -amount, {
-    requireBalance: amount > 0 && !options.allowDebt,
-    allowNegative: true
+    requireBalance: amount > 0,
+    allowNegative: false
   });
 }
 
@@ -4959,15 +5131,12 @@ function adjustTournamentTrophies(userId, delta, options = {}) {
 
 function normalizeTournamentParticipantCount(value) {
   const count = Number(value);
-  if (!Number.isSafeInteger(count) || count < TOURNAMENT_MIN_PARTICIPANTS) return null;
+  if (!Number.isSafeInteger(count) || count < TOURNAMENT_MIN_PARTICIPANTS || count > TOURNAMENT_MAX_PARTICIPANTS) return null;
   return count;
 }
 
 function normalizeTournamentStake(value) {
-  if (value === '' || value === null || value === undefined) return 0;
-  const stake = Number(value);
-  if (!Number.isSafeInteger(stake) || stake < 0) return null;
-  return stake;
+  return TOURNAMENT_FIXED_STAKE;
 }
 
 function canListSpectatorRoom(room) {
@@ -5120,9 +5289,16 @@ function isAllowedOrigin(origin, host) {
 }
 
 function ensureUserColumn(columnName, definition) {
-  const columns = db.prepare('PRAGMA table_info(users)').all();
-  if (columns.some((column) => column.name === columnName)) return;
-  db.exec(`ALTER TABLE users ADD COLUMN ${columnName} ${definition}`);
+  ensureTableColumn('users', columnName, definition);
+}
+
+function ensureTableColumn(tableName, columnName, definition) {
+  const safeTableName = String(tableName || '').replace(/[^a-zA-Z0-9_]/g, '');
+  const safeColumnName = String(columnName || '').replace(/[^a-zA-Z0-9_]/g, '');
+  if (!safeTableName || !safeColumnName) throw new Error('Invalid table or column name.');
+  const columns = db.prepare(`PRAGMA table_info(${safeTableName})`).all();
+  if (columns.some((column) => column.name === safeColumnName)) return;
+  db.exec(`ALTER TABLE ${safeTableName} ADD COLUMN ${safeColumnName} ${definition}`);
 }
 
 function resolveDataDir() {

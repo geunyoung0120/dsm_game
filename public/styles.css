@@ -556,6 +556,7 @@ input:disabled {
 }
 
 .ranking-preview,
+.pickrate-preview,
 .notice-panel {
   padding: 20px;
   background: var(--surface);
@@ -565,7 +566,7 @@ input:disabled {
 }
 
 .notice-panel {
-  grid-row: span 2;
+  grid-row: span 3;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
 }
@@ -659,6 +660,77 @@ input:disabled {
 
 .ranking-preview-title {
   margin-bottom: 12px;
+}
+
+.pickrate-preview-title {
+  margin-bottom: 12px;
+}
+
+.pickrate-list {
+  display: grid;
+  gap: 10px;
+}
+
+.pickrate-row {
+  min-width: 0;
+  min-height: 64px;
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  background:
+    linear-gradient(90deg, rgba(70, 185, 165, 0.12), transparent),
+    var(--panel-2);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--teal);
+  border-radius: 8px;
+}
+
+.pickrate-row b {
+  color: var(--gold);
+  font-size: 16px;
+  text-align: center;
+}
+
+.pickrate-row div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.pickrate-row strong,
+.pickrate-row small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pickrate-row strong {
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.pickrate-row small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pickrate-row span {
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.pickrate-summary {
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.pickrate-list-full {
+  padding-bottom: 24px;
 }
 
 .top-ranking-list {
@@ -967,6 +1039,14 @@ html[data-theme="light"] .lobby-hero {
   gap: 14px;
 }
 
+.admin-search-field {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 800;
+}
+
 .admin-user-list {
   display: grid;
   gap: 10px;
@@ -1195,6 +1275,7 @@ html[data-theme="light"] .tournament-winner-banner {
 .encyclopedia-screen,
 .mypage-screen,
 .ranking-screen,
+.pickrate-screen,
 .update-history-screen,
 .tournament-history-screen,
 .tournament-detail-screen,
@@ -1206,6 +1287,7 @@ html[data-theme="light"] .tournament-winner-banner {
 .encyclopedia-header,
 .mypage-header,
 .ranking-header,
+.pickrate-header,
 .update-history-header,
 .tournament-history-header,
 .tournament-detail-header,
@@ -1222,6 +1304,7 @@ html[data-theme="light"] .tournament-winner-banner {
 .encyclopedia-header h1,
 .mypage-header h1,
 .ranking-header h1,
+.pickrate-header h1,
 .update-history-header h1,
 .tournament-history-header h1,
 .tournament-detail-header h1,
@@ -1235,6 +1318,17 @@ html[data-theme="light"] .tournament-winner-banner {
 .update-history-list {
   display: grid;
   gap: 12px;
+}
+
+.screen-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.screen-header-actions select {
+  width: 180px;
+  min-height: 42px;
 }
 
 .tournament-history-list {
@@ -1456,6 +1550,11 @@ html[data-theme="light"] .tournament-winner-banner {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
+}
+
+.deck-pool-panel .section-title select {
+  width: 180px;
+  min-height: 42px;
 }
 
 .deck-pool-card {
@@ -2415,6 +2514,7 @@ canvas {
   .auth-card,
   .lobby-hero,
   .notice-panel,
+  .pickrate-preview,
   .profile-panel,
   .season-panel {
     padding: 20px;
@@ -2447,6 +2547,7 @@ canvas {
   .home-actions,
   .encyclopedia-header,
   .mypage-header,
+  .pickrate-header,
   .update-history-header,
   .tournament-history-header,
   .tournament-detail-header,
@@ -2466,6 +2567,25 @@ canvas {
   }
 
   button {
+    width: 100%;
+  }
+
+  .screen-header-actions {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .screen-header-actions select {
+    width: 100%;
+  }
+
+  .deck-pool-panel .section-title {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .deck-pool-panel .section-title select {
     width: 100%;
   }
 

@@ -23,6 +23,7 @@ const targetDummyDeck = ['peach', 'seongjoo', 'jimin', 'bbatman', 'yushin', 'myt
 let serverProcess = null;
 let clients = [];
 let finished = false;
+let adminSmokeAccount = null;
 
 main().catch((error) => {
   console.error(error.message || error);
@@ -62,6 +63,7 @@ async function main() {
   const admin = await expectAdminTools(accounts[0]);
   await expectSessionUser(await login(accounts[0].user.username));
   const result = await runClientSmoke(accounts);
+  const pickRates = await expectCardPickRates(accounts[0]);
   const dagwasil = await expectDagwasilImmediateSpawn(accounts);
   const cherryTree = await expectCherryTreeAttackFlow(accounts);
   const giantHyeonjik = await expectGiantHyeonjikIgnoresUnits(accounts);
@@ -77,18 +79,20 @@ async function main() {
     signup(`연습유저${Date.now()}I`)
   ]);
   const twoVersusTwo = await expectTwoVersusTwoRoom(twoVersusTwoAccounts.slice(0, 4), twoVersusTwoAccounts.slice(4));
-  const tournamentAccounts = await Promise.all([
-    signup(`토너유저${Date.now()}A`),
-    signup(`토너유저${Date.now()}B`),
-    signup(`토너유저${Date.now()}C`)
-  ]);
+  const tournamentAccounts = [
+    adminSmokeAccount,
+    ...(await Promise.all([
+      signup(`토너유저${Date.now()}B`),
+      signup(`토너유저${Date.now()}C`)
+    ]))
+  ];
   const tournament = await expectTournamentMode(tournamentAccounts);
   const expectedOpeningHand = smokeDeck.slice(0, 4).join('|');
   const actualOpeningHand = (result.initialHands[0] || []).join('|');
   if (actualOpeningHand !== expectedOpeningHand) {
     throw new Error(`Saved deck was not used for player 1. Expected ${expectedOpeningHand}, got ${actualOpeningHand}.`);
   }
-  console.log(JSON.stringify({ ...result, admin, dagwasil, cherryTree, giantHyeonjik, kkongMeteor, entropic, twoVersusTwo, tournament }));
+  console.log(JSON.stringify({ ...result, admin, pickRates, dagwasil, cherryTree, giantHyeonjik, kkongMeteor, entropic, twoVersusTwo, tournament }));
   cleanup();
 }
 
@@ -251,6 +255,7 @@ async function expectDeckSave(account, deck) {
 
 async function expectAdminTools(nonAdminAccount) {
   const adminAccount = await signup('김근영');
+  adminSmokeAccount = adminAccount;
   if (!adminAccount.user.isAdmin) {
     throw new Error('Admin account did not receive admin flag.');
   }
@@ -284,7 +289,7 @@ async function expectAdminTools(nonAdminAccount) {
   });
   const trophyBody = await trophyResponse.json();
   if (!trophyResponse.ok) throw new Error(trophyBody.error || 'Admin trophy update failed.');
-  if (!trophyBody.user || trophyBody.user.trophies !== 42 || trophyBody.user.tier !== '실버') {
+  if (!trophyBody.user || trophyBody.user.trophies !== 42 || trophyBody.user.tier !== '브론즈') {
     throw new Error('Admin trophy update did not return the expected profile.');
   }
 
@@ -325,6 +330,25 @@ async function expectAdminTools(nonAdminAccount) {
   }
 
   return true;
+}
+
+async function expectCardPickRates(account) {
+  const response = await fetch(`${url}/api/card-pick-rates`, {
+    headers: { Cookie: account.cookie }
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || 'Card pick rate lookup failed.');
+  if (!Number.isInteger(body.totalDecks) || body.totalDecks < 2) {
+    throw new Error(`Expected at least 2 recorded deck samples, got ${body.totalDecks}.`);
+  }
+  const osj = (body.cards || []).find((card) => card.id === 'osj');
+  if (!osj || osj.pickCount < 1 || typeof osj.pickRate !== 'number') {
+    throw new Error('Card pick rates did not include the saved OSJ deck sample.');
+  }
+  return {
+    totalDecks: body.totalDecks,
+    osjPickCount: osj.pickCount
+  };
 }
 
 async function runClientSmoke(accounts) {
@@ -739,6 +763,9 @@ async function expectSpectatorFlow(roomId, accounts) {
 }
 
 async function expectTournamentMode(accounts) {
+  if (!accounts[0] || !accounts[0].user || accounts[0].user.username !== '김근영') {
+    throw new Error('Tournament smoke requires the admin account as the host.');
+  }
   seedSmokeTrophies(accounts, 10);
   clients = accounts.map((account) => io(url, {
     transports: ['websocket'],
@@ -746,15 +773,27 @@ async function expectTournamentMode(accounts) {
   }));
 
   await Promise.all(clients.map((client) => once(client, 'welcome')));
+  const forbiddenPromise = once(clients[1], 'room-error', 'non-admin tournament create room-error');
+  clients[1].emit('create-room', {
+    name: '일반 유저 토너먼트 방',
+    password: '',
+    mode: 'tournament',
+    participantCount: 3
+  });
+  const forbiddenError = await forbiddenPromise;
+  if (!String(forbiddenError).includes('관리자')) {
+    throw new Error(`Non-admin tournament creation was not rejected as admin-only. Got: ${forbiddenError}`);
+  }
+  await delay(80);
+
   clients[0].emit('create-room', {
     name: '토너먼트 스모크 테스트 방',
     password: '',
     mode: 'tournament',
-    participantCount: 3,
-    stake: 5
+    participantCount: 3
   });
   const hostJoin = await once(clients[0], 'room-joined', 'tournament host room-joined');
-  if (!hostJoin.room || hostJoin.room.mode !== 'tournament' || hostJoin.room.stake !== 5 || hostJoin.room.maxPlayers !== 3) {
+  if (!hostJoin.room || hostJoin.room.mode !== 'tournament' || hostJoin.room.stake !== 1 || hostJoin.room.maxPlayers !== 3) {
     throw new Error('Tournament room did not expose mode, stake, and participant count.');
   }
 
@@ -766,7 +805,7 @@ async function expectTournamentMode(accounts) {
   const openingStates = await Promise.all(clients.map((client, index) => waitForState(client, (payload) => {
     return payload.tournament
       && payload.tournament.status === 'playing'
-      && payload.tournament.pool === 15
+      && payload.tournament.pool === 8
       && payload.tournament.rounds.length === 1
       && payload.status === 'playing';
   }, `tournament opening state ${index}`)));
@@ -834,11 +873,11 @@ async function expectTournamentMode(accounts) {
   await delay(200);
   const winnerProfile = await fetchSessionUser(accounts[winnerIndex]);
   const runnerUpProfile = await fetchSessionUser(accounts[loserIndex]);
-  if (winnerProfile.trophies !== 16 || winnerProfile.tournamentWins !== 1) {
-    throw new Error(`Tournament winner profile expected 16 trophies and 1 win. Got ${winnerProfile.trophies}, ${winnerProfile.tournamentWins}.`);
+  if (winnerProfile.trophies !== 14 || winnerProfile.tournamentWins !== 1) {
+    throw new Error(`Tournament winner profile expected 14 trophies and 1 win. Got ${winnerProfile.trophies}, ${winnerProfile.tournamentWins}.`);
   }
-  if (runnerUpProfile.trophies !== 9) {
-    throw new Error(`Tournament runner-up profile expected 9 trophies. Got ${runnerUpProfile.trophies}.`);
+  if (runnerUpProfile.trophies !== 12) {
+    throw new Error(`Tournament runner-up profile expected 12 trophies. Got ${runnerUpProfile.trophies}.`);
   }
   const latestWinner = await fetchTournamentWinner(accounts[winnerIndex]);
   if (!latestWinner || latestWinner.username !== accounts[winnerIndex].user.username || !latestWinner.wonAt) {
@@ -850,13 +889,13 @@ async function expectTournamentMode(accounts) {
     throw new Error('Tournament history API did not list the completed tournament.');
   }
   const detail = await fetchTournamentDetail(accounts[winnerIndex], completed.id);
-  if (!detail || detail.winnerUsername !== accounts[winnerIndex].user.username || detail.runnerUpUsername !== accounts[loserIndex].user.username || detail.pool !== 15 || detail.winnerPrize !== 11 || detail.runnerUpPrize !== 4 || !Array.isArray(detail.rounds) || detail.rounds.length < 2) {
+  if (!detail || detail.winnerUsername !== accounts[winnerIndex].user.username || detail.runnerUpUsername !== accounts[loserIndex].user.username || detail.pool !== 8 || detail.winnerPrize !== 5 || detail.runnerUpPrize !== 3 || !Array.isArray(detail.rounds) || detail.rounds.length < 2) {
     throw new Error('Tournament detail API did not expose bracket results.');
   }
 
   for (const client of clients) client.disconnect();
   return {
-    pool: 15,
+    pool: 8,
     winner: winnerProfile.username,
     trophies: winnerProfile.trophies,
     tournamentWins: winnerProfile.tournamentWins
@@ -868,7 +907,7 @@ function seedSmokeTrophies(accounts, trophies) {
   const statement = database.prepare('UPDATE users SET trophies = ?, tier = ?, updated_at = ? WHERE username = ?');
   const now = new Date().toISOString();
   for (const account of accounts) {
-    statement.run(trophies, trophies >= 10 ? '브론즈' : '마이어스', now, account.user.username);
+    statement.run(trophies, trophies >= 15 ? '브론즈' : '마이어스', now, account.user.username);
   }
   database.close();
 }
