@@ -411,7 +411,7 @@ async function expectGiantHyeonjikIgnoresUnits(accounts) {
   await once(clients[1], 'room-joined', 'giant guest room-joined');
   await Promise.all([
     waitForState(clients[0], (payload) => {
-      return payload.status === 'playing' && payload.players[0] && Array.isArray(payload.players[0].hand) && payload.players[0].hand[0] === 'giantHyeonjik' && payload.players[0].elixir >= 6;
+      return payload.status === 'playing' && payload.players[0] && Array.isArray(payload.players[0].hand) && payload.players[0].hand[0] === 'giantHyeonjik' && payload.players[0].elixir >= 7;
     }, 'giant host playing state'),
     waitForState(clients[1], (payload) => {
       return payload.status === 'playing' && payload.players[1] && Array.isArray(payload.players[1].hand) && payload.players[1].hand[0] === 'peach';
@@ -822,7 +822,7 @@ function expectHeoseonNerf(cards) {
   if (!cards.baduk || cards.baduk.damage !== 100 || cards.baduk.chaosEnemyDamage !== 100 || cards.baduk.chaosFriendlyDamage !== 29) {
     throw new Error('Baduk damage tuning was not present.');
   }
-  if (!cards.zzangga || cards.zzangga.cost !== 4 || cards.zzangga.maxHp !== 646 || cards.zzangga.damage !== 83) {
+  if (!cards.zzangga || cards.zzangga.cost !== 5 || cards.zzangga.maxHp !== 646 || cards.zzangga.damage !== 83) {
     throw new Error('Zzangga latest tuning was not present.');
   }
   if (!cards.mythos || cards.mythos.damage !== 63 || cards.mythos.awakenedDamage !== 108) {
@@ -832,7 +832,7 @@ function expectHeoseonNerf(cards) {
   if (!cards.badukFart || !cards.badukFart.spell || cards.badukFart.damagePerSecond !== 60 || cards.badukFart.radius !== 59 || cards.badukFart.durationMs !== 4000) {
     throw new Error('Baduk fart spell card did not expose the expected spell fields.');
   }
-  if (!cards.bbatman || cards.bbatman.healIntervalMs !== 600) {
+  if (!cards.bbatman || cards.bbatman.healPerSecond !== 40.1625 || cards.bbatman.healIntervalMs !== 600) {
     throw new Error('Bbatman heal interval was not present.');
   }
   const playableCount = Object.values(cards).filter((card) => card && card.playable !== false).length;
@@ -854,7 +854,7 @@ function expectHeoseonNerf(cards) {
   if (!cards.cherryTree || !cards.cherryTree.building || cards.cherryTree.cost !== 5 || cards.cherryTree.maxHp !== 1700 || cards.cherryTree.damage !== 100 || cards.cherryTree.range !== 175 || cards.cherryTree.attackMs !== 1000 || cards.cherryTree.buildingDurationMs !== 20000 || !cards.cherryTree.cherryAttack) {
     throw new Error('Cherry tree building card did not expose the expected fields.');
   }
-  if (!cards.giantHyeonjik || cards.giantHyeonjik.cost !== 6 || cards.giantHyeonjik.maxHp !== 2000 || cards.giantHyeonjik.damage !== 150 || cards.giantHyeonjik.attackMs !== 1200 || cards.giantHyeonjik.radius !== 31 || !cards.giantHyeonjik.buildingDestroyer) {
+  if (!cards.giantHyeonjik || cards.giantHyeonjik.cost !== 7 || cards.giantHyeonjik.maxHp !== 2200 || cards.giantHyeonjik.damage !== 150 || cards.giantHyeonjik.attackMs !== 1200 || cards.giantHyeonjik.radius !== 31 || !cards.giantHyeonjik.buildingDestroyer) {
     throw new Error('Giant ZICK card did not expose the expected building destroyer fields.');
   }
   if (!cards.taegeonBumperCar || cards.taegeonBumperCar.cost !== 1 || cards.taegeonBumperCar.speed !== 95 || cards.taegeonBumperCar.maxHp !== 120 || cards.taegeonBumperCar.damage !== 200 || cards.taegeonBumperCar.explosionDamage !== 200 || !cards.taegeonBumperCar.suicideRusher) {

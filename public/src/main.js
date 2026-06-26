@@ -25,6 +25,21 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: '토너먼트 대기 화면과 밸런스 조정',
+    date: '2026.06.26',
+    items: [
+      '토너먼트 대기 참가자 이름을 입장 순서대로 세로 표시',
+      '전투 채팅과 토너먼트 참가자 목록 스크롤 적용',
+      '짱가 5 엘릭서, 빼트맨 힐량 15% 감소, 자이언트 ZICK 7 엘릭서와 HP 2200'
+    ],
+    details: [
+      '토너먼트 대기 중에는 2대2 진영 카드처럼 보이지 않게 참가자 이름만 입장 순서대로 아래에 쌓아 보여준다.',
+      '참가자나 채팅이 많아져도 박스가 계속 길어지지 않고 내부 스크롤로 확인할 수 있게 했다.',
+      '짱가는 4 엘릭서에서 5 엘릭서로 올렸고, 빼트맨 힐량은 초당 47.25에서 40.1625로 낮췄다.',
+      '자이언트 ZICK는 6 엘릭서에서 7 엘릭서로 올리고, HP를 2000에서 2200으로 올렸다.'
+    ]
+  },
+  {
     title: '벚꽃나무와 자이언트 ZICK 밸런스 조정',
     date: '2026.06.26',
     items: [
@@ -560,7 +575,7 @@ const CHARACTER_DETAILS = [
   {
     id: 'zzangga',
     name: '짱가',
-    cost: '4',
+    cost: '5',
     type: '광역 딜러',
     stats: [
       ['HP', '646'],
@@ -582,7 +597,7 @@ const CHARACTER_DETAILS = [
     stats: [
       ['HP', '410'],
       ['공격력', '없음'],
-      ['힐량', '초당 47.25'],
+      ['힐량', '초당 40.16'],
       ['힐 간격', '0.6초'],
       ['힐 범위', '81'],
       ['자가 피해', '초당 8'],
@@ -591,7 +606,7 @@ const CHARACTER_DETAILS = [
     ],
     ability: '주변에 더 좁아진 회복 원을 만들고, 원 안에 있는 모든 여학생 또는 여학생으로 인식되는 아군을 0.6초마다 한 번씩 회복시킨다. 회복 대상이 원 밖에 있으면 가까운 대상 쪽으로 이동한다. 전장에 있는 동안에는 시간이 지날수록 체력이 조금씩 줄어든다.',
     appearance: '키가 작고 마른 남학생. 삭발 머리, 매우 탄 피부, 운동을 잘할 것 같은 체형이다.',
-    trait: '공격하지 못하는 순수 힐러다. 힐량은 낮아졌고 회복이 0.6초 간격으로 들어가지만 여러 아군을 동시에 회복할 수 있다.'
+    trait: '공격하지 못하는 순수 힐러다. 힐량은 더 낮아졌고 회복이 0.6초 간격으로 들어가지만 여러 아군을 동시에 회복할 수 있다.'
   },
   {
     id: 'baduk',
@@ -688,10 +703,10 @@ const CHARACTER_DETAILS = [
   {
     id: 'giantHyeonjik',
     name: '자이언트 ZICK',
-    cost: '6',
+    cost: '7',
     type: '건물 특화 근접 딜러',
     stats: [
-      ['HP', '2000'],
+      ['HP', '2200'],
       ['공격력', '150'],
       ['공격 주기', '1.2초'],
       ['공격 타입', '단일 근접'],
@@ -3504,6 +3519,11 @@ function renderTournamentPanel() {
 
 function renderTournamentBracket(bracket, tournament) {
   bracket.replaceChildren();
+  bracket.classList.remove('tournament-bracket-tree', 'tournament-waiting-list');
+  if (tournament.status === 'waiting') {
+    renderTournamentWaitingList(bracket, tournament);
+    return;
+  }
   bracket.classList.add('tournament-bracket-tree');
   const rounds = roundsForBracket(tournament);
   if (rounds.length === 0) {
@@ -3527,6 +3547,40 @@ function renderTournamentBracket(bracket, tournament) {
     }
     bracket.appendChild(roundColumn);
   }
+}
+
+function renderTournamentWaitingList(container, tournament) {
+  container.classList.add('tournament-waiting-list');
+  const participants = Array.isArray(tournament.participants) ? tournament.participants : [];
+  if (participants.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = '아직 참가자가 없습니다.';
+    container.appendChild(empty);
+    return;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'tournament-participant-list';
+  for (const [index, participant] of participants.entries()) {
+    const row = document.createElement('div');
+    row.className = 'tournament-participant-row';
+    if (!participant.connected) row.classList.add('disconnected');
+
+    const order = document.createElement('span');
+    order.className = 'tournament-participant-order';
+    order.textContent = String(index + 1);
+
+    const name = document.createElement('strong');
+    name.textContent = participant.username || '참가자';
+
+    const status = document.createElement('small');
+    status.textContent = participant.connected ? '참가중' : '연결 끊김';
+
+    row.append(order, name, status);
+    list.appendChild(row);
+  }
+  container.appendChild(list);
 }
 
 function roundsForBracket(tournament) {

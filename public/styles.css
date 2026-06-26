@@ -1931,6 +1931,61 @@ html[data-theme="light"] .tournament-winner-banner {
   align-items: stretch;
 }
 
+.tournament-waiting-list {
+  display: block;
+  max-height: 184px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.tournament-participant-list {
+  display: grid;
+  gap: 8px;
+}
+
+.tournament-participant-row {
+  min-width: 0;
+  padding: 8px 10px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.tournament-participant-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.tournament-participant-row small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.tournament-participant-row.disconnected {
+  opacity: 0.65;
+}
+
+.tournament-participant-order {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--badge-ink);
+  background: var(--gold);
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 1000;
+}
+
 .tournament-round {
   position: relative;
   display: grid;
@@ -2090,11 +2145,12 @@ html[data-theme="light"] .tournament-winner-banner {
   display: grid;
   grid-template-columns: 260px minmax(0, 1120px);
   gap: 12px;
-  align-items: stretch;
+  align-items: start;
 }
 
 .battle-chat-panel {
   width: 100%;
+  height: clamp(360px, calc(100vh - 248px), 760px);
   min-height: 0;
   padding: 12px;
   display: grid;
@@ -2212,6 +2268,7 @@ canvas {
 
   .battle-chat-panel {
     order: 2;
+    height: auto;
   }
 
   .game-frame {
@@ -2220,6 +2277,7 @@ canvas {
 
   .battle-chat-log {
     min-height: 118px;
+    max-height: 220px;
   }
 
   .battle-chat-form button {
