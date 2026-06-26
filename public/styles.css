@@ -962,6 +962,71 @@ html[data-theme="light"] .lobby-hero {
   gap: 12px;
 }
 
+.admin-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-user-list {
+  display: grid;
+  gap: 10px;
+  max-height: 460px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.admin-user-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.admin-user-info {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.admin-user-info strong {
+  overflow-wrap: anywhere;
+}
+
+.admin-user-info span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.admin-user-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-user-actions input {
+  width: 104px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 900;
+}
+
+.admin-danger {
+  border-color: rgba(221, 76, 76, 0.55);
+  color: #ffd5d5;
+}
+
 .tournament-winner-banner {
   padding: 14px 18px;
   display: grid;
@@ -2326,6 +2391,19 @@ canvas {
   .brand-mark img {
     width: 26px;
     height: 26px;
+  }
+
+  .admin-user-row {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-user-actions {
+    justify-content: stretch;
+  }
+
+  .admin-user-actions input,
+  .admin-user-actions button {
+    flex: 1 1 120px;
   }
 
   .auth-screen,

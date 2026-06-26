@@ -17,6 +17,7 @@ const DATA_DIR = resolveDataDir();
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, 'game.sqlite');
 const DB_DIR = path.dirname(DB_PATH);
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-session-secret-change-before-production';
+const ADMIN_USERNAME = '김근영';
 const HTTP_RATE_WINDOW_MS = 60 * 1000;
 const HTTP_RATE_LIMIT = Number(process.env.HTTP_RATE_LIMIT || 240);
 const SOCKET_RATE_WINDOW_MS = 60 * 1000;
@@ -461,6 +462,10 @@ db.exec(`
     tier TEXT NOT NULL DEFAULT '마이어스',
     loss_counter INTEGER NOT NULL DEFAULT 0,
     tournament_wins INTEGER NOT NULL DEFAULT 0,
+    signup_ip TEXT NOT NULL DEFAULT '',
+    last_ip TEXT NOT NULL DEFAULT '',
+    deleted_at TEXT,
+    deleted_by_admin_id INTEGER,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -504,10 +509,22 @@ db.exec(`
     ended_at TEXT,
     FOREIGN KEY (creator_user_id) REFERENCES users(id),
     FOREIGN KEY (winner_user_id) REFERENCES users(id)
-  )
+  );
+
+  CREATE TABLE IF NOT EXISTS banned_ips (
+    ip TEXT PRIMARY KEY,
+    reason TEXT NOT NULL DEFAULT '',
+    banned_user_id INTEGER,
+    banned_by_user_id INTEGER,
+    banned_at TEXT NOT NULL
+  );
 `);
 
 ensureUserColumn('tournament_wins', 'INTEGER NOT NULL DEFAULT 0');
+ensureUserColumn('signup_ip', "TEXT NOT NULL DEFAULT ''");
+ensureUserColumn('last_ip', "TEXT NOT NULL DEFAULT ''");
+ensureUserColumn('deleted_at', 'TEXT');
+ensureUserColumn('deleted_by_admin_id', 'INTEGER');
 
 const statements = {
   createUser: db.prepare(`
@@ -519,7 +536,15 @@ const statements = {
   listRankings: db.prepare(`
     SELECT id, username, trophies, tier
     FROM users
+    WHERE deleted_at IS NULL
     ORDER BY trophies DESC, username COLLATE NOCASE ASC
+  `),
+  listAdminUsers: db.prepare(`
+    SELECT id, username, trophies, tier, loss_counter, tournament_wins, signup_ip, last_ip,
+      created_at, updated_at, deleted_at
+    FROM users
+    WHERE deleted_at IS NULL
+    ORDER BY username COLLATE NOCASE ASC
   `),
   createTournament: db.prepare(`
     INSERT INTO tournaments (
@@ -571,11 +596,35 @@ const statements = {
     SET trophies = ?, tier = ?, loss_counter = ?, updated_at = ?
     WHERE id = ?
   `),
+  updateUserIp: db.prepare(`
+    UPDATE users
+    SET signup_ip = CASE WHEN signup_ip = '' THEN ? ELSE signup_ip END,
+      last_ip = ?,
+      updated_at = ?
+    WHERE id = ?
+  `),
+  softDeleteUser: db.prepare(`
+    UPDATE users
+    SET deleted_at = ?, deleted_by_admin_id = ?, updated_at = ?
+    WHERE id = ? AND deleted_at IS NULL
+  `),
   incrementTournamentWins: db.prepare(`
     UPDATE users
     SET tournament_wins = tournament_wins + 1, updated_at = ?
     WHERE id = ?
-  `)
+  `),
+  getBannedIp: db.prepare('SELECT * FROM banned_ips WHERE ip = ?'),
+  banIp: db.prepare(`
+    INSERT INTO banned_ips (ip, reason, banned_user_id, banned_by_user_id, banned_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(ip) DO UPDATE SET
+      reason = excluded.reason,
+      banned_user_id = excluded.banned_user_id,
+      banned_by_user_id = excluded.banned_by_user_id,
+      banned_at = excluded.banned_at
+  `),
+  listSessions: db.prepare('SELECT sid, data FROM sessions'),
+  deleteSessionBySid: db.prepare('DELETE FROM sessions WHERE sid = ?')
 };
 
 class SqliteSessionStore extends session.Store {
@@ -660,6 +709,10 @@ const io = new Server(server, {
       callback('허용되지 않은 접속 출처입니다.', false);
       return;
     }
+    if (isIpBanned(clientIpFromRequest(req))) {
+      callback('영구정지된 IP입니다.', false);
+      return;
+    }
     if (!checkSocketConnectionRate(clientIpFromRequest(req))) {
       callback('접속 요청이 너무 많습니다.', false);
       return;
@@ -672,6 +725,7 @@ app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.use(applySecurityHeaders);
 app.use(limitHttpRequests);
+app.use(blockBannedIp);
 app.use(express.json({ limit: '12kb' }));
 app.use(sessionMiddleware);
 
@@ -704,8 +758,10 @@ app.post('/api/signup', asyncHandler(async (req, res) => {
   const tier = getTierForTrophies(0).name;
   const result = statements.createUser.run(username, passwordHash, tier, now, now);
   const user = statements.getUserById.get(result.lastInsertRowid);
+  const ip = clientIpFromRequest(req);
+  statements.updateUserIp.run(ip, ip, now, user.id);
   await establishSession(req, user.id);
-  res.status(201).json({ user: publicUser(user) });
+  res.status(201).json({ user: publicUser(statements.getUserById.get(user.id)) });
 }));
 
 app.post('/api/login', asyncHandler(async (req, res) => {
@@ -717,13 +773,14 @@ app.post('/api/login', asyncHandler(async (req, res) => {
   }
 
   const user = statements.getUserByUsername.get(username);
-  if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+  if (!user || user.deleted_at || !(await bcrypt.compare(password, user.password_hash))) {
     res.status(401).json({ error: '이름 또는 비밀번호가 올바르지 않습니다.' });
     return;
   }
 
   await establishSession(req, user.id);
-  res.json({ user: publicUser(user) });
+  const refreshed = statements.getUserById.get(user.id);
+  res.json({ user: publicUser(refreshed) });
 }));
 
 app.post('/api/logout', (req, res) => {
@@ -789,6 +846,61 @@ app.put('/api/deck', requireAuthApi, (req, res) => {
   });
 });
 
+app.get('/api/admin/users', requireAdminApi, (req, res) => {
+  res.json({ users: publicAdminUsers() });
+});
+
+app.patch('/api/admin/users/:id/trophies', requireAdminApi, (req, res) => {
+  const target = adminTargetUser(req.params.id);
+  if (!target) {
+    res.status(404).json({ error: '유저를 찾을 수 없습니다.' });
+    return;
+  }
+  const trophies = Number(req.body && req.body.trophies);
+  if (!Number.isSafeInteger(trophies) || trophies < -999999 || trophies > 999999) {
+    res.status(400).json({ error: '트로피는 -999999부터 999999까지 정수로 입력하세요.' });
+    return;
+  }
+  const tier = getTierForTrophies(trophies);
+  const lossCounter = Math.max(0, Number(target.loss_counter) || 0);
+  statements.updateUserStats.run(trophies, tier.name, lossCounter, new Date().toISOString(), target.id);
+  emitProfileToUser(target.id);
+  res.json({ user: publicAdminUser(statements.getUserById.get(target.id)) });
+});
+
+app.delete('/api/admin/users/:id', requireAdminApi, (req, res) => {
+  const target = adminTargetUser(req.params.id);
+  if (!target) {
+    res.status(404).json({ error: '유저를 찾을 수 없습니다.' });
+    return;
+  }
+  if (isAdminUser(target)) {
+    res.status(400).json({ error: '관리자 계정은 삭제할 수 없습니다.' });
+    return;
+  }
+  softDeleteAccount(target.id, req.user.id);
+  res.json({ ok: true, users: publicAdminUsers() });
+});
+
+app.post('/api/admin/users/:id/ban-ip', requireAdminApi, (req, res) => {
+  const target = adminTargetUser(req.params.id);
+  if (!target) {
+    res.status(404).json({ error: '유저를 찾을 수 없습니다.' });
+    return;
+  }
+  if (isAdminUser(target)) {
+    res.status(400).json({ error: '관리자 계정의 IP는 정지할 수 없습니다.' });
+    return;
+  }
+  const ip = normalizeIp(target.last_ip || target.signup_ip);
+  if (!ip) {
+    res.status(400).json({ error: '해당 계정의 접속 IP 기록이 없습니다.' });
+    return;
+  }
+  banIpForUser(ip, target.id, req.user.id);
+  res.json({ ok: true, users: publicAdminUsers() });
+});
+
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, filePath) => {
     if (['.html', '.js', '.css'].includes(path.extname(filePath))) {
@@ -828,12 +940,13 @@ io.use((socket, next) => {
   }
 
   const user = statements.getUserById.get(userId);
-  if (!user) {
+  if (!user || user.deleted_at) {
     next(new Error('계정을 찾을 수 없습니다.'));
     return;
   }
 
   socket.data.user = publicUser(user);
+  socket.data.ip = clientIpFromRequest(socket.request);
   socket.data.slot = null;
   socket.data.roomId = null;
   socket.data.spectatingRoomId = null;
@@ -3443,7 +3556,25 @@ function publicUser(user) {
       min: nextTier.min
     } : null,
     lossCounter: Math.max(0, Number(user.loss_counter) || 0),
-    tournamentWins: Math.max(0, Number(user.tournament_wins) || 0)
+    tournamentWins: Math.max(0, Number(user.tournament_wins) || 0),
+    isAdmin: isAdminUser(user)
+  };
+}
+
+function publicAdminUsers() {
+  return statements.listAdminUsers.all().map(publicAdminUser);
+}
+
+function publicAdminUser(user) {
+  const publicProfile = publicUser(user);
+  const lastIp = normalizeIp(user.last_ip || user.signup_ip);
+  return {
+    ...publicProfile,
+    signupIp: normalizeIp(user.signup_ip),
+    lastIp,
+    ipBanned: Boolean(lastIp && isIpBanned(lastIp)),
+    createdAt: user.created_at,
+    updatedAt: user.updated_at
   };
 }
 
@@ -3695,8 +3826,13 @@ function establishSession(req, userId) {
       }
       req.session.userId = userId;
       req.session.save((saveError) => {
-        if (saveError) reject(saveError);
-        else resolve();
+        if (saveError) {
+          reject(saveError);
+          return;
+        }
+        const ip = clientIpFromRequest(req);
+        statements.updateUserIp.run(ip, ip, new Date().toISOString(), userId);
+        resolve();
       });
     });
   });
@@ -3716,13 +3852,90 @@ function requireAuthApi(req, res, next) {
     return;
   }
   const user = statements.getUserById.get(userId);
-  if (!user) {
+  if (!user || user.deleted_at) {
     req.session.destroy(() => {});
     res.status(401).json({ error: '계정을 찾을 수 없습니다.' });
     return;
   }
   req.user = user;
   next();
+}
+
+function requireAdminApi(req, res, next) {
+  requireAuthApi(req, res, () => {
+    if (!isAdminUser(req.user)) {
+      res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+      return;
+    }
+    next();
+  });
+}
+
+function isAdminUser(user) {
+  return Boolean(user && !user.deleted_at && normalizeUsername(user.username) === ADMIN_USERNAME);
+}
+
+function adminTargetUser(id) {
+  const userId = Number(id);
+  if (!Number.isSafeInteger(userId) || userId <= 0) return null;
+  const user = statements.getUserById.get(userId);
+  if (!user || user.deleted_at) return null;
+  return user;
+}
+
+function normalizeIp(value) {
+  return String(value || '').trim().slice(0, 128);
+}
+
+function isIpBanned(ip) {
+  const normalized = normalizeIp(ip);
+  return Boolean(normalized && statements.getBannedIp.get(normalized));
+}
+
+function blockBannedIp(req, res, next) {
+  if (req.path === '/healthz') {
+    next();
+    return;
+  }
+  if (!isIpBanned(clientIpFromRequest(req))) {
+    next();
+    return;
+  }
+  if (req.session) req.session.destroy(() => {});
+  res.status(403).json({ error: '영구정지된 IP입니다.' });
+}
+
+function banIpForUser(ip, userId, adminUserId) {
+  const normalized = normalizeIp(ip);
+  if (!normalized) return;
+  statements.banIp.run(normalized, '관리자 영구정지', userId, adminUserId, new Date().toISOString());
+  for (const socket of io.of('/').sockets.values()) {
+    if (normalizeIp(socket.data.ip) === normalized) {
+      leaveCurrentRoom(socket, { disconnecting: true });
+      socket.disconnect(true);
+    }
+  }
+}
+
+function softDeleteAccount(userId, adminUserId) {
+  const now = new Date().toISOString();
+  statements.softDeleteUser.run(now, adminUserId, now, userId);
+  destroySessionsForUser(userId);
+  for (const socket of io.of('/').sockets.values()) {
+    if (socket.data.user && socket.data.user.id === userId) {
+      leaveCurrentRoom(socket, { disconnecting: true });
+      socket.disconnect(true);
+    }
+  }
+}
+
+function destroySessionsForUser(userId) {
+  for (const row of statements.listSessions.all()) {
+    const data = safeJsonParse(row.data, null);
+    if (data && Number(data.userId) === Number(userId)) {
+      statements.deleteSessionBySid.run(row.sid);
+    }
+  }
 }
 
 function asyncHandler(handler) {

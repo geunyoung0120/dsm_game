@@ -59,6 +59,7 @@ async function main() {
   await expectRankings(accounts[0], accounts.map((account) => account.user.username));
   await expectTiers(accounts[0]);
   await expectDeckSave(accounts[0], smokeDeck);
+  const admin = await expectAdminTools(accounts[0]);
   await expectSessionUser(await login(accounts[0].user.username));
   const result = await runClientSmoke(accounts);
   const dagwasil = await expectDagwasilImmediateSpawn(accounts);
@@ -87,7 +88,7 @@ async function main() {
   if (actualOpeningHand !== expectedOpeningHand) {
     throw new Error(`Saved deck was not used for player 1. Expected ${expectedOpeningHand}, got ${actualOpeningHand}.`);
   }
-  console.log(JSON.stringify({ ...result, dagwasil, cherryTree, giantHyeonjik, kkongMeteor, entropic, twoVersusTwo, tournament }));
+  console.log(JSON.stringify({ ...result, admin, dagwasil, cherryTree, giantHyeonjik, kkongMeteor, entropic, twoVersusTwo, tournament }));
   cleanup();
 }
 
@@ -134,10 +135,10 @@ function expectUnauthSocketRejected() {
   });
 }
 
-async function signup(username) {
+async function signup(username, extraHeaders = {}) {
   const response = await fetch(`${url}/api/signup`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...extraHeaders },
     body: JSON.stringify({ username, password: smokePassword })
   });
   const body = await response.json();
@@ -152,10 +153,10 @@ async function signup(username) {
   };
 }
 
-async function login(username) {
+async function login(username, extraHeaders = {}) {
   const response = await fetch(`${url}/api/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...extraHeaders },
     body: JSON.stringify({ username, password: smokePassword })
   });
   const body = await response.json();
@@ -246,6 +247,84 @@ async function expectDeckSave(account, deck) {
   if (!Array.isArray(body.deck) || body.deck.join('|') !== deck.join('|')) {
     throw new Error('Smoke deck save did not return the saved deck.');
   }
+}
+
+async function expectAdminTools(nonAdminAccount) {
+  const adminAccount = await signup('김근영');
+  if (!adminAccount.user.isAdmin) {
+    throw new Error('Admin account did not receive admin flag.');
+  }
+
+  const targetIp = '203.0.113.10';
+  const deleteIp = '203.0.113.11';
+  const target = await signup(`관리대상${Date.now()}A`, { 'X-Forwarded-For': targetIp });
+  const doomed = await signup(`삭제대상${Date.now()}B`, { 'X-Forwarded-For': deleteIp });
+
+  const forbidden = await fetch(`${url}/api/admin/users`, {
+    headers: { Cookie: nonAdminAccount.cookie }
+  });
+  if (forbidden.status !== 403) {
+    throw new Error(`Non-admin admin endpoint expected 403, got ${forbidden.status}.`);
+  }
+
+  const listResponse = await fetch(`${url}/api/admin/users`, {
+    headers: { Cookie: adminAccount.cookie }
+  });
+  const listBody = await listResponse.json();
+  if (!listResponse.ok) throw new Error(listBody.error || 'Admin user list failed.');
+  const listedTarget = (listBody.users || []).find((user) => user.id === target.user.id);
+  if (!listedTarget || listedTarget.lastIp !== targetIp) {
+    throw new Error('Admin user list did not include target IP.');
+  }
+
+  const trophyResponse = await fetch(`${url}/api/admin/users/${target.user.id}/trophies`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: adminAccount.cookie },
+    body: JSON.stringify({ trophies: 42 })
+  });
+  const trophyBody = await trophyResponse.json();
+  if (!trophyResponse.ok) throw new Error(trophyBody.error || 'Admin trophy update failed.');
+  if (!trophyBody.user || trophyBody.user.trophies !== 42 || trophyBody.user.tier !== '실버') {
+    throw new Error('Admin trophy update did not return the expected profile.');
+  }
+
+  const targetProfile = await fetch(`${url}/api/me`, {
+    headers: { Cookie: target.cookie, 'X-Forwarded-For': targetIp }
+  });
+  const targetProfileBody = await targetProfile.json();
+  if (!targetProfile.ok || !targetProfileBody.user || targetProfileBody.user.trophies !== 42) {
+    throw new Error('Admin trophy update was not visible to the target user.');
+  }
+
+  const deleteResponse = await fetch(`${url}/api/admin/users/${doomed.user.id}`, {
+    method: 'DELETE',
+    headers: { Cookie: adminAccount.cookie }
+  });
+  const deleteBody = await deleteResponse.json();
+  if (!deleteResponse.ok) throw new Error(deleteBody.error || 'Admin account delete failed.');
+  const deletedProfile = await fetch(`${url}/api/me`, {
+    headers: { Cookie: doomed.cookie, 'X-Forwarded-For': deleteIp }
+  });
+  if (deletedProfile.status !== 401) {
+    throw new Error(`Deleted account expected 401, got ${deletedProfile.status}.`);
+  }
+
+  const banResponse = await fetch(`${url}/api/admin/users/${target.user.id}/ban-ip`, {
+    method: 'POST',
+    headers: { Cookie: adminAccount.cookie }
+  });
+  const banBody = await banResponse.json();
+  if (!banResponse.ok) throw new Error(banBody.error || 'Admin IP ban failed.');
+  const bannedLogin = await fetch(`${url}/api/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': targetIp },
+    body: JSON.stringify({ username: target.user.username, password: smokePassword })
+  });
+  if (bannedLogin.status !== 403) {
+    throw new Error(`Banned IP login expected 403, got ${bannedLogin.status}.`);
+  }
+
+  return true;
 }
 
 async function runClientSmoke(accounts) {
@@ -508,7 +587,7 @@ async function expectEntropicFusion(accounts) {
 
   const readyState = await waitForState(clients[0], (payload) => {
     const player = payload.players[0];
-    return player && Array.isArray(player.hand) && player.hand.includes('haikuGeonhwi') && player.elixir >= 2 && payload.units.some((unit) => unit.owner === 0 && unit.cardId === 'mythos');
+    return player && Array.isArray(player.hand) && player.hand.includes('haikuGeonhwi') && player.elixir >= 2.2 && payload.units.some((unit) => unit.owner === 0 && unit.cardId === 'mythos');
   }, 'haiku ready for fusion');
   const handIndex = readyState.players[0].hand.indexOf('haikuGeonhwi');
   if (handIndex < 0) throw new Error('Haiku Geonhwi was not in hand for fusion.');

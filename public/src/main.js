@@ -1013,6 +1013,7 @@ let isSpectating = false;
 let ascensionAudioUntil = 0;
 let latestRankings = [];
 let latestTiers = [];
+let latestAdminUsers = [];
 let latestSpectatorRooms = [];
 let latestTournamentWinner = null;
 let latestTournamentHistory = [];
@@ -2803,6 +2804,8 @@ function setupShell() {
   const tournamentStakeField = document.getElementById('tournament-stake-field');
   const tournamentPrevButton = document.getElementById('tournament-prev-match');
   const tournamentNextButton = document.getElementById('tournament-next-match');
+  const adminUserList = document.getElementById('admin-user-list');
+  const refreshAdminUsersButton = document.getElementById('refresh-admin-users');
 
   initializeTheme(themeButton);
   renderCharacterGrid();
@@ -2860,9 +2863,10 @@ function setupShell() {
     await loadRankings();
   });
 
-  mypageButton.addEventListener('click', () => {
+  mypageButton.addEventListener('click', async () => {
     renderProfile();
     showScreen(mypageScreen);
+    await loadAdminUsers();
   });
 
   updateHistoryButton.addEventListener('click', () => {
@@ -2937,6 +2941,7 @@ function setupShell() {
     currentRoom = null;
     currentSlot = null;
     latestState = null;
+    latestAdminUsers = [];
     latestTournamentWinner = null;
     latestTournamentHistory = [];
     currentTournamentDetail = null;
@@ -3017,6 +3022,8 @@ function setupShell() {
   }
 
   saveDeckButton.addEventListener('click', saveDeck);
+  if (adminUserList) adminUserList.addEventListener('click', handleAdminUserAction);
+  if (refreshAdminUsersButton) refreshAdminUsersButton.addEventListener('click', loadAdminUsers);
 
   function showScreen(target) {
     for (const screen of [authScreen, homeScreen, mypageScreen, updateHistoryScreen, tournamentHistoryScreen, tournamentDetailScreen, roomScreen, encyclopediaScreen, rankingScreen, tierScreen, deckScreen, gameScreen]) {
@@ -3149,6 +3156,7 @@ function finishAuth(user) {
   currentRoom = null;
   currentSlot = null;
   latestState = null;
+  latestAdminUsers = [];
   renderProfile();
   loadTournamentWinner();
   loadRankings();
@@ -3642,6 +3650,141 @@ function renderProfile() {
     profileStat('토너먼트 우승 횟수', `${currentUser.tournamentWins || 0}회`),
     profileTierStat()
   );
+  renderAdminPanel();
+}
+
+async function loadAdminUsers() {
+  renderAdminPanel();
+  if (!isCurrentUserAdmin()) return;
+  setMessage('admin-message', '유저 목록을 불러오는 중...');
+  try {
+    const data = await apiRequest('/api/admin/users');
+    latestAdminUsers = Array.isArray(data.users) ? data.users : [];
+    setMessage('admin-message', '');
+    renderAdminPanel();
+  } catch (error) {
+    setMessage('admin-message', error.message || '관리자 목록을 불러오지 못했습니다.');
+  }
+}
+
+function renderAdminPanel() {
+  const panel = document.getElementById('admin-panel');
+  const list = document.getElementById('admin-user-list');
+  if (!panel || !list) return;
+  const isAdmin = isCurrentUserAdmin();
+  panel.classList.toggle('hidden', !isAdmin);
+  if (!isAdmin) {
+    latestAdminUsers = [];
+    list.replaceChildren();
+    setMessage('admin-message', '');
+    return;
+  }
+
+  list.replaceChildren();
+  if (latestAdminUsers.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-list';
+    empty.textContent = '표시할 유저가 없습니다.';
+    list.appendChild(empty);
+    return;
+  }
+
+  for (const user of latestAdminUsers) {
+    list.appendChild(adminUserRow(user));
+  }
+}
+
+function adminUserRow(user) {
+  const row = document.createElement('article');
+  row.className = 'admin-user-row';
+  row.dataset.userId = user.id;
+
+  const info = document.createElement('div');
+  info.className = 'admin-user-info';
+  const name = document.createElement('strong');
+  name.textContent = user.username;
+  const meta = document.createElement('span');
+  const ipText = user.lastIp ? `IP ${user.lastIp}` : 'IP 기록 없음';
+  meta.textContent = `${user.tierIcon || ''} ${user.tier} · 트로피 ${user.trophies}개 · ${ipText}${user.ipBanned ? ' · IP 정지됨' : ''}`;
+  info.append(name, meta);
+
+  const actions = document.createElement('div');
+  actions.className = 'admin-user-actions';
+  const trophyInput = document.createElement('input');
+  trophyInput.type = 'number';
+  trophyInput.step = '1';
+  trophyInput.min = '-999999';
+  trophyInput.max = '999999';
+  trophyInput.value = String(user.trophies);
+  trophyInput.setAttribute('aria-label', `${user.username} 트로피`);
+
+  const updateButton = document.createElement('button');
+  updateButton.type = 'button';
+  updateButton.className = 'secondary';
+  updateButton.dataset.adminAction = 'trophies';
+  updateButton.textContent = '적용';
+
+  const banButton = document.createElement('button');
+  banButton.type = 'button';
+  banButton.className = 'secondary admin-danger';
+  banButton.dataset.adminAction = 'ban-ip';
+  banButton.textContent = 'IP 정지';
+  banButton.disabled = Boolean(user.isAdmin || !user.lastIp || user.ipBanned);
+
+  const deleteButton = document.createElement('button');
+  deleteButton.type = 'button';
+  deleteButton.className = 'secondary admin-danger';
+  deleteButton.dataset.adminAction = 'delete';
+  deleteButton.textContent = '계정 삭제';
+  deleteButton.disabled = Boolean(user.isAdmin);
+
+  actions.append(trophyInput, updateButton, banButton, deleteButton);
+  row.append(info, actions);
+  return row;
+}
+
+async function handleAdminUserAction(event) {
+  const button = event.target.closest('[data-admin-action]');
+  if (!button || !isCurrentUserAdmin()) return;
+  const row = button.closest('.admin-user-row');
+  const userId = row && row.dataset.userId;
+  const user = latestAdminUsers.find((candidate) => String(candidate.id) === String(userId));
+  if (!row || !user) return;
+
+  const action = button.dataset.adminAction;
+  try {
+    button.disabled = true;
+    if (action === 'trophies') {
+      const input = row.querySelector('input[type="number"]');
+      const trophies = Number(input && input.value);
+      if (!Number.isSafeInteger(trophies)) throw new Error('트로피는 정수로 입력하세요.');
+      const data = await apiRequest(`/api/admin/users/${encodeURIComponent(userId)}/trophies`, {
+        method: 'PATCH',
+        body: JSON.stringify({ trophies })
+      });
+      if (currentUser && data.user && data.user.id === currentUser.id) currentUser = data.user;
+      setMessage('admin-message', '트로피를 수정했습니다.');
+    } else if (action === 'delete') {
+      if (!window.confirm(`${user.username} 계정을 삭제할까요? 이 계정은 로그인할 수 없게 됩니다.`)) return;
+      await apiRequest(`/api/admin/users/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+      setMessage('admin-message', '계정을 삭제했습니다.');
+    } else if (action === 'ban-ip') {
+      if (!window.confirm(`${user.username} 계정의 IP ${user.lastIp}를 영구정지할까요?`)) return;
+      await apiRequest(`/api/admin/users/${encodeURIComponent(userId)}/ban-ip`, { method: 'POST' });
+      setMessage('admin-message', 'IP를 영구정지했습니다.');
+    }
+    await loadAdminUsers();
+    await loadRankings();
+    renderProfile();
+  } catch (error) {
+    setMessage('admin-message', error.message || '관리자 작업을 처리하지 못했습니다.');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function isCurrentUserAdmin() {
+  return Boolean(currentUser && currentUser.isAdmin);
 }
 
 function renderTournamentWinnerBanner() {
