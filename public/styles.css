@@ -1801,6 +1801,32 @@ html[data-theme="light"] .tournament-winner-banner {
   font-size: 22px;
 }
 
+.room-saved-deck-panel {
+  margin: 14px 0 16px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.room-saved-deck-panel div {
+  display: grid;
+  gap: 4px;
+}
+
+.room-saved-deck-panel strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.room-saved-deck-panel span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .room-list-title {
   display: flex;
   align-items: center;

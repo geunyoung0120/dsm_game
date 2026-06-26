@@ -25,6 +25,25 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: '창GPT 밸런스와 편의 개선',
+    date: '2026.06.26',
+    items: [
+      '창GPT 공격력 180으로 감소',
+      '창GPT 사거리 110으로 감소',
+      '창GPT 에러 자폭 확률 25%로 증가',
+      '공주타워 파괴 후 배치 확장 범위 축소',
+      '방 선택 화면 저장 덱 확인/수정 추가',
+      '토너먼트 우승 기록 최신순 기본 정렬'
+    ],
+    details: [
+      '창GPT의 텍스트 스트림 피해량과 에러 자폭 피해를 200에서 180으로 낮췄다.',
+      '창GPT의 사거리를 120에서 110으로 낮추고, 공격마다 발생하는 에러 자폭 확률은 20%에서 25%로 올렸다.',
+      '상대 공주타워를 부숴도 배치 가능 영역이 그 공주타워를 넘어 왕타워 쪽까지 넓어지지 않게 했다.',
+      '방 선택 화면에서 다음 경기에서 사용할 저장 덱을 확인하고, 바로 덱짜기 화면으로 이동해 수정할 수 있게 했다.',
+      '역대 토너먼트 우승 기록은 기본 최신순으로 표시하고, 오래된순 정렬도 선택할 수 있게 했다.'
+    ]
+  },
+  {
     title: '하이쿠 건휘·박바둑·다과실 밸런스 조정',
     date: '2026.06.26',
     items: [
@@ -85,7 +104,7 @@ const PATCH_NOTICES = [
       '캐릭터 확인 설명을 전투 정보 중심으로 정리'
     ],
     details: [
-      '창GPT는 7 엘릭서 고위험 원거리 딜러다. 넓은 전방 텍스트 스트림으로 200 피해를 주지만, 공격마다 20% 확률로 에러 자폭 피해를 받는다.',
+      '창GPT는 7 엘릭서 고위험 원거리 딜러다. 넓은 전방 텍스트 스트림으로 180 피해를 주지만, 공격마다 25% 확률로 에러 자폭 피해를 받는다.',
       '하이쿠 건휘는 2 엘릭서 초고속 원거리 딜러다. 0.1초마다 15 피해를 주지만, 3회 연속 공격 후 1초 동안 토큰 제한으로 공격하지 못한다.',
       '하이쿠 건휘 카드를 아군 미토스건휘 위에 놓거나, 미토스건휘 카드를 아군 하이쿠 건휘 위에 놓으면 엔트로픽으로 합체한다.',
       '엔트로픽은 미토스건휘 각성 스탯을 영구 유지하고 최대 HP가 1150으로 오르며, 합체 즉시 풀피가 된다.',
@@ -683,14 +702,14 @@ const CHARACTER_DETAILS = [
     type: '고위험 원거리 딜러',
     stats: [
       ['HP', '1000'],
-      ['공격력', '200'],
+      ['공격력', '180'],
       ['공격 주기', '1초'],
-      ['사거리', '120'],
+      ['사거리', '110'],
       ['전방 폭', '260'],
       ['치유 보정', '빼트맨 힐 50%만 받음'],
-      ['자폭 확률', '공격마다 20%']
+      ['자폭 확률', '공격마다 25%']
     ],
-    ability: '손끝에서 글자와 데이터가 줄줄이 이어지는 텍스트 스트림을 전방 사거리 120, 가로 폭 260 범위로 발사한다. 사거리는 짧아졌지만 양옆으로 넓게 퍼지고 피해량이 200으로 매우 높다. 대신 공격할 때마다 20% 확률로 에러가 발생해 창GPT 자신도 200 피해를 받아, 중요한 순간에 도박처럼 쓰는 고위험 고보상 카드다.',
+    ability: '손끝에서 글자와 데이터가 줄줄이 이어지는 텍스트 스트림을 전방 사거리 110, 가로 폭 260 범위로 발사한다. 사거리는 더 짧아졌지만 양옆으로 넓게 퍼지고 피해량이 180으로 높다. 대신 공격할 때마다 25% 확률로 에러가 발생해 창GPT 자신도 180 피해를 받아, 중요한 순간에 도박처럼 쓰는 고위험 고보상 카드다.',
     trait: '남학생이지만 빼트맨과 같은 사람의 미래 버전이라 빼트맨에게 회복을 받을 수 있다. 다만 여학생 캐릭터와 달리 힐량은 절반만 적용된다.'
   },
   {
@@ -1052,6 +1071,7 @@ let adminUserSearchQuery = '';
 let latestSpectatorRooms = [];
 let latestTournamentWinner = null;
 let latestTournamentHistory = [];
+let tournamentHistorySortMode = 'desc';
 let currentTournamentDetail = null;
 let latestPickRates = [];
 let totalPickRateDecks = 0;
@@ -1061,6 +1081,9 @@ let selectedDeck = [];
 let activeDeckSize = DECK_SIZE;
 let deckSortMode = 'cost-asc';
 let returnToGameAfterDeck = false;
+let returnToRoomAfterDeck = false;
+let roomSavedDeck = [];
+let roomSavedDeckCards = {};
 let showingSpectatorRooms = false;
 let battleChatMessages = [];
 
@@ -2608,19 +2631,37 @@ class BattleScene extends Phaser.Scene {
       : { y: BOTTOM_DEPLOY_Y_MIN, h: BOTTOM_DEPLOY_Y_MAX - BOTTOM_DEPLOY_Y_MIN };
 
     if (this.isPrincessTowerDestroyed(enemyTeam, 'princess-left')) {
-      zones.push({ x: DEPLOY_X_MIN, y: enemySide.y, w: FIELD_CENTER_X - DEPLOY_X_MIN, h: enemySide.h, expanded: true });
+      const zone = this.expandedEnemyZoneForTower(team, enemyTeam, 'princess-left', enemySide);
+      if (zone) zones.push({ x: DEPLOY_X_MIN, y: zone.y, w: FIELD_CENTER_X - DEPLOY_X_MIN, h: zone.h, expanded: true });
     }
     if (this.isPrincessTowerDestroyed(enemyTeam, 'princess-right')) {
-      zones.push({ x: FIELD_CENTER_X, y: enemySide.y, w: DEPLOY_X_MAX - FIELD_CENTER_X, h: enemySide.h, expanded: true });
+      const zone = this.expandedEnemyZoneForTower(team, enemyTeam, 'princess-right', enemySide);
+      if (zone) zones.push({ x: FIELD_CENTER_X, y: zone.y, w: DEPLOY_X_MAX - FIELD_CENTER_X, h: zone.h, expanded: true });
     }
 
     return zones;
   }
 
+  expandedEnemyZoneForTower(team, enemyTeam, towerType, fallback) {
+    const tower = this.getPrincessTower(enemyTeam, towerType);
+    const towerY = Number(tower && tower.y);
+    if (!Number.isFinite(towerY)) return fallback;
+    if (team === 0) {
+      const y = Math.max(TOP_DEPLOY_Y_MIN, towerY);
+      return { y, h: Math.max(0, TOP_DEPLOY_Y_MAX - y) };
+    }
+    const y = BOTTOM_DEPLOY_Y_MIN;
+    return { y, h: Math.max(0, Math.min(BOTTOM_DEPLOY_Y_MAX, towerY) - y) };
+  }
+
   isPrincessTowerDestroyed(owner, type) {
-    return Boolean(this.state && Array.isArray(this.state.towers) && this.state.towers.some((tower) => {
-      return tower.owner === owner && tower.type === type && tower.hp <= 0;
-    }));
+    const tower = this.getPrincessTower(owner, type);
+    return Boolean(tower && tower.hp <= 0);
+  }
+
+  getPrincessTower(owner, type) {
+    if (!this.state || !Array.isArray(this.state.towers)) return null;
+    return this.state.towers.find((tower) => tower.owner === owner && tower.type === type) || null;
   }
 
   getVisualRadius(cardId) {
@@ -2818,6 +2859,7 @@ function setupShell() {
   const mypageButton = document.getElementById('open-mypage');
   const updateHistoryButton = document.getElementById('open-update-history');
   const tournamentHistoryButton = document.getElementById('open-tournament-history');
+  const tournamentHistorySortSelect = document.getElementById('tournament-history-sort');
   const tierButton = document.getElementById('open-tier-chart');
   const backUpdateHistoryButton = document.getElementById('back-update-history');
   const backMypageButton = document.getElementById('back-mypage');
@@ -2851,6 +2893,7 @@ function setupShell() {
   const adminUserSearch = document.getElementById('admin-user-search');
   const refreshAdminUsersButton = document.getElementById('refresh-admin-users');
   const deckSortSelect = document.getElementById('deck-sort');
+  const editSavedDeckFromRoomButton = document.getElementById('edit-saved-deck-from-room');
   const pickrateSortSelect = document.getElementById('pickrate-sort');
 
   initializeTheme(themeButton);
@@ -2888,6 +2931,7 @@ function setupShell() {
 
   startButton.addEventListener('click', () => {
     showScreen(roomScreen);
+    loadRoomSavedDeckStatus();
     connectSocket();
     showingSpectatorRooms = false;
     updateRoomListMode();
@@ -2896,6 +2940,7 @@ function setupShell() {
 
   deckButton.addEventListener('click', async () => {
     returnToGameAfterDeck = false;
+    returnToRoomAfterDeck = false;
     showScreen(deckScreen);
     await loadDeckBuilder({ deckSize: DECK_SIZE });
   });
@@ -2929,6 +2974,8 @@ function setupShell() {
 
   if (tournamentHistoryButton) {
     tournamentHistoryButton.addEventListener('click', async () => {
+      tournamentHistorySortMode = 'desc';
+      if (tournamentHistorySortSelect) tournamentHistorySortSelect.value = 'desc';
       showScreen(tournamentHistoryScreen);
       await loadTournamentHistory();
     });
@@ -2979,6 +3026,16 @@ function setupShell() {
       startGame();
       return;
     }
+    if (returnToRoomAfterDeck) {
+      returnToRoomAfterDeck = false;
+      showScreen(roomScreen);
+      connectSocket();
+      showingSpectatorRooms = false;
+      updateRoomListMode();
+      loadRoomSavedDeckStatus();
+      requestRooms();
+      return;
+    }
     showScreen(homeScreen);
   });
 
@@ -3004,9 +3061,12 @@ function setupShell() {
     adminUserSearchQuery = '';
     latestTournamentWinner = null;
     latestTournamentHistory = [];
+    tournamentHistorySortMode = 'desc';
     currentTournamentDetail = null;
     latestPickRates = [];
     totalPickRateDecks = 0;
+    roomSavedDeck = [];
+    roomSavedDeckCards = {};
     renderTournamentWinnerBanner();
     renderPickRatePreview();
     renderPickRateList();
@@ -3083,6 +3143,15 @@ function setupShell() {
   }
 
   saveDeckButton.addEventListener('click', saveDeck);
+  if (editSavedDeckFromRoomButton) {
+    editSavedDeckFromRoomButton.addEventListener('click', async () => {
+      returnToRoomAfterDeck = true;
+      returnToGameAfterDeck = false;
+      showScreen(deckScreen);
+      await loadDeckBuilder({ deckSize: DECK_SIZE });
+      setMessage('deck-message', '저장한 덱은 다음 일반/2대2/토너먼트 경기에서 자동 사용됩니다.');
+    });
+  }
   if (adminUserList) adminUserList.addEventListener('click', handleAdminUserAction);
   if (adminUserSearch) {
     adminUserSearch.addEventListener('input', () => {
@@ -3095,6 +3164,12 @@ function setupShell() {
     deckSortSelect.addEventListener('change', () => {
       deckSortMode = deckSortSelect.value || 'cost-asc';
       renderDeckCardGrid();
+    });
+  }
+  if (tournamentHistorySortSelect) {
+    tournamentHistorySortSelect.addEventListener('change', () => {
+      tournamentHistorySortMode = tournamentHistorySortSelect.value === 'asc' ? 'asc' : 'desc';
+      renderTournamentHistory();
     });
   }
   if (pickrateSortSelect) {
@@ -3143,7 +3218,10 @@ function setupShell() {
   };
 
   window.showHomeScreen = () => showScreen(homeScreen);
-  window.showRoomScreen = () => showScreen(roomScreen);
+  window.showRoomScreen = () => {
+    showScreen(roomScreen);
+    loadRoomSavedDeckStatus();
+  };
   window.showTournamentDetailScreen = () => showScreen(tournamentDetailScreen);
   window.openDeckBuilderForBreak = async () => {
     const breakState = latestState && latestState.tournament && latestState.tournament.break;
@@ -3308,6 +3386,7 @@ function connectSocket() {
     currentSlot = payload.slot;
     isSpectating = false;
     returnToGameAfterDeck = false;
+    returnToRoomAfterDeck = false;
     resetBattleChat();
     setMessage('room-message', '');
     updateGameRoomTitle();
@@ -3319,6 +3398,7 @@ function connectSocket() {
     currentSlot = null;
     isSpectating = true;
     returnToGameAfterDeck = false;
+    returnToRoomAfterDeck = false;
     resetBattleChat();
     setMessage('room-message', '');
     updateGameRoomTitle();
@@ -3390,6 +3470,38 @@ async function requestRooms() {
   } catch (error) {
     setMessage('room-message', error.message || '방 목록을 가져오지 못했습니다.');
   }
+}
+
+async function loadRoomSavedDeckStatus() {
+  const status = document.getElementById('room-saved-deck-status');
+  if (!currentUser || !status) return;
+  status.textContent = '저장 덱 확인 중';
+  try {
+    const data = await apiRequest(`/api/deck?deckSize=${DECK_SIZE}`);
+    roomSavedDeck = Array.isArray(data.deck) ? [...data.deck] : [];
+    roomSavedDeckCards = data.cards || {};
+    renderRoomSavedDeckStatus();
+  } catch (error) {
+    roomSavedDeck = [];
+    roomSavedDeckCards = {};
+    status.textContent = error.message || '저장 덱을 확인하지 못했습니다.';
+  }
+}
+
+function renderRoomSavedDeckStatus() {
+  const status = document.getElementById('room-saved-deck-status');
+  if (!status) return;
+
+  if (roomSavedDeck.length !== DECK_SIZE) {
+    status.textContent = '저장된 8장 덱이 없어 다음 경기는 랜덤 덱으로 시작합니다.';
+    return;
+  }
+
+  const names = roomSavedDeck.map((cardId) => {
+    const card = roomSavedDeckCards[cardId];
+    return card && card.name ? card.name : cardId;
+  });
+  status.textContent = `다음 경기 저장 덱: ${names.join(', ')}`;
 }
 
 function requestSpectatorRooms() {
@@ -3469,7 +3581,7 @@ function renderTournamentHistory(errorMessage = '') {
     return;
   }
 
-  for (const tournament of latestTournamentHistory) {
+  for (const tournament of sortedTournamentHistory()) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'tournament-history-card';
@@ -3482,6 +3594,21 @@ function renderTournamentHistory(errorMessage = '') {
     button.addEventListener('click', () => loadTournamentDetail(tournament.id));
     list.appendChild(button);
   }
+}
+
+function sortedTournamentHistory() {
+  const direction = tournamentHistorySortMode === 'asc' ? 1 : -1;
+  return [...latestTournamentHistory].sort((a, b) => {
+    const timeDiff = tournamentHistoryTime(a) - tournamentHistoryTime(b);
+    if (timeDiff !== 0) return timeDiff * direction;
+    const numberDiff = (Number(a.number) || 0) - (Number(b.number) || 0);
+    return numberDiff * direction;
+  });
+}
+
+function tournamentHistoryTime(tournament) {
+  const time = new Date(tournament.wonAt || tournament.date || tournament.endedAt || 0).getTime();
+  return Number.isFinite(time) ? time : 0;
 }
 
 async function loadTournamentDetail(id) {
@@ -3621,6 +3748,11 @@ async function saveDeck() {
     });
     deckCards = data.cards || deckCards;
     selectedDeck = Array.isArray(data.deck) ? [...data.deck] : selectedDeck;
+    if (activeDeckSize === DECK_SIZE) {
+      roomSavedDeck = [...selectedDeck];
+      roomSavedDeckCards = deckCards;
+      renderRoomSavedDeckStatus();
+    }
     setMessage('deck-message', activeDeckSize === FINAL_DECK_SIZE ? '결승전 전용 덱을 저장했습니다.' : '덱을 저장했습니다. 다음 경기부터 이 덱으로 시작합니다.');
     renderDeckBuilder();
   } catch (error) {

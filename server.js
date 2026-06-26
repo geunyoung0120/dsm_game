@@ -121,15 +121,15 @@ const CARDS = {
     cost: 7,
     role: '고위험 원거리',
     maxHp: 1000,
-    damage: 200,
-    range: 120,
+    damage: 180,
+    range: 110,
     speed: 40,
     attackMs: 1000,
     radius: 18,
     textStream: true,
     streamWidth: 260,
-    backfireChance: 0.2,
-    backfireDamage: 200,
+    backfireChance: 0.25,
+    backfireDamage: 180,
     bbatmanHealingMultiplier: 0.5
   },
   baduk: {
@@ -1958,13 +1958,25 @@ function isExpandedDeployZone(game, team, x, y) {
     : y >= BOTTOM_DEPLOY_Y_MIN && y <= BOTTOM_DEPLOY_Y_MAX;
   if (!inEnemySide) return false;
 
-  if (x <= FIELD_CENTER_X && isPrincessTowerDestroyed(game, enemyTeam, 'princess-left')) return true;
-  if (x >= FIELD_CENTER_X && isPrincessTowerDestroyed(game, enemyTeam, 'princess-right')) return true;
+  if (x <= FIELD_CENTER_X && isExpandedLaneDeployZone(game, team, enemyTeam, 'princess-left', y)) return true;
+  if (x >= FIELD_CENTER_X && isExpandedLaneDeployZone(game, team, enemyTeam, 'princess-right', y)) return true;
   return false;
 }
 
+function isExpandedLaneDeployZone(game, team, enemyTeam, towerType, y) {
+  const tower = getPrincessTower(game, enemyTeam, towerType);
+  if (!tower || tower.hp > 0) return false;
+  if (team === 0) return y >= tower.y && y <= TOP_DEPLOY_Y_MAX;
+  return y >= BOTTOM_DEPLOY_Y_MIN && y <= tower.y;
+}
+
 function isPrincessTowerDestroyed(game, owner, type) {
-  return game.towers.some((tower) => tower.owner === owner && tower.type === type && tower.hp <= 0);
+  const tower = getPrincessTower(game, owner, type);
+  return Boolean(tower && tower.hp <= 0);
+}
+
+function getPrincessTower(game, owner, type) {
+  return game.towers.find((tower) => tower.owner === owner && tower.type === type) || null;
 }
 
 function isValidSpellTargetPoint(x, y) {

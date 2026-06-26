@@ -229,7 +229,13 @@
             <p class="eyebrow">토너먼트 대회 우승자</p>
             <h1>역대 우승 기록</h1>
           </div>
-          <button id="back-tournament-history" type="button" class="secondary">뒤로가기</button>
+          <div class="screen-header-actions">
+            <select id="tournament-history-sort" aria-label="토너먼트 기록 정렬">
+              <option value="desc">최신순</option>
+              <option value="asc">오래된순</option>
+            </select>
+            <button id="back-tournament-history" type="button" class="secondary">뒤로가기</button>
+          </div>
         </header>
         <div id="tournament-history-list" class="tournament-history-list"></div>
       </section>
@@ -335,6 +341,13 @@
         <div class="room-layout">
           <section class="room-create">
             <h2>방 만들기</h2>
+            <div class="room-saved-deck-panel" aria-label="저장 덱 상태">
+              <div>
+                <strong>사용할 저장 덱</strong>
+                <span id="room-saved-deck-status">저장 덱 확인 중</span>
+              </div>
+              <button id="edit-saved-deck-from-room" type="button" class="secondary">저장 덱 수정</button>
+            </div>
             <form id="create-room-form" class="stack-form">
               <label>
                 <span>방 이름</span>
