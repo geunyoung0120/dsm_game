@@ -566,7 +566,7 @@ input:disabled {
 }
 
 .notice-panel {
-  grid-row: span 3;
+  grid-row: span 2;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
 }
@@ -669,6 +669,27 @@ input:disabled {
 .pickrate-list {
   display: grid;
   gap: 10px;
+}
+
+.home-pickrate-panel {
+  padding: 24px;
+}
+
+.home-pickrate-panel .pickrate-list {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.home-pickrate-panel .pickrate-row {
+  min-height: 104px;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: start;
+}
+
+.home-pickrate-panel .pickrate-row span {
+  grid-column: 2;
+  justify-self: start;
+  font-size: 22px;
 }
 
 .pickrate-row {
