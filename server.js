@@ -111,6 +111,23 @@ const CARDS = {
     followDistance: 72,
     decayPerSecond: 8
   },
+  changGpt: {
+    id: 'changGpt',
+    name: '창GPT',
+    cost: 7,
+    role: '고위험 원거리',
+    maxHp: 1000,
+    damage: 200,
+    range: 210,
+    speed: 40,
+    attackMs: 1000,
+    radius: 18,
+    textStream: true,
+    streamWidth: 190,
+    backfireChance: 0.2,
+    backfireDamage: 200,
+    bbatmanHealingMultiplier: 0.5
+  },
   baduk: {
     id: 'baduk',
     name: '박바둑',
@@ -241,6 +258,21 @@ const CARDS = {
     awakenedAttackMs: 650,
     radius: 19,
     awakenMs: 950
+  },
+  haikuGeonhwi: {
+    id: 'haikuGeonhwi',
+    name: '하이쿠 건휘',
+    cost: 2,
+    role: '초고속 원거리',
+    maxHp: 400,
+    damage: 15,
+    range: 165,
+    speed: 43,
+    attackMs: 100,
+    radius: 15,
+    hallucinationRadius: 46,
+    tokenLimitAfter: 3,
+    tokenLimitMs: 1000
   },
   peach: {
     id: 'peach',
@@ -1622,7 +1654,8 @@ function playCard(room, slot, payload = {}) {
 
   const x = Number(payload.x);
   const y = Number(payload.y);
-  if (!isValidPlayPoint(game, card, player.team, x, y)) return;
+  const fusionTarget = findEntropicFusionTarget(game, player.team, card.id, x, y);
+  if (!fusionTarget && !isValidPlayPoint(game, card, player.team, x, y)) return;
 
   player.elixir = Math.max(0, player.elixir - elixirCost);
 
@@ -1638,6 +1671,12 @@ function playCard(room, slot, payload = {}) {
   if (bestFriendCombo) {
     broadcastEffect(room, { type: 'best-friend-combo', owner: player.team, x, y });
     queueBestFriendCombo(room, player.team, x, y);
+    broadcastState(room);
+    return;
+  }
+
+  if (fusionTarget) {
+    triggerEntropicFusion(room, player.team, card.id, fusionTarget, now);
     broadcastState(room);
     return;
   }
@@ -1662,6 +1701,47 @@ function playCard(room, slot, payload = {}) {
 function isValidPlayPoint(game, card, team, x, y) {
   if (card && card.spell) return isValidSpellTargetPoint(x, y);
   return isValidSpawnPoint(game, team, x, y);
+}
+
+function findEntropicFusionTarget(game, owner, cardId, x, y) {
+  const targetCardId = entropicFusionTargetCardId(cardId);
+  if (!targetCardId || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return game.units.find((unit) => {
+    if (unit.owner !== owner || unit.hp <= 0 || unit.cardId !== targetCardId || unit.entropic) return false;
+    return distance({ x, y }, unit) <= getTargetRadius(unit) + 6;
+  }) || null;
+}
+
+function entropicFusionTargetCardId(cardId) {
+  if (cardId === 'haikuGeonhwi') return 'mythos';
+  if (cardId === 'mythos') return 'haikuGeonhwi';
+  return null;
+}
+
+function triggerEntropicFusion(room, owner, playedCardId, target, now) {
+  if (!target || target.hp <= 0) return;
+  target.cardId = 'mythos';
+  target.displayName = '엔트로픽';
+  target.entropic = true;
+  target.awakened = true;
+  target.berserked = false;
+  target.furious = false;
+  target.maxHp = CARDS.mythos.maxHp + 300;
+  target.hp = target.maxHp;
+  target.nextAttackAt = now + 180;
+  target.nextSkillAt = now + 700;
+  target.haikuAttackCount = 0;
+  target.invincibleUntil = Math.max(target.invincibleUntil || 0, now + 720);
+  target.action = '엔트로픽';
+  target.actionUntil = now + 1300;
+  broadcastEffect(room, {
+    type: 'entropic-fusion',
+    owner,
+    cardId: 'mythos',
+    playedCardId,
+    x: target.x,
+    y: target.y
+  });
 }
 
 function isValidSpawnPoint(game, team, x, y) {
@@ -1946,6 +2026,7 @@ function getDeployDelayMs(cardId) {
     peach: 560,
     seongjoo: 600,
     bbatman: 680,
+    changGpt: 760,
     jimin: 700,
     johyunwoo: 720,
     zzangga: 760,
@@ -1957,6 +2038,7 @@ function getDeployDelayMs(cardId) {
     taegeonBumperCar: 360,
     osj: 880,
     mythos: 900,
+    haikuGeonhwi: 520,
     heoseon: 920,
     kimgeunyoung: 950
   };
@@ -1967,6 +2049,7 @@ function deployLabel(cardId) {
   const labels = {
     zzangga: '폭소 준비',
     bbatman: '회복 원 전개',
+    changGpt: '텍스트 스트림',
     baduk: '혼돈 등장',
     dagwasil: '다과실 개장',
     cherryTree: '벚꽃 개화',
@@ -1974,6 +2057,7 @@ function deployLabel(cardId) {
     yushin: '군단 집결',
     jimin: '드립 장전',
     mythos: '기운 상승',
+    haikuGeonhwi: '토큰 준비',
     peach: '라켓 준비',
     seongjoo: '키보드 부팅',
     johyunwoo: '절친 출격',
@@ -2252,8 +2336,7 @@ function updateHealer(room, unit, card, deltaSeconds, now) {
   const game = room.game;
   const healTargets = game.units.filter((other) => {
     if (other.id === unit.id || other.owner !== unit.owner || other.hp <= 0) return false;
-    const otherCard = CARDS[other.cardId];
-    return otherCard && otherCard.female && distance(unit, other) <= card.healRange + getTargetRadius(other);
+    return isBbatmanHealTarget(other) && distance(unit, other) <= card.healRange + getTargetRadius(other);
   });
 
   if (healTargets.length > 0) {
@@ -2265,8 +2348,7 @@ function updateHealer(room, unit, card, deltaSeconds, now) {
 
   const candidates = game.units.filter((other) => {
     if (other.id === unit.id || other.owner !== unit.owner || other.hp <= 0) return false;
-    const otherCard = CARDS[other.cardId];
-    return otherCard && otherCard.female;
+    return isBbatmanHealTarget(other);
   });
   const target = nearest(unit, candidates);
   if (!target) {
@@ -2299,7 +2381,7 @@ function applyHealerPulse(unit, card, targets, deltaSeconds, now) {
     : card.healPerSecond * deltaSeconds;
 
   for (const target of targets) {
-    target.hp = Math.min(target.maxHp, target.hp + healAmount);
+    target.hp = Math.min(target.maxHp, target.hp + healAmount * getBbatmanHealMultiplier(target));
   }
 
   if (healIntervalMs > 0) {
@@ -2307,6 +2389,16 @@ function applyHealerPulse(unit, card, targets, deltaSeconds, now) {
   }
 
   return true;
+}
+
+function isBbatmanHealTarget(unit) {
+  const card = CARDS[unit.cardId];
+  return Boolean(card && (card.female || card.bbatmanHealingMultiplier));
+}
+
+function getBbatmanHealMultiplier(unit) {
+  const card = CARDS[unit.cardId];
+  return card && card.bbatmanHealingMultiplier ? card.bbatmanHealingMultiplier : 1;
 }
 
 function updateRui(room, unit, card, deltaSeconds, now) {
@@ -2468,6 +2560,16 @@ function performAttack(room, unit, card, target, now) {
     return;
   }
 
+  if (card.textStream) {
+    performTextStreamAttack(room, unit, card, target, damage, now);
+    return;
+  }
+
+  if (unit.cardId === 'haikuGeonhwi') {
+    performHaikuAttack(room, unit, card, target, damage, now);
+    return;
+  }
+
   if (card.pusher) {
     performPushAttack(room, unit, card, target, damage, now);
     return;
@@ -2493,6 +2595,109 @@ function performAttack(room, unit, card, target, now) {
   }
 
   unit.nextAttackAt = now + getAttackMs(unit, card);
+}
+
+function performTextStreamAttack(room, unit, card, target, damage, now) {
+  const game = room.game;
+  const targets = getFrontArcTargets(game, unit, card);
+  if (targets.length === 0 && target) targets.push(target);
+
+  const hitIds = new Set();
+  for (const hitTarget of targets) {
+    if (!hitTarget || hitIds.has(hitTarget.id)) continue;
+    hitIds.add(hitTarget.id);
+    applyDamage(room, hitTarget, damage, unit.owner, now);
+    lockTowerTargetAfterHit(game, unit, hitTarget);
+  }
+
+  const backfired = Math.random() < (card.backfireChance || 0);
+  if (backfired) {
+    applyDamageToUnit(room, unit, card.backfireDamage || damage, 1 - unit.owner, now);
+  }
+
+  unit.action = backfired ? '에러 자폭' : '텍스트 스트림';
+  unit.actionUntil = now + 520;
+  unit.nextAttackAt = now + getAttackMs(unit, card);
+  broadcastEffect(room, {
+    type: 'text-stream',
+    owner: unit.owner,
+    cardId: unit.cardId,
+    fromX: unit.x,
+    fromY: unit.y,
+    x: target ? target.x : unit.x,
+    y: target ? target.y : unit.y,
+    range: card.range,
+    width: card.streamWidth,
+    backfired
+  });
+}
+
+function performHaikuAttack(room, unit, card, target, damage, now) {
+  const game = room.game;
+  const hitUnitIds = new Set();
+  if (target.entity === 'unit') hitUnitIds.add(target.id);
+  else applyDamage(room, target, damage, unit.owner, now);
+
+  const radius = card.hallucinationRadius || 0;
+  if (radius > 0) {
+    for (const other of game.units) {
+      if (other.owner === unit.owner || other.hp <= 0) continue;
+      if (distance(target, other) <= radius) hitUnitIds.add(other.id);
+    }
+  }
+
+  for (const targetId of hitUnitIds) {
+    const enemy = findEntityById(game, targetId);
+    if (enemy && enemy.entity === 'unit' && enemy.hp > 0) {
+      applyDamageToUnit(room, enemy, damage, unit.owner, now);
+    }
+  }
+
+  lockTowerTargetAfterHit(game, unit, target);
+  unit.haikuAttackCount = (unit.haikuAttackCount || 0) + 1;
+  const tokenLimited = unit.haikuAttackCount >= (card.tokenLimitAfter || 3);
+  if (tokenLimited) {
+    unit.haikuAttackCount = 0;
+    unit.nextAttackAt = now + (card.tokenLimitMs || 1000);
+    unit.action = '토큰 제한';
+    unit.actionUntil = unit.nextAttackAt;
+  } else {
+    unit.nextAttackAt = now + getAttackMs(unit, card);
+    unit.action = '할루시네이션';
+    unit.actionUntil = now + 120;
+  }
+
+  broadcastEffect(room, {
+    type: 'hallucination',
+    owner: unit.owner,
+    cardId: unit.cardId,
+    fromX: unit.x,
+    fromY: unit.y,
+    x: target.x,
+    y: target.y,
+    radius,
+    tokenLimited
+  });
+}
+
+function getFrontArcTargets(game, unit, card) {
+  const forward = unit.owner === 0 ? -1 : 1;
+  const width = card.streamWidth || 160;
+  const targets = [];
+  for (const other of game.units) {
+    if (other.owner === unit.owner || other.hp <= 0) continue;
+    const otherRadius = getTargetRadius(other);
+    const forwardDistance = (other.y - unit.y) * forward;
+    if (forwardDistance < -otherRadius || forwardDistance > card.range + otherRadius) continue;
+    if (Math.abs(other.x - unit.x) <= width / 2 + otherRadius) targets.push(other);
+  }
+  for (const tower of getAttackableEnemyTowers(game, unit.owner)) {
+    const towerRadius = getTargetRadius(tower);
+    const forwardDistance = (tower.y - unit.y) * forward;
+    if (forwardDistance < -towerRadius || forwardDistance > card.range + towerRadius) continue;
+    if (Math.abs(tower.x - unit.x) <= width / 2 + towerRadius) targets.push(tower);
+  }
+  return targets;
 }
 
 function performPushAttack(room, unit, card, target, damage, now) {
@@ -3193,11 +3398,13 @@ function serializeState(room, viewerSlot = null, options = {}) {
       id: unit.id,
       owner: unit.owner,
       cardId: unit.cardId,
+      displayName: unit.displayName || '',
       x: Number(unit.x.toFixed(1)),
       y: Number(unit.y.toFixed(1)),
       hp: Math.ceil(unit.hp),
       maxHp: unit.maxHp,
       awakened: unit.awakened,
+      entropic: Boolean(unit.entropic),
       berserked: unit.berserked,
       furious: unit.furious,
       invincible: unit.invincibleUntil > now,

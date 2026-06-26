@@ -25,6 +25,22 @@ function clampNumber(value, min, max) {
 
 const PATCH_NOTICES = [
   {
+    title: 'AI 카드와 엔트로픽 합체 추가',
+    date: '2026.06.26',
+    items: [
+      '신규 카드 창GPT와 하이쿠 건휘 추가',
+      '하이쿠 건휘와 미토스건휘의 엔트로픽 합체 추가',
+      '캐릭터 확인 설명을 전투 정보 중심으로 정리'
+    ],
+    details: [
+      '창GPT는 7 엘릭서 고위험 원거리 딜러다. 넓은 전방 텍스트 스트림으로 200 피해를 주지만, 공격마다 20% 확률로 에러 자폭 피해를 받는다.',
+      '하이쿠 건휘는 2 엘릭서 초고속 원거리 딜러다. 0.1초마다 15 피해를 주지만, 3회 연속 공격 후 1초 동안 토큰 제한으로 공격하지 못한다.',
+      '하이쿠 건휘 카드를 아군 미토스건휘 위에 놓거나, 미토스건휘 카드를 아군 하이쿠 건휘 위에 놓으면 엔트로픽으로 합체한다.',
+      '엔트로픽은 미토스건휘 각성 스탯을 영구 유지하고 최대 HP가 1150으로 오르며, 합체 즉시 풀피가 된다.',
+      '카드 풀은 플레이 가능 카드 22장 기준으로 갱신했고, 캐릭터 확인 페이지는 전투 정보와 카드 특성 중심으로 정리했다.'
+    ]
+  },
+  {
     title: '토너먼트 대기 화면과 밸런스 조정',
     date: '2026.06.26',
     items: [
@@ -548,6 +564,7 @@ const PATCH_NOTICES = [
 const CARD_THEME = {
   zzangga: { fill: 0xe4536d, stroke: 0xffd6df, short: '짱' },
   bbatman: { fill: 0x46b9a5, stroke: 0xc7fff4, short: '힐' },
+  changGpt: { fill: 0x2fd6ff, stroke: 0xd7f8ff, short: 'GPT' },
   baduk: { fill: 0x8c6a54, stroke: 0xffd2a8, short: '박' },
   badukFart: { fill: 0xb7d94b, stroke: 0xf4ff91, short: '마법' },
   dagwasil: { fill: 0x9b6b47, stroke: 0xffd7a8, short: '과' },
@@ -558,6 +575,7 @@ const CARD_THEME = {
   yushin: { fill: 0x7f7fd5, stroke: 0xdad8ff, short: '군' },
   jimin: { fill: 0x4f8de8, stroke: 0xd5e9ff, short: '딜' },
   mythos: { fill: 0xf08a35, stroke: 0xffdfb8, short: '각' },
+  haikuGeonhwi: { fill: 0x6f8796, stroke: 0xd8efff, short: '하' },
   peach: { fill: 0xf184b5, stroke: 0xffdeee, short: '복' },
   seongjoo: { fill: 0x65c7f7, stroke: 0xd3f4ff, short: '성' },
   johyunwoo: { fill: 0x9aa0a6, stroke: 0xf0f2f5, short: '현' },
@@ -586,7 +604,6 @@ const CHARACTER_DETAILS = [
       ['스킬 쿨', '4.2초']
     ],
     ability: '크게 웃고 소리치며 전방 부채꼴 음파를 발사한다. 범위 안 적들에게 동시에 피해를 준다. 스킬 재사용 대기 중에는 단일 일반 공격을 사용한다.',
-    appearance: '둥근 안경을 쓰고 포니테일을 한 키 큰 여학생. 교복을 입고 있다.',
     trait: '스킬 사용 시 입을 크게 벌리고 웃으며 비명을 지르고, 전방에 부채꼴 음파 파동이 퍼진다.'
   },
   {
@@ -605,8 +622,23 @@ const CHARACTER_DETAILS = [
       ['공격 주기', '없음']
     ],
     ability: '주변에 더 좁아진 회복 원을 만들고, 원 안에 있는 모든 여학생 또는 여학생으로 인식되는 아군을 0.6초마다 한 번씩 회복시킨다. 회복 대상이 원 밖에 있으면 가까운 대상 쪽으로 이동한다. 전장에 있는 동안에는 시간이 지날수록 체력이 조금씩 줄어든다.',
-    appearance: '키가 작고 마른 남학생. 삭발 머리, 매우 탄 피부, 운동을 잘할 것 같은 체형이다.',
     trait: '공격하지 못하는 순수 힐러다. 힐량은 더 낮아졌고 회복이 0.6초 간격으로 들어가지만 여러 아군을 동시에 회복할 수 있다.'
+  },
+  {
+    id: 'changGpt',
+    name: '창GPT',
+    cost: '7',
+    type: '고위험 원거리 딜러',
+    stats: [
+      ['HP', '1000'],
+      ['공격력', '200'],
+      ['공격 주기', '1초'],
+      ['사거리', '넓은 전방 텍스트 빔'],
+      ['치유 보정', '빼트맨 힐 50%만 받음'],
+      ['자폭 확률', '공격마다 20%']
+    ],
+    ability: '손끝에서 글자와 데이터가 줄줄이 이어지는 텍스트 스트림을 넓은 전방 범위로 발사한다. 짱가의 음파보다 가로 폭이 넓고 피해량이 200으로 매우 높다. 대신 공격할 때마다 20% 확률로 에러가 발생해 창GPT 자신도 200 피해를 받아, 중요한 순간에 도박처럼 쓰는 고위험 고보상 카드다.',
+    trait: '남학생이지만 빼트맨과 같은 사람의 미래 버전이라 빼트맨에게 회복을 받을 수 있다. 다만 여학생 캐릭터와 달리 힐량은 절반만 적용된다.'
   },
   {
     id: 'baduk',
@@ -623,7 +655,6 @@ const CHARACTER_DETAILS = [
       ['절친 출격', '8 엘릭서 / 스탯 감소 없음']
     ],
     ability: '갑자기 예측하기 어려운 행동을 하며 범위 안 적들에게 매우 큰 피해를 준다. 같은 범위의 아군도 약한 피해를 받는다. 스킬 발동 시점은 무작위다. 조현우와 손패에 함께 있으면 8 엘릭서로 둘이 동시에 기본 스탯 그대로 출격하며 전장에 절친 특성 문구가 뜬다.',
-    appearance: '삭발에 안경을 쓴 통통한 남학생. 교복을 입고 있다.',
     trait: 'HP가 1300으로 낮아졌지만 여전히 위험 부담이 큰 카오스 딜러다. 조현우와 절친 특성으로 나올 때도 스탯은 낮아지지 않는다.'
   },
   {
@@ -641,7 +672,6 @@ const CHARACTER_DETAILS = [
       ['소환 유닛', '없음']
     ],
     ability: '플레이어가 전장 위치 하나를 지정하면 그 지점 주변에 고정 크기의 초록/노란 가스 장판이 바로 생긴다. 4초 동안 장판 안에 있는 모든 적 유닛과 적 타워가 초당 60 피해를 받아 총 240 피해를 받을 수 있다. 유닛을 소환하지 않는 순수 마법 카드라 사용 즉시 효과가 발동한다.',
-    appearance: '캐릭터가 직접 나오지 않고, 지정한 위치에 초록색과 노란색이 섞인 방구 가스 구름이 정해진 크기로 생긴다.',
     trait: '3 엘릭서로 좁은 지역을 강하게 압박할 수 있다. 적 유닛뿐 아니라 적 타워도 피해를 받지만, 범위가 줄어 정확한 위치 지정이 더 중요해졌다.'
   },
   {
@@ -661,7 +691,6 @@ const CHARACTER_DETAILS = [
       ['너드녀', 'HP 140 / 공격력 32 / 빠른 원거리 공격']
     ],
     ability: '플레이어가 전장 위치 하나를 지정하면 그 위치에 다과실 건물이 배치된다. 건물은 움직이지 않고 적에게 타겟팅되어 파괴될 수 있다. 배치 후 20초 동안 체력이 조금씩 줄어들며, 설치 직후 너드남과 너드녀를 한 번 바로 소환하고 살아있는 동안 4초마다 다시 동시에 소환한다.',
-    appearance: '공주 타워 정도 크기의 건물이며, 전면에 다과실 간판이 붙어 있다. 시간이 지나거나 공격을 받으면 HP 막대로 손상 상태를 확인할 수 있다. 소환되는 너드남과 너드녀는 후줄근하고 냄새나는 학생처럼 보인다.',
     trait: '5 엘릭서로 지속 병력을 만드는 건물 카드다. 너드남은 가까이 붙어서 빠르게 때리고, 너드녀는 뒤에서 간식과 음료를 던져 원거리 피해를 준다.'
   },
   {
@@ -678,7 +707,6 @@ const CHARACTER_DETAILS = [
       ['소환 유닛', '없음']
     ],
     ability: '플레이어가 전장 위치 하나를 지정하면 농구공이 운석처럼 위에서 떨어진다. 피해는 사용 즉시 들어가지 않고, 농구공이 지정 위치에 꽂힌 순간 충돌 지점 주변 반지름 40 안의 모든 적 유닛과 적 타워에 500 피해를 준다.',
-    appearance: '하늘에서 농구공이 빠르게 떨어지고, 착지 지점에 큰 충돌 폭발이 생긴다.',
     trait: '좁은 범위에 큰 피해를 꽂는 4 엘릭서 마법 카드다. 바둑이 방구보다 범위가 작아서 정확도는 더 중요하지만, 한 번에 강한 피해를 넣을 수 있다.'
   },
   {
@@ -697,7 +725,6 @@ const CHARACTER_DETAILS = [
       ['공격 대상', '가장 가까운 적 유닛']
     ],
     ability: '플레이어가 전장 위치 하나를 지정하면 벚꽃나무 건물이 배치된다. 건물은 움직이지 않고, 배치 후 20초 동안 체력이 조금씩 줄어든다. 살아있는 동안 1초마다 사거리 175 안의 가장 가까운 적 유닛에게 벚꽃잎을 날려 100 피해를 준다.',
-    appearance: '분홍 벚꽃이 풍성한 나무가 전장에 서 있고, 공격할 때 아름다운 벚꽃잎이 적에게 날아간다.',
     trait: '20초 동안 유지되는 방어형 건물 카드다. HP가 높지만 시간이 지나면 스스로 무너지며, 적 유닛을 꾸준히 끊어내지만 직접 움직이지 않고 적에게 파괴될 수 있다.'
   },
   {
@@ -715,7 +742,6 @@ const CHARACTER_DETAILS = [
       ['우선 대상', '건물 카드와 적 타워']
     ],
     ability: '소환되면 다과실, 진해 벚꽃나무 같은 적 건물 카드와 적 타워만 타겟팅한다. 적 캐릭터가 바로 옆에 있어도 절대 공격하지 않고 지나가며, 공격 가능한 건물이나 타워가 없으면 유닛을 때리는 대신 새 건물 목표를 기다린다.',
-    appearance: '안경을 쓴 너드 느낌의 남학생이지만, 모든 캐릭터보다 훨씬 크다. 지금까지 가장 큰 대.근.영보다도 더 큰 덩치로 전장을 압박한다.',
     trait: '건물 카드의 하드 카운터다. HP가 매우 높아 건물에 도착하기 전 막기 어렵고, 적 유닛을 먼저 때리지 않기 때문에 상대 병력은 뒤쫓아가며 직접 잡아야 한다.'
   },
   {
@@ -732,7 +758,6 @@ const CHARACTER_DETAILS = [
       ['사용자 보너스', '최대 엘릭서 12']
     ],
     ability: '소환되면 화면이 멈추고 전장 중앙에서 기도한다. 하늘에서 거대한 빛이 떨어져 모든 유닛이 승천해 사라진다. 꽁호 자신도 함께 사라진다. 사용자는 그 경기 동안 최대 엘릭서가 12로 증가한다.',
-    appearance: '안경을 쓴 평범한 남학생. 전형적인 기독교 학생 느낌이다.',
     trait: '한 경기에서 한 번만 사용할 수 있다. 타워에는 피해를 주지 않고 유닛만 제거한다.'
   },
   {
@@ -749,7 +774,6 @@ const CHARACTER_DETAILS = [
       ['소환 수', '8명']
     ],
     ability: '소환 즉시 똑같이 생긴 유신 8명이 동시에 뛰쳐나온다. 각자 근접 거리에서 빠른 주먹 공격을 한다.',
-    appearance: '키가 작고 애기 같은 얼굴의 남학생. 교복을 입고 주먹을 들고 있다.',
     trait: '개별 HP가 50으로 낮아져 광역 공격과 타워에 더 쉽게 정리된다. 이동속도가 빠른 돌진형 카드다.'
   },
   {
@@ -766,7 +790,6 @@ const CHARACTER_DETAILS = [
       ['이동속도', '44']
     ],
     ability: '공격 전 손가락으로 가리키며 드립을 치는 동작을 한다. 그 후 한 대상에게 단일 피해를 준다. 유신을 공격할 때는 머리 위에 인포 가위질! 문구가 뜨고 상대 유신 유닛 2~3명에게 피해를 준다.',
-    appearance: '키가 크고 비율이 좋은 남학생. 교복을 입고 있다.',
     trait: '3 엘릭서 카드로 내려가 더 가볍게 쓸 수 있지만, HP와 공격력이 함께 낮아져 한 방 위력과 생존력은 줄었다.'
   },
   {
@@ -783,8 +806,23 @@ const CHARACTER_DETAILS = [
       ['이동속도', '44 / 각성 70']
     ],
     ability: '체력이 절반 이하가 되면 자동으로 초싸이언처럼 각성한다. 각성 중에는 잠시 무적이고, 이후 공격력, 공격속도, 이동속도가 크게 오른다.',
-    appearance: '평소에는 살짝 네모난 얼굴과 안경, 내려앉은 머리의 평범한 남학생이다. 변신 후에는 머리가 솟고 안경이 날아간다.',
     trait: '기본 공격력은 63, 각성 공격력은 108이다. 변신은 한 번 발동하면 유지된다.'
+  },
+  {
+    id: 'haikuGeonhwi',
+    name: '하이쿠 건휘',
+    cost: '2',
+    type: '초고속 원거리 딜러 / 토큰 제한',
+    stats: [
+      ['HP', '400'],
+      ['공격력', '15'],
+      ['공격 주기', '0.1초'],
+      ['사거리', '165'],
+      ['토큰 제한', '3회 연속 공격 후 1초 공격 불가'],
+      ['합체 조건', '미토스건휘와 직접 겹쳐 배치']
+    ],
+    ability: '전방에 거짓 정보 폭발을 빠르게 쏜다. 한 번 피해는 15로 낮지만 공격 주기가 0.1초라 매우 빠르다. 3번 연속 공격하면 토큰 제한이 걸려 1초 동안 공격하지 못한다. 아군 미토스건휘 위에 하이쿠 건휘를 놓거나, 아군 하이쿠 건휘 위에 미토스건휘를 놓으면 엔트로픽 합체가 발동한다.',
+    trait: '엔트로픽 합체가 발동하면 이미 전장에 있던 유닛 위치에서 하나로 합쳐진다. 합체 유닛은 이름이 엔트로픽이 되고, 미토스건휘 기본 최대 HP에 300을 더한 최대 HP를 가지며 즉시 풀피가 된다. 또한 처음부터 영구 각성 상태라 50% HP 조건 없이 미토스건휘 각성 스탯을 계속 사용한다. 대상 위에 직접 놓지 않으면 합체하지 않고 일반 배치된다.'
   },
   {
     id: 'peach',
@@ -800,7 +838,6 @@ const CHARACTER_DETAILS = [
       ['회복 대상', '가능']
     ],
     ability: '테니스 라켓을 휘둘러 근접 단일 대상을 연속 공격한다. 이전보다 공격 속도가 느려져 2 엘릭서 근접 딜러에 맞는 압박력을 가진다.',
-    appearance: '예쁜 여학생. 보통 키와 체형이며 교복을 입고 테니스 라켓을 들고 있다.',
     trait: '2 엘릭서 근접 딜러다. 여학생 캐릭터라 빼트맨의 회복 대상이 된다.'
   },
   {
@@ -817,7 +854,6 @@ const CHARACTER_DETAILS = [
       ['회복 대상', '가능']
     ],
     ability: '뒤쪽에서 키보드를 두드리며 원거리 공격을 한다. 이번 패치로 공격 주기가 0.572초에서 0.686초로 20% 느려졌다.',
-    appearance: '마른 남학생. 헝클어진 머리가 얼굴 전체를 가리고, 머리카락 아래 안경과 마스크를 쓰고 있다.',
     trait: '남자 캐릭터지만 모두가 여학생이라고 생각해서 빼트맨의 회복 대상이 된다. 체력이 낮고 공격력도 낮아졌지만, 방치하면 뒤에서 꾸준히 피해를 준다.'
   },
   {
@@ -835,7 +871,6 @@ const CHARACTER_DETAILS = [
       ['절친 출격', '8 엘릭서 / 스탯 감소 없음']
     ],
     ability: '근접 거리에서 한 대상에게 단일 공격을 한다. HP와 공격력이 20% 낮아졌고 비용은 4 엘릭서다. HP가 20% 이하로 떨어지면 분노해서 명존쎄!를 외치고 공격력이 50% 강해진다. 박바둑과 손패에 함께 있으면 8 엘릭서로 둘이 동시에 기본 스탯 그대로 출격하며 전장에 절친 특성 문구가 뜬다.',
-    appearance: '특별히 튀는 점이 없는 아주 평범한 남학생이다.',
     trait: '체력과 공격력이 더 낮아진 근접 단일 딜러다. 낮은 체력 구간에 들어가면 피해량이 88에서 132로 오른다. 박바둑과 절친 특성으로 나올 때도 스탯은 낮아지지 않는다.'
   },
   {
@@ -853,7 +888,6 @@ const CHARACTER_DETAILS = [
       ['출격 효과', '전투 시간 +30초']
     ],
     ability: '전장에 등장하는 순간 왕의 귀환 임팩트가 깔리며 전투 시간이 30초 추가된다. X2 또는 X3 엘릭서 구간에 등장했다면 추가된 30초 동안 그 배율이 유지된다. 전장에 있는 동안 항상 1.5초마다 HP 190, 공격력 17의 광주 탱크를 하나씩 소환한다. 본체는 HP 2300, 공격력 80의 근접 단일 공격을 한다.',
-    appearance: '잘생긴 남학생이다.',
     trait: '한 경기에서 한 번만 사용할 수 있다. 본체와 광주 탱크가 다시 낮아졌지만, 전투 시간을 늘려 후반 변수를 만드는 카드다.'
   },
   {
@@ -870,7 +904,6 @@ const CHARACTER_DETAILS = [
       ['일반 공격', '없음']
     ],
     ability: '적 캐릭터 하나에게 달라붙어 낮아진 지속 피해로 체력을 흡수한다. 붙어 있는 동안 자신의 체력을 천천히 회복한다.',
-    appearance: '눈 아래까지 내려온 헝클어진 머리의 남학생. 불안정하고 초조해 보인다.',
     trait: '붙은 대상도 이동과 공격을 계속할 수 있다. 흡혈 피해가 낮아져 제압력보다 방해 역할에 더 가까워졌다.'
   },
   {
@@ -890,7 +923,6 @@ const CHARACTER_DETAILS = [
       ['변신 회복', '즉시 최대 HP 100%']
     ],
     ability: '평소에는 공격력이 0이고 어떤 공격도 하지 않은 채 조용히 적 쪽으로 걸어간다. HP가 24.3% 이하로 떨어지는 순간 자동으로 폭발 상태가 되며 최대 HP가 450에서 900으로 바뀌고, 체력이 새 최대 HP의 100%로 완전히 회복된다. 폭발 상태에서는 공격력 70, 공격 주기 0.303초, 이동속도 95로 근접 범위의 여러 대상을 동시에 공격한다.',
-    appearance: '키가 크고 마른 40대 중년 여성이다. 평소에는 침착하고 음산한 표정으로 천천히 움직이며, 폭발 상태가 되면 분노가 터진 얼굴과 어지러운 움직임으로 어두운 분위기를 몰고 다닌다.',
     trait: '1단계에서는 완전히 무해해서 상대가 방심하기 쉽다. 한 번 폭발 상태가 되면 되돌아가지 않지만, 이번 패치로 내구도, 발동 조건, 이동속도, 피해량, 공격 속도, 범위가 모두 낮아졌다.'
   },
   {
@@ -907,7 +939,6 @@ const CHARACTER_DETAILS = [
       ['사망 효과', '무조건 폭발']
     ],
     ability: '소환되면 범퍼카를 타고 가장 가까운 적을 향해 매우 빠르게 돌진한다. 적에게 닿으면 즉시 폭발해 주변 모든 적에게 200 광역 피해를 준다. 돌진 중 적에게 먼저 죽어도 그 자리에서 반드시 폭발하므로 완전히 낭비되지 않는다.',
-    appearance: '자동차에 집착하는 광기 어린 표정의 남학생이 범퍼카를 타고 전장으로 튀어나온다. 충돌하거나 죽는 순간 주황색 폭발 이펙트가 터진다.',
     trait: '게임에서 가장 낮은 1 엘릭서 카드다. HP가 120으로 매우 낮아 중간에 쉽게 잡히지만, 죽어도 200 피해로 폭발하기 때문에 수비 교란과 마무리 압박에 쓸 수 있다.'
   },
   {
@@ -924,7 +955,6 @@ const CHARACTER_DETAILS = [
       ['이동속도', '38']
     ],
     ability: '전방에 적이 모이면 "잡상인들 다 나가!"라고 외치며 앞쪽 범위 안의 적들을 한꺼번에 크게 밀어낸다. 밀치기 간격은 길어졌지만 HP가 늘어 더 오래 버틴다.',
-    appearance: '차분하고 선해 보이는 남자 선생님이다. 아버지 같은 분위기와 품위 있는 표정, 단정한 학교 선생님 느낌을 가진다.',
     trait: 'HP 1200의 매우 단단한 전방 탱커다. 피해량은 낮고 공격 쿨타임이 길어졌지만, 밀치기로 적의 돌파를 방해한다.'
   }
 ];
@@ -986,6 +1016,7 @@ class BattleScene extends Phaser.Scene {
     this.selectedHandIndex = null;
     this.cardBounds = [];
     this.breakDeckButtonBounds = null;
+    this.currentPointer = null;
     this.textPool = [];
     this.usedTextCount = 0;
     this.notice = '';
@@ -1008,6 +1039,9 @@ class BattleScene extends Phaser.Scene {
       if (activeScene === this) activeScene = null;
     });
     this.input.on('pointerdown', (pointer) => this.handlePointer(pointer));
+    this.input.on('pointermove', (pointer) => {
+      this.currentPointer = { x: pointer.x, y: pointer.y };
+    });
     if (this.input.keyboard) {
       this.boundKeyDown = (event) => this.handleKeyDown(event);
       this.input.keyboard.on('keydown', this.boundKeyDown);
@@ -1059,6 +1093,7 @@ class BattleScene extends Phaser.Scene {
   }
 
   handlePointer(pointer) {
+    this.currentPointer = { x: pointer.x, y: pointer.y };
     if (this.breakDeckButtonBounds && isPointInside(pointer, this.breakDeckButtonBounds)) {
       if (typeof window.openDeckBuilderForBreak === 'function') window.openDeckBuilderForBreak();
       return;
@@ -1214,6 +1249,12 @@ class BattleScene extends Phaser.Scene {
         this.g.lineStyle(3, 0xffee64, 0.9);
         this.g.strokeCircle(unit.x, unit.y, radius + 8);
       }
+      if (unit.entropic) {
+        this.g.fillStyle(0xfff176, 0.1);
+        this.g.fillCircle(unit.x, unit.y, radius + 22);
+        this.g.lineStyle(4, 0xfff176, 0.95);
+        this.g.strokeCircle(unit.x, unit.y, radius + 15);
+      }
       if (unit.berserked) {
         this.g.fillStyle(0xff2f45, 0.12);
         this.g.fillCircle(unit.x, unit.y, radius + 17);
@@ -1254,7 +1295,7 @@ class BattleScene extends Phaser.Scene {
       this.g.fillRect(unit.x - 24, unit.y - radius - 13, 48 * hpRatio(unit), 6);
 
       this.drawCenteredText(theme.short, unit.x, unit.y - 8, 14, '#111318');
-      this.drawCenteredText(card.name || unit.cardId, unit.x, unit.y + radius + 12, 10, '#ffffff');
+      this.drawCenteredText(unit.displayName || card.name || unit.cardId, unit.x, unit.y + radius + 12, 10, '#ffffff');
       if (unit.action) {
         this.drawCenteredText(unit.action, unit.x, unit.y - radius - 25, 10, '#fff4a7');
       }
@@ -1356,6 +1397,22 @@ class BattleScene extends Phaser.Scene {
         this.g.lineBetween(x - 16, y - 1, x + 16, y - 1);
         this.g.lineBetween(x, y - 17, x, y + 15);
       }
+    } else if (unit.cardId === 'changGpt') {
+      this.g.fillStyle(0x171d28, 1);
+      this.g.fillRoundedRect(x - 10, y - 16, 20, 34, 5);
+      this.g.strokeRoundedRect(x - 10, y - 16, 20, 34, 5);
+      this.g.fillStyle(0xb56f3d, 1);
+      this.g.fillEllipse(x, y - 28, 20, 17);
+      this.g.strokeEllipse(x, y - 28, 20, 17);
+      this.g.fillStyle(theme.fill, 1);
+      this.g.fillRoundedRect(x - 12, y - 11, 24, 7, 2);
+      this.g.lineStyle(3, 0xd7f8ff, unit.action ? 1 : 0.68);
+      this.g.lineBetween(x + dir * 7, y - 7, x + dir * 28, y - 16);
+      this.g.lineBetween(x - dir * 7, y - 3, x - dir * 23, y + 8);
+      if (unit.action === '에러 자폭') {
+        this.g.lineStyle(2, 0xff5b66, 0.9);
+        this.g.strokeCircle(x, y - 5, radius + 13);
+      }
     } else if (unit.cardId === 'baduk') {
       this.g.fillStyle(theme.fill, 1);
       this.g.fillEllipse(x, y + 1, 38, 34);
@@ -1404,6 +1461,20 @@ class BattleScene extends Phaser.Scene {
       this.g.lineStyle(1, dark, unit.awakened ? 0 : 1);
       this.g.strokeCircle(x - 4, y - 22, 2);
       this.g.strokeCircle(x + 4, y - 22, 2);
+    } else if (unit.cardId === 'haikuGeonhwi') {
+      this.g.fillStyle(theme.fill, 1);
+      this.g.fillRoundedRect(x - 8, y - 12, 16, 29, 5);
+      this.g.strokeRoundedRect(x - 8, y - 12, 16, 29, 5);
+      this.g.fillStyle(skin, 1);
+      this.g.fillRoundedRect(x - 8, y - 25, 16, 14, 4);
+      this.g.strokeRoundedRect(x - 8, y - 25, 16, 14, 4);
+      this.g.lineStyle(1, dark, 1);
+      this.g.strokeCircle(x - 4, y - 20, 3);
+      this.g.strokeCircle(x + 4, y - 20, 3);
+      this.g.lineBetween(x - 1, y - 20, x + 1, y - 20);
+      this.g.lineStyle(2, 0xd8efff, unit.action === '토큰 제한' ? 0.35 : 0.9);
+      this.g.lineBetween(x + dir * 7, y - 5, x + dir * 23, y - 9);
+      this.g.lineBetween(x - dir * 7, y - 2, x - dir * 18, y + 7);
     } else if (unit.cardId === 'peach') {
       this.g.fillStyle(theme.fill, 1);
       this.g.fillRoundedRect(x - 10, y - 11, 20, 29, 6);
@@ -1652,6 +1723,27 @@ class BattleScene extends Phaser.Scene {
         this.g.lineStyle(5, 0xffd6df, alpha);
         this.g.strokeCircle(effect.x, effect.y, 35 + t * 78);
         this.g.strokeCircle(effect.x, effect.y, 60 + t * 84);
+      } else if (effect.type === 'text-stream') {
+        const beamColor = effect.backfired ? 0xff5b66 : 0xd7f8ff;
+        const streamText = effect.backfired ? '오류' : '텍스트';
+        this.drawAttackTrail(effect, beamColor, alpha, t, 5);
+        if (Number.isFinite(effect.fromX) && Number.isFinite(effect.fromY)) {
+          const dir = effect.owner === 0 ? -1 : 1;
+          const range = effect.range || 210;
+          const width = effect.width || 190;
+          const frontY = effect.fromY + dir * range * (0.78 + 0.22 * t);
+          this.g.fillStyle(beamColor, alpha * 0.1);
+          this.g.fillTriangle(effect.fromX, effect.fromY, effect.fromX - width / 2, frontY, effect.fromX + width / 2, frontY);
+          this.g.lineStyle(3, beamColor, alpha * 0.85);
+          this.g.lineBetween(effect.fromX, effect.fromY, effect.fromX - width / 2, frontY);
+          this.g.lineBetween(effect.fromX, effect.fromY, effect.fromX + width / 2, frontY);
+          for (let i = 0; i < 7; i += 1) {
+            const px = effect.fromX - width / 2 + i * (width / 6);
+            const py = Phaser.Math.Linear(effect.fromY, frontY, 0.45 + 0.08 * Math.sin(age / 90 + i));
+            this.drawCenteredText(i % 2 === 0 ? '가' : '1', px, py, 13, effect.backfired ? '#ffccd0' : '#d7f8ff');
+          }
+        }
+        this.drawCenteredText(streamText, effect.x, effect.y - 34, 15, effect.backfired ? '#ffccd0' : '#d7f8ff');
       } else if (effect.type === 'chaos') {
         this.g.lineStyle(4, 0xffc47c, alpha);
         this.g.strokeCircle(effect.x, effect.y, 30 + t * (effect.radius || 105));
@@ -1664,6 +1756,15 @@ class BattleScene extends Phaser.Scene {
         this.g.lineStyle(2, 0xffffff, alpha);
         this.g.lineBetween(effect.x - 30, effect.y + 30, effect.x + 15, effect.y - 38);
         this.g.lineBetween(effect.x + 20, effect.y + 28, effect.x - 10, effect.y - 42);
+      } else if (effect.type === 'entropic-fusion') {
+        this.g.fillStyle(0xfff176, alpha * 0.18);
+        this.g.fillCircle(effect.x, effect.y, 32 + t * 112);
+        this.g.lineStyle(8, 0xfff176, alpha);
+        this.g.strokeCircle(effect.x, effect.y, 22 + t * 96);
+        this.g.lineStyle(3, 0xffffff, alpha * 0.9);
+        this.g.lineBetween(effect.x - 58 + t * 18, effect.y, effect.x + 58 - t * 18, effect.y);
+        this.g.lineBetween(effect.x, effect.y - 46 + t * 14, effect.x, effect.y + 46 - t * 14);
+        this.drawCenteredText('엔트로픽', effect.x, Math.max(20, effect.y - 78 - t * 12), 25, '#fff176');
       } else if (effect.type === 'berserk') {
         this.g.fillStyle(0xff2f45, alpha * 0.18);
         this.g.fillCircle(effect.x, effect.y, 36 + t * 96);
@@ -1701,6 +1802,14 @@ class BattleScene extends Phaser.Scene {
         this.g.lineBetween(effect.x - 26, effect.y, effect.x + 26, effect.y);
         this.g.lineBetween(effect.x, effect.y - 26, effect.x, effect.y + 26);
         this.drawCenteredText('멘붕', effect.x, effect.y - 28, 16, '#ffffff');
+      } else if (effect.type === 'hallucination') {
+        this.drawAttackTrail(effect, 0xd8efff, alpha, t, 3);
+        const radius = effect.radius || 46;
+        this.g.fillStyle(0xd8efff, alpha * 0.12);
+        this.g.fillCircle(effect.x, effect.y, 12 + t * radius);
+        this.g.lineStyle(3, effect.tokenLimited ? 0xfff176 : 0xd8efff, alpha);
+        this.g.strokeCircle(effect.x, effect.y, 10 + t * radius);
+        this.drawCenteredText(effect.tokenLimited ? '토큰 제한' : '할루시네이션', effect.x, effect.y - 32, effect.tokenLimited ? 13 : 12, effect.tokenLimited ? '#fff176' : '#d8efff');
       } else if (effect.type === 'jimin-yushin-counter') {
         const labelY = Math.max(28, effect.y - 66 - t * 8);
         this.g.fillStyle(0x111318, alpha * 0.88);
@@ -1982,6 +2091,11 @@ class BattleScene extends Phaser.Scene {
       this.g.strokeCircle(x, y, 34 + t * 8);
       this.g.lineBetween(x - 18, y, x + 18, y);
       this.g.lineBetween(x, y - 18, x, y + 18);
+    } else if (effect.cardId === 'changGpt') {
+      this.g.strokeCircle(x, y, 28 + t * 10);
+      this.g.lineBetween(x - 32, y - 16, x + 32, y + 16);
+      this.g.lineBetween(x - 32, y + 16, x + 32, y - 16);
+      this.drawCenteredText('GPT', x, y - 8, 14, '#ffffff');
     } else if (effect.cardId === 'kimgeunyoung') {
       this.g.fillRoundedRect(x - 22, y - 9, 44, 18, 5);
       this.g.fillRoundedRect(x - 12, y - 19, 24, 12, 4);
@@ -1999,6 +2113,11 @@ class BattleScene extends Phaser.Scene {
         const angle = (Math.PI * 2 * i) / 6;
         this.g.lineBetween(x, y, x + Math.cos(angle) * (20 + t * 16), y + Math.sin(angle) * (20 + t * 16));
       }
+    } else if (effect.cardId === 'haikuGeonhwi') {
+      this.g.strokeCircle(x, y, 22 + t * 8);
+      this.g.lineBetween(x - 24, y, x + 24, y);
+      this.g.lineBetween(x - 14, y - 14, x + 14, y + 14);
+      this.g.lineBetween(x - 14, y + 14, x + 14, y - 14);
     } else if (effect.cardId === 'giantHyeonjik') {
       this.g.fillRoundedRect(x - 18, y - 25, 36, 50, 8);
       this.g.strokeCircle(x - 8, y - 31, 5);
@@ -2274,6 +2393,7 @@ class BattleScene extends Phaser.Scene {
 
   drawOverlay() {
     this.breakDeckButtonBounds = null;
+    this.drawEntropicHoverHint();
     if (this.state.freezeMs > 0) {
       this.g.fillStyle(0xfff3b5, 0.11);
       this.g.fillRect(0, 0, ARENA_W, ARENA_H);
@@ -2373,6 +2493,7 @@ class BattleScene extends Phaser.Scene {
 
   canPlaySelectedAt(x, y) {
     const card = this.getSelectedCard();
+    if (this.findEntropicFusionTarget(x, y)) return true;
     if (card && card.spell) return x >= 28 && x <= ARENA_W - 28 && y >= 28 && y <= ARENA_H - 28;
     return this.isInDeployZone(x, y);
   }
@@ -2381,6 +2502,39 @@ class BattleScene extends Phaser.Scene {
     const player = this.state && this.slot !== null && this.slot !== undefined ? this.state.players[this.slot] : null;
     const cardId = player && player.hand && player.hand[this.selectedHandIndex];
     return this.cards[cardId];
+  }
+
+  getSelectedCardId() {
+    const player = this.state && this.slot !== null && this.slot !== undefined ? this.state.players[this.slot] : null;
+    return player && player.hand && player.hand[this.selectedHandIndex];
+  }
+
+  findEntropicFusionTarget(x, y) {
+    if (!this.state || this.slot === null || this.slot === undefined || this.selectedHandIndex === null) return null;
+    const selectedCardId = this.getSelectedCardId();
+    const targetCardId = selectedCardId === 'haikuGeonhwi' ? 'mythos' : selectedCardId === 'mythos' ? 'haikuGeonhwi' : '';
+    if (!targetCardId || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+    const player = this.state.players[this.slot];
+    const team = player ? player.team : this.slot;
+    return (this.state.units || []).find((unit) => {
+      return unit.owner === team && unit.cardId === targetCardId && unit.hp > 0 && !unit.entropic && distance2d({ x, y }, unit) <= this.getVisualRadius(unit.cardId) + 6;
+    }) || null;
+  }
+
+  drawEntropicHoverHint() {
+    if (!this.currentPointer || this.selectedHandIndex === null || !this.state || this.state.status !== 'playing' || isStartCountdownActive(this.state)) return;
+    const target = this.findEntropicFusionTarget(this.currentPointer.x, this.currentPointer.y);
+    if (!target) return;
+    const radius = this.getVisualRadius(target.cardId);
+    this.g.fillStyle(0xfff176, 0.12);
+    this.g.fillCircle(target.x, target.y, radius + 18);
+    this.g.lineStyle(4, 0xfff176, 0.95);
+    this.g.strokeCircle(target.x, target.y, radius + 13);
+    this.g.fillStyle(0x111318, 0.86);
+    this.g.fillRoundedRect(this.currentPointer.x - 44, this.currentPointer.y - 42, 88, 28, 8);
+    this.g.lineStyle(2, 0xfff176, 0.95);
+    this.g.strokeRoundedRect(this.currentPointer.x - 44, this.currentPointer.y - 42, 88, 28, 8);
+    this.drawCenteredText('엔트로픽', this.currentPointer.x, this.currentPointer.y - 37, 15, '#fff176');
   }
 
   getDeployZones(team) {
@@ -2414,6 +2568,8 @@ class BattleScene extends Phaser.Scene {
     if (cardId === 'yushin') return 10;
     if (cardId === 'kimgeunyoung') return 24;
     if (cardId === 'giantHyeonjik') return 31;
+    if (cardId === 'changGpt') return 18;
+    if (cardId === 'haikuGeonhwi') return 15;
     if (cardId === 'baduk') return 23;
     if (cardId === 'bbatman') return 15;
     if (cardId === 'seongjoo') return 15;
@@ -2432,13 +2588,16 @@ class BattleScene extends Phaser.Scene {
     if (type === 'ascension-end') return 850;
     if (type === 'sudden-death') return 1600;
     if (type === 'sonic') return 950;
+    if (type === 'text-stream') return 780;
     if (type === 'chaos') return 950;
     if (type === 'awaken') return 1200;
+    if (type === 'entropic-fusion') return 1400;
     if (type === 'king-tower-awaken') return 1300;
     if (type === 'berserk') return 1200;
     if (type === 'johyunwoo-rage') return 1300;
     if (type === 'windup') return 820;
     if (type === 'punchline') return 1050;
+    if (type === 'hallucination') return 420;
     if (type === 'jimin-yushin-counter') return 1250;
     if (type === 'best-friend-combo') return 1300;
     if (type === 'deploy') return 1100;
@@ -2495,6 +2654,10 @@ class BattleScene extends Phaser.Scene {
 function hpRatio(entity) {
   if (!entity || !entity.maxHp) return 0;
   return Phaser.Math.Clamp(entity.hp / entity.maxHp, 0, 1);
+}
+
+function distance2d(a, b) {
+  return Math.hypot((a.x || 0) - (b.x || 0), (a.y || 0) - (b.y || 0));
 }
 
 function formatTime(ms) {
@@ -4361,7 +4524,6 @@ function renderCharacterGrid() {
     addDetail(details, '타입', character.type);
     addStats(details, character.stats || []);
     addDetail(details, '능력', character.ability);
-    addDetail(details, '외형', character.appearance);
     addDetail(details, '특징', character.trait);
     article.appendChild(details);
 

@@ -17,6 +17,7 @@ const dagwasilDeck = ['dagwasil', 'seongjoo', 'peach', 'jimin', 'bbatman', 'yush
 const cherryTreeDeck = ['cherryTree', 'seongjoo', 'peach', 'jimin', 'bbatman', 'yushin', 'mythos', 'johyunwoo'];
 const giantHyeonjikDeck = ['giantHyeonjik', 'seongjoo', 'peach', 'jimin', 'bbatman', 'yushin', 'mythos', 'johyunwoo'];
 const kkongMeteorDeck = ['kkong', 'seongjoo', 'peach', 'jimin', 'bbatman', 'yushin', 'mythos', 'johyunwoo'];
+const entropicDeck = ['mythos', 'haikuGeonhwi', 'seongjoo', 'peach', 'bbatman', 'yushin', 'jimin', 'johyunwoo'];
 const targetDummyDeck = ['peach', 'seongjoo', 'jimin', 'bbatman', 'yushin', 'mythos', 'johyunwoo', 'osj'];
 
 let serverProcess = null;
@@ -64,6 +65,7 @@ async function main() {
   const cherryTree = await expectCherryTreeAttackFlow(accounts);
   const giantHyeonjik = await expectGiantHyeonjikIgnoresUnits(accounts);
   const kkongMeteor = await expectKkongMeteorDamageDelayed(accounts);
+  const entropic = await expectEntropicFusion(accounts);
   const twoVersusTwoAccounts = await Promise.all([
     signup(`연습유저${Date.now()}C`),
     signup(`연습유저${Date.now()}D`),
@@ -85,7 +87,7 @@ async function main() {
   if (actualOpeningHand !== expectedOpeningHand) {
     throw new Error(`Saved deck was not used for player 1. Expected ${expectedOpeningHand}, got ${actualOpeningHand}.`);
   }
-  console.log(JSON.stringify({ ...result, dagwasil, cherryTree, giantHyeonjik, kkongMeteor, twoVersusTwo, tournament }));
+  console.log(JSON.stringify({ ...result, dagwasil, cherryTree, giantHyeonjik, kkongMeteor, entropic, twoVersusTwo, tournament }));
   cleanup();
 }
 
@@ -478,6 +480,49 @@ async function expectKkongMeteorDamageDelayed(accounts) {
   return true;
 }
 
+async function expectEntropicFusion(accounts) {
+  await expectDeckSave(accounts[0], entropicDeck);
+  await expectDeckSave(accounts[1], targetDummyDeck);
+
+  clients = accounts.map((account) => io(url, {
+    transports: ['websocket'],
+    extraHeaders: { Cookie: account.cookie }
+  }));
+
+  await Promise.all(clients.map((client) => once(client, 'welcome')));
+  clients[0].emit('create-room', { name: '엔트로픽 합체 스모크 테스트 방', password: '' });
+  const joined = await once(clients[0], 'room-joined', 'entropic host room-joined');
+  clients[1].emit('join-room', { roomId: joined.room.id, password: '' });
+  await once(clients[1], 'room-joined', 'entropic guest room-joined');
+
+  await waitForState(clients[0], (payload) => {
+    const player = payload.players[0];
+    return payload.status === 'playing' && player && Array.isArray(player.hand) && player.hand[0] === 'mythos' && player.hand[1] === 'haikuGeonhwi' && player.elixir >= 5;
+  }, 'entropic mythos ready');
+  await delay(150);
+
+  clients[0].emit('play-card', { handIndex: 0, x: 450, y: 560 });
+  await waitForState(clients[0], (payload) => {
+    return payload.units.some((unit) => unit.owner === 0 && unit.cardId === 'mythos');
+  }, 'deployed mythos for fusion');
+
+  const readyState = await waitForState(clients[0], (payload) => {
+    const player = payload.players[0];
+    return player && Array.isArray(player.hand) && player.hand.includes('haikuGeonhwi') && player.elixir >= 2 && payload.units.some((unit) => unit.owner === 0 && unit.cardId === 'mythos');
+  }, 'haiku ready for fusion');
+  const handIndex = readyState.players[0].hand.indexOf('haikuGeonhwi');
+  if (handIndex < 0) throw new Error('Haiku Geonhwi was not in hand for fusion.');
+  const mythos = readyState.units.find((unit) => unit.owner === 0 && unit.cardId === 'mythos');
+  clients[0].emit('play-card', { handIndex, x: mythos.x, y: mythos.y });
+
+  await waitForState(clients[0], (payload) => {
+    return payload.units.some((unit) => unit.owner === 0 && unit.cardId === 'mythos' && unit.entropic && unit.displayName === '엔트로픽' && unit.maxHp === 1150 && unit.hp === 1150 && unit.awakened);
+  }, 'entropic fused unit');
+
+  for (const client of clients) client.disconnect();
+  return true;
+}
+
 async function expectTwoVersusTwoRoom(accounts, spectatorAccounts) {
   clients = accounts.map((account) => io(url, {
     transports: ['websocket'],
@@ -828,6 +873,12 @@ function expectHeoseonNerf(cards) {
   if (!cards.mythos || cards.mythos.damage !== 63 || cards.mythos.awakenedDamage !== 108) {
     throw new Error('Mythos damage tuning was not present.');
   }
+  if (!cards.changGpt || cards.changGpt.cost !== 7 || cards.changGpt.maxHp !== 1000 || cards.changGpt.damage !== 200 || cards.changGpt.attackMs !== 1000 || cards.changGpt.backfireChance !== 0.2 || cards.changGpt.bbatmanHealingMultiplier !== 0.5) {
+    throw new Error('ChangGPT card did not expose the expected high-risk ranged fields.');
+  }
+  if (!cards.haikuGeonhwi || cards.haikuGeonhwi.cost !== 2 || cards.haikuGeonhwi.maxHp !== 400 || cards.haikuGeonhwi.damage !== 15 || cards.haikuGeonhwi.attackMs !== 100 || cards.haikuGeonhwi.tokenLimitAfter !== 3 || cards.haikuGeonhwi.tokenLimitMs !== 1000) {
+    throw new Error('Haiku Geonhwi card did not expose the expected token limit fields.');
+  }
 
   if (!cards.badukFart || !cards.badukFart.spell || cards.badukFart.damagePerSecond !== 60 || cards.badukFart.radius !== 59 || cards.badukFart.durationMs !== 4000) {
     throw new Error('Baduk fart spell card did not expose the expected spell fields.');
@@ -836,8 +887,8 @@ function expectHeoseonNerf(cards) {
     throw new Error('Bbatman heal interval was not present.');
   }
   const playableCount = Object.values(cards).filter((card) => card && card.playable !== false).length;
-  if (playableCount !== 20) {
-    throw new Error(`Playable card count expected 20, got ${playableCount}.`);
+  if (playableCount !== 22) {
+    throw new Error(`Playable card count expected 22, got ${playableCount}.`);
   }
   if (!cards.dagwasil || !cards.dagwasil.building || cards.dagwasil.cost !== 5 || cards.dagwasil.maxHp !== 1320 || cards.dagwasil.radius !== 34 || cards.dagwasil.buildingDurationMs !== 20000 || cards.dagwasil.spawnMinionMs !== 4000 || !cards.dagwasil.spawnImmediately) {
     throw new Error('Dagwasil building card did not expose the expected fields.');
