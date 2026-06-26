@@ -851,10 +851,10 @@ function expectHeoseonNerf(cards) {
   if (!cards.kkong || !cards.kkong.spell || cards.kkong.spellType !== 'meteor' || cards.kkong.cost !== 4 || cards.kkong.damage !== 500 || cards.kkong.radius !== 40 || cards.kkong.impactDelayMs !== 620) {
     throw new Error('Kkong meteor spell card did not expose the expected fields.');
   }
-  if (!cards.cherryTree || !cards.cherryTree.building || cards.cherryTree.cost !== 5 || cards.cherryTree.maxHp !== 2000 || cards.cherryTree.damage !== 100 || cards.cherryTree.range !== 175 || cards.cherryTree.attackMs !== 1000 || cards.cherryTree.buildingDurationMs !== 20000 || !cards.cherryTree.cherryAttack) {
+  if (!cards.cherryTree || !cards.cherryTree.building || cards.cherryTree.cost !== 5 || cards.cherryTree.maxHp !== 1700 || cards.cherryTree.damage !== 100 || cards.cherryTree.range !== 175 || cards.cherryTree.attackMs !== 1000 || cards.cherryTree.buildingDurationMs !== 20000 || !cards.cherryTree.cherryAttack) {
     throw new Error('Cherry tree building card did not expose the expected fields.');
   }
-  if (!cards.giantHyeonjik || cards.giantHyeonjik.cost !== 6 || cards.giantHyeonjik.maxHp !== 1800 || cards.giantHyeonjik.damage !== 120 || cards.giantHyeonjik.attackMs !== 1200 || cards.giantHyeonjik.radius !== 31 || !cards.giantHyeonjik.buildingDestroyer) {
+  if (!cards.giantHyeonjik || cards.giantHyeonjik.cost !== 6 || cards.giantHyeonjik.maxHp !== 2000 || cards.giantHyeonjik.damage !== 150 || cards.giantHyeonjik.attackMs !== 1200 || cards.giantHyeonjik.radius !== 31 || !cards.giantHyeonjik.buildingDestroyer) {
     throw new Error('Giant ZICK card did not expose the expected building destroyer fields.');
   }
   if (!cards.taegeonBumperCar || cards.taegeonBumperCar.cost !== 1 || cards.taegeonBumperCar.speed !== 95 || cards.taegeonBumperCar.maxHp !== 120 || cards.taegeonBumperCar.damage !== 200 || cards.taegeonBumperCar.explosionDamage !== 200 || !cards.taegeonBumperCar.suicideRusher) {
