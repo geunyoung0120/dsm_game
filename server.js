@@ -71,6 +71,7 @@ const TOURNAMENT_FIXED_STAKE = 1;
 const TOURNAMENT_DAY_TIME_ZONE = process.env.TOURNAMENT_DAY_TIME_ZONE || 'Asia/Seoul';
 const TOURNAMENT_BREAK_MS = Number(process.env.TOURNAMENT_BREAK_MS || 60000);
 const TOURNAMENT_FINAL_BREAK_MS = Number(process.env.TOURNAMENT_FINAL_BREAK_MS || 120000);
+const SETTING_TOURNAMENT_DAILY_LIMIT_ENABLED = 'tournament_daily_limit_enabled';
 
 const TIER_DEFINITIONS = [
   { key: 'mayers', name: '마이어스', icon: '🪨', min: 0, max: 14 },
@@ -537,6 +538,12 @@ db.exec(`
     banned_by_user_id INTEGER,
     banned_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 `);
 
 ensureUserColumn('tournament_wins', 'INTEGER NOT NULL DEFAULT 0');
@@ -665,6 +672,12 @@ const statements = {
       banned_user_id = excluded.banned_user_id,
       banned_by_user_id = excluded.banned_by_user_id,
       banned_at = excluded.banned_at
+  `),
+  getSetting: db.prepare('SELECT value FROM app_settings WHERE key = ?'),
+  upsertSetting: db.prepare(`
+    INSERT INTO app_settings (key, value, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
   `),
   listSessions: db.prepare('SELECT sid, data FROM sessions'),
   deleteSessionBySid: db.prepare('DELETE FROM sessions WHERE sid = ?')
@@ -895,6 +908,20 @@ app.put('/api/deck', requireAuthApi, (req, res) => {
 
 app.get('/api/admin/users', requireAdminApi, (req, res) => {
   res.json({ users: publicAdminUsers() });
+});
+
+app.get('/api/admin/settings', requireAdminApi, (req, res) => {
+  res.json({ settings: publicAdminSettings() });
+});
+
+app.patch('/api/admin/settings/tournament-daily-limit', requireAdminApi, (req, res) => {
+  const enabled = req.body && req.body.enabled;
+  if (typeof enabled !== 'boolean') {
+    res.status(400).json({ error: '설정값은 true 또는 false로 보내야 합니다.' });
+    return;
+  }
+  setAppSetting(SETTING_TOURNAMENT_DAILY_LIMIT_ENABLED, enabled ? '1' : '0');
+  res.json({ settings: publicAdminSettings() });
 });
 
 app.patch('/api/admin/users/:id/trophies', requireAdminApi, (req, res) => {
@@ -1147,7 +1174,7 @@ function createTournamentRoomForSocket(socket, payload, normalized) {
     socket.emit('room-error', '이미 대기 중인 토너먼트 대회가 있습니다.');
     return;
   }
-  if (hasStartedTournamentToday()) {
+  if (isTournamentDailyLimitEnabled() && hasStartedTournamentToday()) {
     socket.emit('room-error', '토너먼트 대회는 하루에 한 번만 열 수 있습니다.');
     return;
   }
@@ -4009,6 +4036,21 @@ function requireAdminApi(req, res, next) {
 
 function isAdminUser(user) {
   return Boolean(user && !user.deleted_at && normalizeUsername(user.username) === ADMIN_USERNAME);
+}
+
+function publicAdminSettings() {
+  return {
+    tournamentDailyLimitEnabled: isTournamentDailyLimitEnabled()
+  };
+}
+
+function isTournamentDailyLimitEnabled() {
+  const row = statements.getSetting.get(SETTING_TOURNAMENT_DAILY_LIMIT_ENABLED);
+  return !row || row.value !== '0';
+}
+
+function setAppSetting(key, value) {
+  statements.upsertSetting.run(key, String(value), new Date().toISOString());
 }
 
 function adminTargetUser(id) {

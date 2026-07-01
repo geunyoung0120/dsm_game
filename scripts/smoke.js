@@ -329,6 +329,41 @@ async function expectAdminTools(nonAdminAccount) {
     throw new Error(`Banned IP login expected 403, got ${bannedLogin.status}.`);
   }
 
+  const forbiddenSettings = await fetch(`${url}/api/admin/settings`, {
+    headers: { Cookie: nonAdminAccount.cookie }
+  });
+  if (forbiddenSettings.status !== 403) {
+    throw new Error(`Non-admin settings endpoint expected 403, got ${forbiddenSettings.status}.`);
+  }
+  const settingsResponse = await fetch(`${url}/api/admin/settings`, {
+    headers: { Cookie: adminAccount.cookie }
+  });
+  const settingsBody = await settingsResponse.json();
+  if (!settingsResponse.ok) throw new Error(settingsBody.error || 'Admin settings lookup failed.');
+  if (!settingsBody.settings || settingsBody.settings.tournamentDailyLimitEnabled !== true) {
+    throw new Error('Tournament daily limit setting should be enabled by default.');
+  }
+  const disableResponse = await fetch(`${url}/api/admin/settings/tournament-daily-limit`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: adminAccount.cookie },
+    body: JSON.stringify({ enabled: false })
+  });
+  const disableBody = await disableResponse.json();
+  if (!disableResponse.ok) throw new Error(disableBody.error || 'Admin setting disable failed.');
+  if (!disableBody.settings || disableBody.settings.tournamentDailyLimitEnabled !== false) {
+    throw new Error('Tournament daily limit setting did not turn off.');
+  }
+  const enableResponse = await fetch(`${url}/api/admin/settings/tournament-daily-limit`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: adminAccount.cookie },
+    body: JSON.stringify({ enabled: true })
+  });
+  const enableBody = await enableResponse.json();
+  if (!enableResponse.ok) throw new Error(enableBody.error || 'Admin setting enable failed.');
+  if (!enableBody.settings || enableBody.settings.tournamentDailyLimitEnabled !== true) {
+    throw new Error('Tournament daily limit setting did not turn back on.');
+  }
+
   return true;
 }
 
@@ -894,12 +929,54 @@ async function expectTournamentMode(accounts) {
   }
 
   for (const client of clients) client.disconnect();
+  clients = [];
+  await expectTournamentDailyLimitCanBeDisabled(accounts[0]);
   return {
     pool: 8,
     winner: winnerProfile.username,
     trophies: winnerProfile.trophies,
     tournamentWins: winnerProfile.tournamentWins
   };
+}
+
+async function expectTournamentDailyLimitCanBeDisabled(adminAccount) {
+  await setTournamentDailyLimit(adminAccount, false);
+  const adminClient = io(url, {
+    transports: ['websocket'],
+    extraHeaders: { Cookie: adminAccount.cookie }
+  });
+  clients = [adminClient];
+  try {
+    await once(adminClient, 'welcome');
+    adminClient.emit('create-room', {
+      name: '하루 제한 해제 확인 토너먼트',
+      password: '',
+      mode: 'tournament',
+      participantCount: 3
+    });
+    const joined = await once(adminClient, 'room-joined', 'second tournament room after disabled daily limit');
+    if (!joined.room || joined.room.mode !== 'tournament') {
+      throw new Error('Disabled tournament daily limit did not allow a second tournament room.');
+    }
+  } finally {
+    adminClient.disconnect();
+    clients = [];
+    await setTournamentDailyLimit(adminAccount, true);
+  }
+}
+
+async function setTournamentDailyLimit(account, enabled) {
+  const response = await fetch(`${url}/api/admin/settings/tournament-daily-limit`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: account.cookie },
+    body: JSON.stringify({ enabled })
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || 'Tournament daily limit setting update failed.');
+  if (!body.settings || body.settings.tournamentDailyLimitEnabled !== enabled) {
+    throw new Error(`Tournament daily limit expected ${enabled}, got ${body.settings && body.settings.tournamentDailyLimitEnabled}.`);
+  }
+  return body.settings;
 }
 
 function seedSmokeTrophies(accounts, trophies) {

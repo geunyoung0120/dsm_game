@@ -1081,6 +1081,7 @@ let ascensionAudioUntil = 0;
 let latestRankings = [];
 let latestTiers = [];
 let latestAdminUsers = [];
+let latestAdminSettings = { tournamentDailyLimitEnabled: true };
 let adminUserSearchQuery = '';
 let latestSpectatorRooms = [];
 let latestTournamentWinner = null;
@@ -2906,6 +2907,7 @@ function setupShell() {
   const adminUserList = document.getElementById('admin-user-list');
   const adminUserSearch = document.getElementById('admin-user-search');
   const refreshAdminUsersButton = document.getElementById('refresh-admin-users');
+  const toggleTournamentDailyLimitButton = document.getElementById('toggle-tournament-daily-limit');
   const deckSortSelect = document.getElementById('deck-sort');
   const editSavedDeckFromRoomButton = document.getElementById('edit-saved-deck-from-room');
   const pickrateSortSelect = document.getElementById('pickrate-sort');
@@ -3072,6 +3074,7 @@ function setupShell() {
     currentSlot = null;
     latestState = null;
     latestAdminUsers = [];
+    latestAdminSettings = { tournamentDailyLimitEnabled: true };
     adminUserSearchQuery = '';
     latestTournamentWinner = null;
     latestTournamentHistory = [];
@@ -3174,6 +3177,7 @@ function setupShell() {
     });
   }
   if (refreshAdminUsersButton) refreshAdminUsersButton.addEventListener('click', loadAdminUsers);
+  if (toggleTournamentDailyLimitButton) toggleTournamentDailyLimitButton.addEventListener('click', toggleTournamentDailyLimit);
   if (deckSortSelect) {
     deckSortSelect.addEventListener('change', () => {
       deckSortMode = deckSortSelect.value || 'cost-asc';
@@ -3921,8 +3925,12 @@ async function loadAdminUsers() {
   if (!isCurrentUserAdmin()) return;
   setMessage('admin-message', '유저 목록을 불러오는 중...');
   try {
-    const data = await apiRequest('/api/admin/users');
-    latestAdminUsers = Array.isArray(data.users) ? data.users : [];
+    const [usersData, settingsData] = await Promise.all([
+      apiRequest('/api/admin/users'),
+      apiRequest('/api/admin/settings')
+    ]);
+    latestAdminUsers = Array.isArray(usersData.users) ? usersData.users : [];
+    latestAdminSettings = normalizeAdminSettings(settingsData.settings);
     setMessage('admin-message', '');
     renderAdminPanel();
   } catch (error) {
@@ -3938,11 +3946,14 @@ function renderAdminPanel() {
   panel.classList.toggle('hidden', !isAdmin);
   if (!isAdmin) {
     latestAdminUsers = [];
+    latestAdminSettings = { tournamentDailyLimitEnabled: true };
     list.replaceChildren();
     setMessage('admin-message', '');
+    renderAdminSettings(false);
     return;
   }
 
+  renderAdminSettings(true);
   const visibleUsers = filterAdminUsers(latestAdminUsers);
   list.replaceChildren();
   if (visibleUsers.length === 0) {
@@ -3955,6 +3966,49 @@ function renderAdminPanel() {
 
   for (const user of visibleUsers) {
     list.appendChild(adminUserRow(user));
+  }
+}
+
+function normalizeAdminSettings(settings = {}) {
+  return {
+    tournamentDailyLimitEnabled: settings.tournamentDailyLimitEnabled !== false
+  };
+}
+
+function renderAdminSettings(isAdmin = isCurrentUserAdmin()) {
+  const status = document.getElementById('admin-tournament-limit-status');
+  const button = document.getElementById('toggle-tournament-daily-limit');
+  if (!status || !button) return;
+  if (!isAdmin) {
+    status.textContent = '';
+    button.disabled = true;
+    button.textContent = '설정 변경';
+    return;
+  }
+  const enabled = latestAdminSettings.tournamentDailyLimitEnabled !== false;
+  status.textContent = enabled
+    ? '켜짐: 하루에 시작된 토너먼트가 있으면 다음날 00:00까지 새 대회를 열 수 없습니다.'
+    : '꺼짐: 같은 날에도 관리자 계정이 토너먼트 대회를 여러 번 열 수 있습니다.';
+  button.disabled = false;
+  button.textContent = enabled ? '제한 끄기' : '제한 켜기';
+}
+
+async function toggleTournamentDailyLimit() {
+  if (!isCurrentUserAdmin()) return;
+  const button = document.getElementById('toggle-tournament-daily-limit');
+  const nextEnabled = latestAdminSettings.tournamentDailyLimitEnabled === false;
+  try {
+    if (button) button.disabled = true;
+    const data = await apiRequest('/api/admin/settings/tournament-daily-limit', {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled: nextEnabled })
+    });
+    latestAdminSettings = normalizeAdminSettings(data.settings);
+    setMessage('admin-message', nextEnabled ? '토너먼트 하루 1회 제한을 켰습니다.' : '토너먼트 하루 1회 제한을 껐습니다.');
+    renderAdminPanel();
+  } catch (error) {
+    setMessage('admin-message', error.message || '설정을 변경하지 못했습니다.');
+    renderAdminPanel();
   }
 }
 

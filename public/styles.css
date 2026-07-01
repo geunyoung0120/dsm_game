@@ -1060,6 +1060,34 @@ html[data-theme="light"] .lobby-hero {
   gap: 14px;
 }
 
+.admin-setting-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.admin-setting-card div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.admin-setting-card strong {
+  color: var(--ink);
+}
+
+.admin-setting-card span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
 .admin-search-field {
   display: grid;
   gap: 7px;
@@ -2539,6 +2567,7 @@ canvas {
     height: 26px;
   }
 
+  .admin-setting-card,
   .admin-user-row {
     grid-template-columns: 1fr;
   }
