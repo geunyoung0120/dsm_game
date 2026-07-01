@@ -118,10 +118,10 @@ const CARDS = {
   changGpt: {
     id: 'changGpt',
     name: '창GPT',
-    cost: 7,
+    cost: 8,
     role: '고위험 원거리',
     maxHp: 1000,
-    damage: 180,
+    damage: 165,
     range: 110,
     speed: 40,
     attackMs: 1000,
@@ -129,7 +129,7 @@ const CARDS = {
     textStream: true,
     streamWidth: 260,
     backfireChance: 0.25,
-    backfireDamage: 180,
+    backfireDamage: 165,
     bbatmanHealingMultiplier: 0.5
   },
   baduk: {
@@ -353,7 +353,7 @@ const CARDS = {
   heoseon: {
     id: 'heoseon',
     name: '허선',
-    cost: 8,
+    cost: 7,
     role: '폭발형 딜러',
     maxHp: 450,
     damage: 0,

@@ -963,7 +963,7 @@ function expectHeoseonNerf(cards) {
   }
 
   const expected = {
-    cost: 8,
+    cost: 7,
     maxHp: 450,
     range: 16,
     speed: 37,
@@ -991,7 +991,7 @@ function expectHeoseonNerf(cards) {
   if (!cards.mythos || cards.mythos.damage !== 63 || cards.mythos.awakenedDamage !== 108) {
     throw new Error('Mythos damage tuning was not present.');
   }
-  if (!cards.changGpt || cards.changGpt.cost !== 7 || cards.changGpt.maxHp !== 1000 || cards.changGpt.damage !== 180 || cards.changGpt.range !== 110 || cards.changGpt.streamWidth !== 260 || cards.changGpt.attackMs !== 1000 || cards.changGpt.backfireChance !== 0.25 || cards.changGpt.bbatmanHealingMultiplier !== 0.5) {
+  if (!cards.changGpt || cards.changGpt.cost !== 8 || cards.changGpt.maxHp !== 1000 || cards.changGpt.damage !== 165 || cards.changGpt.range !== 110 || cards.changGpt.streamWidth !== 260 || cards.changGpt.attackMs !== 1000 || cards.changGpt.backfireChance !== 0.25 || cards.changGpt.bbatmanHealingMultiplier !== 0.5) {
     throw new Error('ChangGPT card did not expose the expected high-risk ranged fields.');
   }
   if (!cards.haikuGeonhwi || cards.haikuGeonhwi.cost !== 2 || cards.haikuGeonhwi.maxHp !== 330 || cards.haikuGeonhwi.damage !== 15 || cards.haikuGeonhwi.attackMs !== 100 || cards.haikuGeonhwi.tokenLimitAfter !== 3 || cards.haikuGeonhwi.tokenLimitMs !== 1000) {
