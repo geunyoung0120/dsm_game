@@ -1115,8 +1115,8 @@ function expectHeoseonNerf(cards) {
   if (!cards.kimgeunyoung || cards.kimgeunyoung.maxHp !== 2300 || cards.kimgeunyoung.damage !== 80 || cards.kimgeunyoung.timeExtensionMs !== 30000) {
     throw new Error('Kim Geunyoung return tuning was not present.');
   }
-  if (!cards.geunyoungTank || cards.geunyoungTank.maxHp !== 190 || cards.geunyoungTank.damage !== 17) {
-    throw new Error('Geunyoung tank damage tuning was not present.');
+  if (!cards.geunyoungTank || cards.geunyoungTank.maxHp !== 290 || cards.geunyoungTank.damage !== 17) {
+    throw new Error('Geunyoung tank HP tuning was not present.');
   }
 }
 

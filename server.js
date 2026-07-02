@@ -408,7 +408,7 @@ const CARDS = {
     cost: 0,
     role: '소환 탱커',
     playable: false,
-    maxHp: 190,
+    maxHp: 290,
     damage: 17,
     range: 32,
     speed: 37,
