@@ -1112,11 +1112,11 @@ function expectHeoseonNerf(cards) {
   if (!cards.osj || cards.osj.cost !== 6 || cards.osj.maxHp !== 1200 || cards.osj.damage !== 20 || cards.osj.speed !== 19) {
     throw new Error('OSJ latest tuning was not present.');
   }
-  if (!cards.kimgeunyoung || cards.kimgeunyoung.maxHp !== 2300 || cards.kimgeunyoung.damage !== 80 || cards.kimgeunyoung.timeExtensionMs !== 30000) {
+  if (!cards.kimgeunyoung || cards.kimgeunyoung.maxHp !== 2500 || cards.kimgeunyoung.damage !== 90 || cards.kimgeunyoung.timeExtensionMs !== 30000) {
     throw new Error('Kim Geunyoung return tuning was not present.');
   }
-  if (!cards.geunyoungTank || cards.geunyoungTank.maxHp !== 290 || cards.geunyoungTank.damage !== 17) {
-    throw new Error('Geunyoung tank HP tuning was not present.');
+  if (!cards.geunyoungTank || cards.geunyoungTank.maxHp !== 350 || cards.geunyoungTank.damage !== 30) {
+    throw new Error('Geunyoung tank latest tuning was not present.');
   }
 }
 
